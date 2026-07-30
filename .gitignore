@@ -1,0 +1,21 @@
+# Android & Kotlin build outputs
+.gradle/
+build/
+app/build/
+opencv/build/
+.externalNativeBuild/
+.cxx/
+local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# IDE & OS configuration
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*~
