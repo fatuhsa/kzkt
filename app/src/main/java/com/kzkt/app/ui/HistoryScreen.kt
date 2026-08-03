@@ -40,6 +40,7 @@ fun HistoryScreen(
     viewModel: MainViewModel,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val entries by viewModel.historyRepo.entriesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     var confirmDelete by remember { mutableStateOf<HistoryEntry?>(null) }
     var preview by remember { mutableStateOf<HistoryEntry?>(null) }
@@ -47,13 +48,31 @@ fun HistoryScreen(
     var readerInitialIndex by remember { mutableIntStateOf(0) }
     var isExtractingPdf by remember { mutableStateOf(false) }
 
-    // BottomSheet preview — expanded on item tap, dismissed by swipe down / close
-    val sheetState = rememberBottomSheetState(
-        dismissedBound = 0.dp,
-        collapsedBound = 0.dp,
-        expandedBound = 560.dp,
-    )
-    val scope = rememberCoroutineScope()
+    fun openReaderForEntry(entry: HistoryEntry) {
+        val file = File(entry.outputPath)
+        if (file.name.endsWith(".pdf", ignoreCase = true)) {
+            isExtractingPdf = true
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val cacheDir = File(context.cacheDir, "pdf_reader_cache")
+                val pages = com.kzkt.app.util.PdfImporter.extractPdfToImages(file, cacheDir)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    isExtractingPdf = false
+                    if (pages.isNotEmpty()) {
+                        readerPages = pages
+                        readerInitialIndex = 0
+                    }
+                }
+            }
+        } else if (file.exists()) {
+            val allHistoryImages = entries.mapNotNull { e ->
+                val path = e.outputPath
+                if (!path.endsWith(".pdf", ignoreCase = true) && File(path).exists()) path else null
+            }
+            val idx = allHistoryImages.indexOf(file.absolutePath).coerceAtLeast(0)
+            readerPages = if (allHistoryImages.isNotEmpty()) allHistoryImages else listOf(file.absolutePath)
+            readerInitialIndex = idx
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (entries.isEmpty()) {
@@ -74,72 +93,29 @@ fun HistoryScreen(
                 items(entries, key = { it.timestamp }) { entry ->
                     HistoryItem(
                         entry = entry,
-                        onClick = {
-                            preview = entry
-                            scope.launch { sheetState.expandSoft() }
-                        },
+                        onClick = { openReaderForEntry(entry) },
                         onLongClick = { confirmDelete = entry },
                     )
                 }
             }
         }
 
-        // BottomSheet overlay when a preview is requested
-        if (preview != null) {
-            BottomSheet(
-                state = sheetState,
-                background = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f))
-                            .clickable(interactionSource = null, indication = null) {
-                                scope.launch { sheetState.dismiss() }
-                                preview = null
-                            }
-                    )
-                },
-                onDismiss = { preview = null },
-                collapsedContent = {},
-                isExpandable = true,
-                content = {
-                    PreviewSheetContent(
-                        entry = preview!!,
-                        isExtractingPdf = isExtractingPdf,
-                        onClose = {
-                            scope.launch { sheetState.dismiss() }
-                            preview = null
-                        },
-                        onReadManga = { entry ->
-                            val file = File(entry.outputPath)
-                            if (file.name.endsWith(".pdf", ignoreCase = true)) {
-                                isExtractingPdf = true
-                                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                    val cacheDir = File(context.cacheDir, "pdf_reader_cache")
-                                    val pages = com.kzkt.app.util.PdfImporter.extractPdfToImages(file, cacheDir)
-                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                        isExtractingPdf = false
-                                        if (pages.isNotEmpty()) {
-                                            readerPages = pages
-                                            readerInitialIndex = 0
-                                        }
-                                    }
-                                }
-                            } else if (file.exists()) {
-                                // Gather all image history entries so user can swipe left/right across history items
-                                val allHistoryImages = entries.mapNotNull { e ->
-                                    val path = e.outputPath
-                                    if (!path.endsWith(".pdf", ignoreCase = true) && File(path).exists()) path else null
-                                }
-
-                                val idx = allHistoryImages.indexOf(file.absolutePath).coerceAtLeast(0)
-                                readerPages = if (allHistoryImages.isNotEmpty()) allHistoryImages else listOf(file.absolutePath)
-                                readerInitialIndex = idx
-                            }
-                        }
-                    )
-                },
-            )
+        if (isExtractingPdf) {
+            androidx.compose.ui.window.Dialog(onDismissRequest = {}) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(24.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        Text("Preparing Manga Pages...", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
         }
 
         if (readerPages != null && readerPages!!.isNotEmpty()) {

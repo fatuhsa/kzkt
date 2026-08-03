@@ -5,6 +5,8 @@ import android.graphics.BitmapFactory
 import androidx.compose.animation.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
@@ -257,28 +259,28 @@ private fun ZoomablePageViewer(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { onTap() },
-                    onDoubleTap = {
-                        if (scale > 1f) {
-                            scale = 1f
-                            offset = Offset.Zero
-                            onZoomStateChanged(false)
-                        } else {
-                            scale = 2.5f
-                            onZoomStateChanged(true)
-                        }
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onTap,
+                onDoubleClick = {
+                    if (scale > 1f) {
+                        scale = 1f
+                        offset = Offset.Zero
+                        onZoomStateChanged(false)
+                    } else {
+                        scale = 2.5f
+                        onZoomStateChanged(true)
                     }
-                )
-            }
+                }
+            )
             .graphicsLayer(
                 scaleX = scale,
                 scaleY = scale,
                 translationX = offset.x,
                 translationY = offset.y
             )
-            .transformable(state = state),
+            .transformable(state = state, enabled = scale > 1f),
         contentAlignment = Alignment.Center
     ) {
         androidx.compose.foundation.Image(
