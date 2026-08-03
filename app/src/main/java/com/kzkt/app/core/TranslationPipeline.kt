@@ -630,7 +630,32 @@ class TranslationPipeline(
                 continue
             }
 
-            val canvas = Canvas(page.pil)
+            val renderBitmap = if (params.useInpainting) {
+                onProgress("  [OpenCV Inpainting] Erasing original text strokes for ${File(page.path).name}...")
+                val workingMat = ImageProcessor.bitmapToMat(page.pil)
+                try {
+                    val targets = page.coordMap.mapNotNull { (id, box) ->
+                        val text = allTranslations[id]
+                        if (text != null && text.uppercase() != "SKIP" && text.isNotBlank()) box else null
+                    }
+                    coroutineScope {
+                        targets.map { box ->
+                            async(Dispatchers.Default) {
+                                synchronized(workingMat) {
+                                    ImageProcessor.inpaintBubbleText(workingMat, box)
+                                }
+                            }
+                        }.awaitAll()
+                    }
+                    ImageProcessor.matToBitmap(workingMat)
+                } finally {
+                    workingMat.release()
+                }
+            } else {
+                page.pil
+            }
+
+            val canvas = Canvas(renderBitmap)
             val translatedCount = renderTranslations(
                 canvas = canvas,
                 translations = allTranslations,
@@ -640,8 +665,9 @@ class TranslationPipeline(
                 imgHeight = page.imgHeight,
             )
 
-            saveBitmap(page.pil, pageOutputPath)
+            saveBitmap(renderBitmap, pageOutputPath)
             results.add(PipelineResult(pageOutputPath, bubblesFound = page.crops.size, bubblesTranslated = translatedCount))
+            if (renderBitmap != page.pil && !renderBitmap.isRecycled) renderBitmap.recycle()
             if (!page.pil.isRecycled) page.pil.recycle()
         }
 

@@ -408,14 +408,14 @@ object ImageProcessor {
             Imgproc.cvtColor(crop, gray, Imgproc.COLOR_RGBA2GRAY)
             val meanBrightness = Core.mean(gray).`val`[0]
             if (meanBrightness > 128) {
-                // White background: threshold dark text strokes
-                Imgproc.threshold(gray, textMask, 150.0, 255.0, Imgproc.THRESH_BINARY_INV)
+                // White/light background: threshold dark text strokes (inclusive of anti-aliasing)
+                Imgproc.threshold(gray, textMask, 190.0, 255.0, Imgproc.THRESH_BINARY_INV)
             } else {
                 // Dark background: threshold light text strokes
-                Imgproc.threshold(gray, textMask, 110.0, 255.0, Imgproc.THRESH_BINARY)
+                Imgproc.threshold(gray, textMask, 90.0, 255.0, Imgproc.THRESH_BINARY)
             }
 
-            val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(3.0, 3.0))
+            val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(5.0, 5.0))
             Imgproc.dilate(textMask, textMask, kernel)
             kernel.release()
 
