@@ -126,13 +126,14 @@ fun HistoryScreen(
                                     }
                                 }
                             } else if (file.exists()) {
-                                val parent = file.parentFile
-                                val allImages = parent?.listFiles()
-                                    ?.filter { it.isFile && (it.name.endsWith(".png", true) || it.name.endsWith(".jpg", true) || it.name.endsWith(".jpeg", true)) }
-                                    ?.sortedBy { it.name }
-                                    ?.map { it.absolutePath } ?: listOf(file.absolutePath)
-                                val idx = allImages.indexOf(file.absolutePath).coerceAtLeast(0)
-                                readerPages = allImages
+                                // Gather all image history entries so user can swipe left/right across history items
+                                val allHistoryImages = entries.mapNotNull { e ->
+                                    val path = e.outputPath
+                                    if (!path.endsWith(".pdf", ignoreCase = true) && File(path).exists()) path else null
+                                }
+
+                                val idx = allHistoryImages.indexOf(file.absolutePath).coerceAtLeast(0)
+                                readerPages = if (allHistoryImages.isNotEmpty()) allHistoryImages else listOf(file.absolutePath)
                                 readerInitialIndex = idx
                             }
                         }
@@ -274,7 +275,7 @@ private fun PreviewSheetContent(
                 } else {
                     Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Read Manga 📖")
+                    Text("Read Manga")
                 }
             }
             OutlinedButton(
