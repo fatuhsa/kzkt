@@ -38,6 +38,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Observable state — all writes happen on the Main thread (see [post]).
     val settings = mutableStateOf(SettingsRepository.Settings())
 
+    // History entries — hoisted from the cold repo flow into an in-memory
+    // StateFlow so each History-tab open replays cached state instead of
+    // re-parsing the full JSON from DataStore (fixes tab-open frame drop).
+    val historyEntries = MutableStateFlow<List<HistoryEntry>>(emptyList())
+
     // File processing
     val selectedFiles = mutableStateListOf<String>()
     val translationLog = mutableStateListOf<String>()
@@ -83,6 +88,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepo.settingsFlow.collect { s ->
                 settings.value = s
             }
+        }
+        // Hoist history into memory: parse the JSON once, then replay on every
+        // History-tab open instead of re-reading DataStore + re-parsing (F3).
+        viewModelScope.launch {
+            historyRepo.entriesFlow.collect { historyEntries.value = it }
         }
     }
 

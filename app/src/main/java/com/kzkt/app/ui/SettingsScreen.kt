@@ -487,61 +487,6 @@ private fun CustomUrlSection(viewModel: MainViewModel) {
 private fun TweakParamsSection(viewModel: MainViewModel) {
     val scope = rememberCoroutineScope()
 
-    // Each slider reads only its own field
-    @Composable fun slider(keyField: String, label: String, range: ClosedFloatingPointRange<Float>) {
-        val value by remember { derivedStateOf {
-            when (keyField) {
-                "max_bubbles" -> viewModel.settings.value.maxBubblesPerRequest.toFloat()
-                "request_delay" -> viewModel.settings.value.minRequestDelay
-                "pad_x" -> viewModel.settings.value.padXRatio
-                "pad_y" -> viewModel.settings.value.padYRatio
-                "min_pad" -> viewModel.settings.value.minPad.toFloat()
-                else -> 0f
-            }
-        } }
-        var sliderValue by remember(value) { mutableFloatStateOf(value) }
-        Material3SettingsGroup(
-            items = listOf(
-                Material3SettingsItem(
-                    title = {
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Text(label, style = MaterialTheme.typography.bodyMedium)
-                                val fmt = when (keyField) {
-                                    "request_delay" -> "%.1fs".format(sliderValue)
-                                    "min_pad" -> "${sliderValue.toInt()}"
-                                    "max_bubbles" -> "${sliderValue.toInt()}"
-                                    else -> "%.2f".format(sliderValue)
-                                }
-                                Text(fmt, style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary)
-                            }
-                            Slider(
-                                value = sliderValue,
-                                onValueChange = { sliderValue = it },
-                                onValueChangeFinished = {
-                                    scope.launch {
-                                        viewModel.settingsRepo.saveTweakParam(keyField,
-                                            when (keyField) {
-                                                "max_bubbles", "min_pad" -> sliderValue.toInt()
-                                                else -> sliderValue
-                                            }
-                                        )
-                                    }
-                                },
-                                valueRange = range,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                    },
-                ),
-            ),
-        )
-    }
-
     val useInpainting = viewModel.settings.value.useInpainting
     Material3SettingsGroup(
         items = listOf(
@@ -560,11 +505,80 @@ private fun TweakParamsSection(viewModel: MainViewModel) {
     )
     Spacer(Modifier.height(8.dp))
 
-    slider("max_bubbles", "Bubbles per request", 5f..50f)
-    slider("request_delay", "Min request delay (s)", 0.5f..10f)
-    slider("pad_x", "Pad X ratio", 0.1f..1.0f)
-    slider("pad_y", "Pad Y ratio", 0.1f..1.0f)
-    slider("min_pad", "Min padding (px)", 5f..100f)
+    TweakSlider(viewModel, "max_bubbles", "Bubbles per request", 5f..50f)
+    TweakSlider(viewModel, "request_delay", "Min request delay (s)", 0.5f..10f)
+    TweakSlider(viewModel, "pad_x", "Pad X ratio", 0.1f..1.0f)
+    TweakSlider(viewModel, "pad_y", "Pad Y ratio", 0.1f..1.0f)
+    TweakSlider(viewModel, "min_pad", "Min padding (px)", 5f..100f)
+}
+
+/**
+ * One tweak-parameter slider, extracted to top-level (was a composable local to
+ * [TweakParamsSection]). A local @Composable is recreated on every recomposition
+ * of its parent, so dragging one slider re-composed all five sliders; top-level
+ * makes each slider a stable call site that skips when its own state is unchanged.
+ */
+@Composable
+private fun TweakSlider(
+    viewModel: MainViewModel,
+    keyField: String,
+    label: String,
+    range: ClosedFloatingPointRange<Float>,
+) {
+    val scope = rememberCoroutineScope()
+
+    // Each slider reads only its own field
+    val value by remember { derivedStateOf {
+        when (keyField) {
+            "max_bubbles" -> viewModel.settings.value.maxBubblesPerRequest.toFloat()
+            "request_delay" -> viewModel.settings.value.minRequestDelay
+            "pad_x" -> viewModel.settings.value.padXRatio
+            "pad_y" -> viewModel.settings.value.padYRatio
+            "min_pad" -> viewModel.settings.value.minPad.toFloat()
+            else -> 0f
+        }
+    } }
+    var sliderValue by remember(value) { mutableFloatStateOf(value) }
+    Material3SettingsGroup(
+        items = listOf(
+            Material3SettingsItem(
+                title = {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                            val fmt = when (keyField) {
+                                "request_delay" -> "%.1fs".format(sliderValue)
+                                "min_pad" -> "${sliderValue.toInt()}"
+                                "max_bubbles" -> "${sliderValue.toInt()}"
+                                else -> "%.2f".format(sliderValue)
+                            }
+                            Text(fmt, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary)
+                        }
+                        Slider(
+                            value = sliderValue,
+                            onValueChange = { sliderValue = it },
+                            onValueChangeFinished = {
+                                scope.launch {
+                                    viewModel.settingsRepo.saveTweakParam(keyField,
+                                        when (keyField) {
+                                            "max_bubbles", "min_pad" -> sliderValue.toInt()
+                                            else -> sliderValue
+                                        }
+                                    )
+                                }
+                            },
+                            valueRange = range,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                },
+            ),
+        ),
+    )
 }
 
 @Composable

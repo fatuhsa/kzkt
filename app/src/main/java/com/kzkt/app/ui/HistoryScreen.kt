@@ -41,7 +41,7 @@ fun HistoryScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val entries by viewModel.historyRepo.entriesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val entries by viewModel.historyEntries.collectAsStateWithLifecycle()
     var confirmDelete by remember { mutableStateOf<HistoryEntry?>(null) }
     var preview by remember { mutableStateOf<HistoryEntry?>(null) }
     var readerPages by remember { mutableStateOf<List<String>?>(null) }
