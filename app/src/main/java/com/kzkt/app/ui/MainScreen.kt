@@ -464,14 +464,19 @@ private fun ResultPreview(
             }
         }
 
+        val lastResult = viewModel.lastResultForEditing.value
+        val allResultPaths = viewModel.resultPaths.toList()
+
         if (showFullscreenViewer) {
-            FullscreenImageViewer(
-                path = currentPath,
-                onDismiss = { showFullscreenViewer = false },
+            com.kzkt.app.ui.component.MangaReaderDialog(
+                pagePaths = if (allResultPaths.isNotEmpty()) allResultPaths else listOf(currentPath),
+                pipelineResult = lastResult,
+                targetLanguage = viewModel.settings.value.targetLanguage,
+                customFontPath = viewModel.settings.value.customFontPath,
+                onDismiss = { showFullscreenViewer = false }
             )
         }
 
-        val lastResult = viewModel.lastResultForEditing.value
         if (viewModel.showInteractiveEditor.value && lastResult?.originalBitmap != null) {
             com.kzkt.app.ui.component.InteractiveEditorDialog(
                 originalBitmap = lastResult.originalBitmap,
