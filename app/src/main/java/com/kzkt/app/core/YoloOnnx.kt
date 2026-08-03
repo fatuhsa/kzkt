@@ -23,6 +23,12 @@ class YoloOnnx(
     private var ortSession: OrtSession? = null
     private var modelSize: Int = 0
 
+    // Pre-allocated reusable direct FloatBuffer (1 * 3 * 640 * 640 * 4 bytes) for zero-GC inference
+    private val inputBuffer: FloatBuffer = java.nio.ByteBuffer
+        .allocateDirect(1 * 3 * Constants.YOLO_INPUT_SIZE * Constants.YOLO_INPUT_SIZE * 4)
+        .order(java.nio.ByteOrder.nativeOrder())
+        .asFloatBuffer()
+
     data class Detection(val x1: Int, val y1: Int, val x2: Int, val y2: Int)
 
     fun initialize(): Boolean {
@@ -138,7 +144,8 @@ class YoloOnnx(
         }
     }
 
-    private fun prepareInput(bitmap: Bitmap): Triple<FloatArray, DoubleArray, DoubleArray> {
+    @Synchronized
+    private fun prepareInput(bitmap: Bitmap): Triple<FloatBuffer, DoubleArray, DoubleArray> {
         val h = bitmap.height.toDouble()
         val w = bitmap.width.toDouble()
         val targetSize = Constants.YOLO_INPUT_SIZE.toDouble()
@@ -150,10 +157,7 @@ class YoloOnnx(
         val dw = ((targetSize - newW) / 2.0).toInt()
         val dh = ((targetSize - newH) / 2.0).toInt()
 
-        Log.d("KZKT/YOLO", "prepareInput: img=${w.toInt()}x${h} scale=%.3f new=${newW}x${newH} pad=${dw}x${dh}".format(scale))
-
         val resized = Bitmap.createScaledBitmap(bitmap, newW, newH, true)
-
         val padded = Bitmap.createBitmap(Constants.YOLO_INPUT_SIZE, Constants.YOLO_INPUT_SIZE, Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(padded)
         canvas.drawColor(android.graphics.Color.rgb(114, 114, 114))
@@ -162,37 +166,35 @@ class YoloOnnx(
         val pixels = IntArray(Constants.YOLO_INPUT_SIZE * Constants.YOLO_INPUT_SIZE)
         padded.getPixels(pixels, 0, Constants.YOLO_INPUT_SIZE, 0, 0, Constants.YOLO_INPUT_SIZE, Constants.YOLO_INPUT_SIZE)
         padded.recycle()
-        resized.recycle()
+        if (resized != bitmap) resized.recycle()
 
-        val inputData = FloatArray(3 * Constants.YOLO_INPUT_SIZE * Constants.YOLO_INPUT_SIZE)
         val area = Constants.YOLO_INPUT_SIZE * Constants.YOLO_INPUT_SIZE
+        inputBuffer.rewind()
         for (i in pixels.indices) {
             val pixel = pixels[i]
-            inputData[i] = ((pixel shr 16) and 0xFF) / 255.0f
-            inputData[area + i] = ((pixel shr 8) and 0xFF) / 255.0f
-            inputData[2 * area + i] = (pixel and 0xFF) / 255.0f
+            inputBuffer.put(i, ((pixel shr 16) and 0xFF) / 255.0f)
+            inputBuffer.put(area + i, ((pixel shr 8) and 0xFF) / 255.0f)
+            inputBuffer.put(2 * area + i, (pixel and 0xFF) / 255.0f)
         }
+        inputBuffer.rewind()
 
-        return Triple(inputData, doubleArrayOf(scale, scale), doubleArrayOf(dw.toDouble(), dh.toDouble()))
+        return Triple(inputBuffer, doubleArrayOf(scale, scale), doubleArrayOf(dw.toDouble(), dh.toDouble()))
     }
 
+    @Synchronized
     fun predict(bitmap: Bitmap, confThreshold: Double = this.confThreshold, iouThreshold: Double = this.iouThreshold): List<Detection> {
         val env = ortEnv ?: throw IllegalStateException("ONNX Runtime not initialized")
         val session = ortSession ?: throw IllegalStateException("Model not loaded")
 
-        val (inputData, ratios, paddings) = prepareInput(bitmap)
+        val (buffer, ratios, paddings) = prepareInput(bitmap)
         val (dw, dh) = paddings[0] to paddings[1]
         val (ratioW, ratioH) = ratios[0] to ratios[1]
 
         val inputShape = longArrayOf(1, 3, Constants.YOLO_INPUT_SIZE.toLong(), Constants.YOLO_INPUT_SIZE.toLong())
         val inputName = session.inputNames.iterator().next()
 
-        Log.d("KZKT/YOLO", "Running inference on ${bitmap.width}x${bitmap.height}...")
-        // inputTensor & result hold native C++ handles — must be closed to avoid leaking memory on every page.
-        // The output tensor's floatBuffer is a DIRECT buffer into native memory that becomes invalid once the
-        // result is closed, so copy it to a heap array while still inside the use{} block.
         val outputData: FloatArray
-        OnnxTensor.createTensor(env, FloatBuffer.wrap(inputData), inputShape).use { inputTensor ->
+        OnnxTensor.createTensor(env, buffer, inputShape).use { inputTensor ->
             session.run(mapOf(inputName to inputTensor)).use { result ->
                 val onnxVal = result.get(0) as OnnxTensor
                 val fb = onnxVal.floatBuffer

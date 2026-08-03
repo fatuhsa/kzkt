@@ -141,6 +141,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun createFallbackProviders(primaryKey: String): List<LlmProvider> {
+        val s = settings.value
+        val fallbacks = mutableListOf<LlmProvider>()
+        if (primaryKey != "gemini" && s.geminiApiKey.isNotBlank()) fallbacks.add(GeminiProvider(s.geminiApiKey, s.modelGemini))
+        if (primaryKey != "openai" && s.openaiApiKey.isNotBlank()) fallbacks.add(OpenAIProvider(s.openaiApiKey, s.modelOpenai))
+        if (primaryKey != "openrouter" && s.openrouterApiKey.isNotBlank()) fallbacks.add(OpenRouterProvider(s.openrouterApiKey, s.modelOpenrouter))
+        if (primaryKey != "zen" && s.zenApiKey.isNotBlank()) fallbacks.add(ZenProvider(s.zenApiKey, s.modelZen))
+        if (primaryKey != "opencodego" && s.opencodegoApiKey.isNotBlank()) fallbacks.add(OpenCodeGoProvider(s.opencodegoApiKey, s.modelOpencodego))
+        return fallbacks
+    }
+
     private var translationJob: kotlinx.coroutines.Job? = null
 
     fun startTranslation() {
@@ -183,6 +194,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 val cacheRepo = com.kzkt.app.data.TranslationCacheRepository(getApplication())
+                val fallbackProviders = createFallbackProviders(settings.value.llmProvider)
 
                 val pipeline = TranslationPipeline(
                     yolo = yolo,
@@ -191,6 +203,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     params = params,
                     targetLanguage = settings.value.targetLanguage,
                     cacheRepo = cacheRepo,
+                    fallbackProviders = fallbackProviders,
                     context = getApplication(),
                     onProgress = { msg ->
                         post {

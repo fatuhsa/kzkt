@@ -10,6 +10,7 @@ import com.kzkt.app.core.Config.TweakParams
 import com.kzkt.app.core.providers.LlmProvider
 import com.kzkt.app.ui.FileUtils
 import com.kzkt.app.util.JsonUtils
+import kotlinx.coroutines.*
 import org.opencv.android.Utils
 import org.opencv.core.Core
 import org.opencv.core.Mat
@@ -30,6 +31,7 @@ class TranslationPipeline(
     private val rateLimiter: RateLimiter = RateLimiter((params.minRequestDelay * 1000).toLong()),
     private val targetLanguage: String = "Indonesian",
     private val cacheRepo: com.kzkt.app.data.TranslationCacheRepository? = null,
+    private val fallbackProviders: List<LlmProvider> = emptyList(),
     private val context: Context? = null,
     private val onProgress: (String) -> Unit = {},
     private val isCancelled: () -> Boolean = { false },
@@ -345,37 +347,38 @@ class TranslationPipeline(
                 val shrunk = MosaicBuilder.shrinkCropsIfTooTall(chunk, params.maxTinggiMosaik, params.jarakAntarPotongan)
                 val mosaic = MosaicBuilder.buildMosaic(shrunk, params)
 
-                onProgress("  Translating with ${provider.providerName}...")
                 val prompt = Constants.buildPrompt(targetLanguage)
+                val providersChain = listOf(provider) + fallbackProviders
 
-                try {
-                    val result = rateLimiter.executeWithRetry(
-                        apiCall = { provider.translateImage(mosaic, prompt) },
-                        providerName = provider.providerName,
-                        isCancelled = isCancelled,
-                        onWait = { msg -> onProgress(msg) }
-                    )
+                for (prov in providersChain) {
+                    if (isCancelled()) break
+                    onProgress("  Translating with ${prov.providerName}...")
+                    try {
+                        val result = rateLimiter.executeWithRetry(
+                            apiCall = { prov.translateImage(mosaic, prompt) },
+                            providerName = prov.providerName,
+                            isCancelled = isCancelled,
+                            onWait = { msg -> onProgress(msg) }
+                        )
 
-                    if (result != null) {
-                        val cleaned = JsonUtils.sanitizeJson(result)
-                        val parsed = JsonUtils.parseTranslationMap(cleaned)
-                        allTranslations.putAll(parsed)
-                        if (cacheRepo != null) {
-                            for ((id, text) in parsed) {
-                                val item = cropItems.find { it.id == id }
-                                if (item != null) cacheRepo.saveTranslation(item.bitmap, targetLanguage, text)
+                        if (result != null) {
+                            val cleaned = JsonUtils.sanitizeJson(result)
+                            val parsed = JsonUtils.parseTranslationMap(cleaned)
+                            allTranslations.putAll(parsed)
+                            if (cacheRepo != null) {
+                                for ((id, text) in parsed) {
+                                    val item = cropItems.find { it.id == id }
+                                    if (item != null) cacheRepo.saveTranslation(item.bitmap, targetLanguage, text)
+                                }
                             }
+                            break
                         }
-                    }
-                } catch (e: Exception) {
-                    if (e is kotlinx.coroutines.CancellationException || isCancelled()) {
-                        throw e
-                    }
-                    val msg = e.message ?: "Unknown error"
-                    if (msg == "API_KEY_ERROR") {
-                        onProgress("[!] API key for ${provider.providerName} is expired or invalid.")
-                    } else {
-                        onProgress("[!] ${provider.providerName} request failed: $msg")
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException || isCancelled()) {
+                            throw e
+                        }
+                        val msg = e.message ?: "Unknown error"
+                        onProgress("  [Failover] ${prov.providerName} failed ($msg). Trying fallback provider...")
                     }
                 }
             }
@@ -396,11 +399,17 @@ class TranslationPipeline(
         val workingMat = ImageProcessor.bitmapToMat(bitmap)
         val resultBitmap = try {
             if (params.useInpainting) {
-                onProgress("  [OpenCV Inpainting] Erasing original text strokes...")
-                for ((id, text) in normalizedTranslations) {
-                    if (text.uppercase() == "SKIP" || text.isBlank()) continue
-                    val box = coordinateMap[id] ?: continue
-                    ImageProcessor.inpaintBubbleText(workingMat, box)
+                onProgress("  [OpenCV Inpainting] Erasing original text strokes (Parallel)...")
+                val targets = normalizedTranslations.mapNotNull { (id, text) ->
+                    if (text.uppercase() == "SKIP" || text.isBlank()) null
+                    else coordinateMap[id]
+                }
+                coroutineScope {
+                    targets.map { box ->
+                        async(Dispatchers.Default) {
+                            ImageProcessor.inpaintBubbleText(workingMat, box)
+                        }
+                    }.awaitAll()
                 }
             }
             ImageProcessor.matToBitmap(workingMat)
@@ -566,23 +575,30 @@ class TranslationPipeline(
             val shrunk = MosaicBuilder.shrinkCropsIfTooTall(chunk, params.maxTinggiMosaik, params.jarakAntarPotongan)
             val mosaic = MosaicBuilder.buildMosaic(shrunk, params)
             val prompt = Constants.buildPrompt(targetLanguage)
+            val providersChain = listOf(provider) + fallbackProviders
 
             try {
-                val result = rateLimiter.executeWithRetry(
-                    apiCall = { provider.translateImage(mosaic, prompt) },
-                    providerName = provider.providerName,
-                    isCancelled = isCancelled,
-                    onWait = { msg -> onProgress(msg) }
-                )
-                if (result != null) {
-                    val cleaned = JsonUtils.sanitizeJson(result)
-                    allTranslations.putAll(JsonUtils.parseTranslationMap(cleaned))
+                for (prov in providersChain) {
+                    if (isCancelled()) break
+                    try {
+                        val result = rateLimiter.executeWithRetry(
+                            apiCall = { prov.translateImage(mosaic, prompt) },
+                            providerName = prov.providerName,
+                            isCancelled = isCancelled,
+                            onWait = { msg -> onProgress(msg) }
+                        )
+                        if (result != null) {
+                            val cleaned = JsonUtils.sanitizeJson(result)
+                            allTranslations.putAll(JsonUtils.parseTranslationMap(cleaned))
+                            break
+                        }
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException || isCancelled()) {
+                            throw e
+                        }
+                        onProgress("  [Failover] ${prov.providerName} failed: ${e.message}. Trying fallback provider...")
+                    }
                 }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException || isCancelled()) {
-                    throw e
-                }
-                onProgress("[!] ${provider.providerName} request failed: ${e.message}")
             } finally {
                 if (!mosaic.isRecycled) mosaic.recycle()
                 for (item in shrunk) {
