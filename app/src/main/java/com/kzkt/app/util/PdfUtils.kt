@@ -24,7 +24,10 @@ object PdfImporter {
      */
     fun extractPdfToImages(pdfFile: File, outputDir: File, dpiScale: Float = 1.5f): List<String> {
         val imagePaths = mutableListOf<String>()
-        outputDir.mkdirs()
+        try {
+            outputDir.mkdirs()
+            outputDir.listFiles()?.forEach { if (it.isFile) it.delete() }
+        } catch (_: Exception) {}
 
         val fd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
         try {
