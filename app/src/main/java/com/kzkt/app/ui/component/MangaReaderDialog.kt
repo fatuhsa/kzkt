@@ -59,6 +59,7 @@ fun MangaReaderDialog(
     var showControls by remember { mutableStateOf(true) }
     var showOriginal by remember { mutableStateOf(false) }
     var showEditor by remember { mutableStateOf(false) }
+    var isZoomed by remember { mutableStateOf(false) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -76,6 +77,7 @@ fun MangaReaderDialog(
                 // ── Horizontal Pager Page Viewer ──
                 HorizontalPager(
                     state = pagerState,
+                    userScrollEnabled = !isZoomed,
                     modifier = Modifier.fillMaxSize()
                 ) { pageIndex ->
                     val path = if (showOriginal && pageIndex in originalPaths.indices) {
@@ -92,7 +94,8 @@ fun MangaReaderDialog(
 
                     ZoomablePageViewer(
                         bitmap = bitmap,
-                        onTap = { showControls = !showControls }
+                        onTap = { showControls = !showControls },
+                        onZoomStateChanged = { zoomed -> isZoomed = zoomed }
                     )
                 }
 
@@ -221,7 +224,8 @@ fun MangaReaderDialog(
 @Composable
 private fun ZoomablePageViewer(
     bitmap: Bitmap?,
-    onTap: () -> Unit
+    onTap: () -> Unit,
+    onZoomStateChanged: (Boolean) -> Unit = {}
 ) {
     if (bitmap == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -233,9 +237,17 @@ private fun ZoomablePageViewer(
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
 
+    LaunchedEffect(bitmap) {
+        scale = 1f
+        offset = Offset.Zero
+        onZoomStateChanged(false)
+    }
+
     val state = rememberTransformableState { zoomChange, offsetChange, _ ->
-        scale = (scale * zoomChange).coerceIn(1f, 4f)
-        if (scale > 1f) {
+        val newScale = (scale * zoomChange).coerceIn(1f, 4f)
+        scale = newScale
+        onZoomStateChanged(newScale > 1f)
+        if (newScale > 1f) {
             offset += offsetChange
         } else {
             offset = Offset.Zero
@@ -252,8 +264,10 @@ private fun ZoomablePageViewer(
                         if (scale > 1f) {
                             scale = 1f
                             offset = Offset.Zero
+                            onZoomStateChanged(false)
                         } else {
                             scale = 2.5f
+                            onZoomStateChanged(true)
                         }
                     }
                 )
