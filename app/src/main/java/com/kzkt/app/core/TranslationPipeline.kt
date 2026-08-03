@@ -407,7 +407,9 @@ class TranslationPipeline(
                 coroutineScope {
                     targets.map { box ->
                         async(Dispatchers.Default) {
-                            ImageProcessor.inpaintBubbleText(workingMat, box)
+                            synchronized(workingMat) {
+                                ImageProcessor.inpaintBubbleText(workingMat, box)
+                            }
                         }
                     }.awaitAll()
                 }

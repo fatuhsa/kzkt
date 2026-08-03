@@ -317,6 +317,13 @@ private fun ApiKeyItem(
     var textState by remember(value) { mutableStateOf(value) }
     var visible by remember { mutableStateOf(false) }
 
+    LaunchedEffect(textState) {
+        if (textState != value) {
+            kotlinx.coroutines.delay(350)
+            viewModel.settingsRepo.saveApiKey(label.lowercase().replace(" ", ""), textState)
+        }
+    }
+
     return Material3SettingsItem(
         leadingContent = {
             Box(
@@ -418,6 +425,12 @@ private fun CustomUrlSection(viewModel: MainViewModel) {
                 leadingContent = { SettingsIcon(Icons.Outlined.Link) },
                 title = {
                     var urlText by remember(customBaseUrl) { mutableStateOf(customBaseUrl) }
+                    LaunchedEffect(urlText) {
+                        if (urlText != customBaseUrl) {
+                            kotlinx.coroutines.delay(350)
+                            viewModel.settingsRepo.saveCustomBaseUrl(urlText)
+                        }
+                    }
                     OutlinedTextField(
                         value = urlText,
                         onValueChange = { urlText = it },
