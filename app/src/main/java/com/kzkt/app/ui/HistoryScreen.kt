@@ -371,7 +371,8 @@ private fun HistoryItem(
     }
 }
 
+private val DATE_FORMATTER by lazy { SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()) }
+
 private fun formatTimestamp(ts: Long): String {
-    val sdf = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
-    return sdf.format(Date(ts))
+    return DATE_FORMATTER.format(Date(ts))
 }

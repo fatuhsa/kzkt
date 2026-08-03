@@ -88,6 +88,9 @@ fun SettingsScreen(
         }
     }
 
+    val providerChips = remember { Config.PROVIDER_REGISTRY.values.map { it.key to it.displayName } }
+    val languageChips = remember { Config.LANGUAGE_CHOICES.map { it to it } }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -161,7 +164,7 @@ fun SettingsScreen(
                 )
                 val selectedProvider by remember { derivedStateOf { viewModel.settings.value.llmProvider } }
                 ChipsRow(
-                    chips = Config.PROVIDER_REGISTRY.values.map { it.key to it.displayName },
+                    chips = providerChips,
                     currentValue = selectedProvider,
                     onValueUpdate = { key -> scope.launch { viewModel.settingsRepo.saveProvider(key) } },
                 )
@@ -187,7 +190,7 @@ fun SettingsScreen(
                 )
                 val language by remember { derivedStateOf { viewModel.settings.value.targetLanguage } }
                 ChipsRow(
-                    chips = Config.LANGUAGE_CHOICES.map { it to it },
+                    chips = languageChips,
                     currentValue = language,
                     onValueUpdate = { lang -> scope.launch { viewModel.settingsRepo.saveLanguage(lang) } },
                 )
