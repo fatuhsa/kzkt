@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.focus.onFocusChanged
 import com.kzkt.app.core.Config
 import com.kzkt.app.ui.component.ChipsRow
 import com.kzkt.app.ui.component.Material3SettingsGroup
@@ -70,8 +71,6 @@ fun SettingsScreen(
 ) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
-    val customFontPath = viewModel.settings.value.customFontPath
-    val useInpainting = viewModel.settings.value.useInpainting
 
     val fontPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -106,6 +105,7 @@ fun SettingsScreen(
 
         // ── Appearance ──
         item {
+            val customFontPath by remember { derivedStateOf { viewModel.settings.value.customFontPath } }
             Material3SettingsGroup(
                 title = "Appearance",
                 items = listOf(
@@ -331,15 +331,30 @@ private fun ApiKeyItem(
         title = {
             OutlinedTextField(
                 value = textState,
-                onValueChange = { newText ->
-                    textState = newText
-                    scope.launch {
-                        viewModel.settingsRepo.saveApiKey(label.lowercase().replace(" ", ""), newText)
-                    }
-                },
+                onValueChange = { textState = it },
                 label = { Text(label) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused && textState != value) {
+                            scope.launch {
+                                viewModel.settingsRepo.saveApiKey(label.lowercase().replace(" ", ""), textState)
+                            }
+                        }
+                    },
                 singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onDone = {
+                        if (textState != value) {
+                            scope.launch {
+                                viewModel.settingsRepo.saveApiKey(label.lowercase().replace(" ", ""), textState)
+                            }
+                        }
+                    }
+                ),
                 visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     IconButton(onClick = { visible = !visible }) {
@@ -357,7 +372,7 @@ private fun ApiKeyItem(
 @Composable
 private fun ModelSection(viewModel: MainViewModel) {
     val scope = rememberCoroutineScope()
-    val selectedProvider = viewModel.settings.value.llmProvider
+    val selectedProvider by remember { derivedStateOf { viewModel.settings.value.llmProvider } }
     val meta = Config.PROVIDER_REGISTRY[selectedProvider]
 
     val modelValue by remember(selectedProvider) { derivedStateOf {
@@ -405,13 +420,26 @@ private fun CustomUrlSection(viewModel: MainViewModel) {
                     var urlText by remember(customBaseUrl) { mutableStateOf(customBaseUrl) }
                     OutlinedTextField(
                         value = urlText,
-                        onValueChange = { newUrl ->
-                            urlText = newUrl
-                            scope.launch { viewModel.settingsRepo.saveCustomBaseUrl(newUrl) }
-                        },
+                        onValueChange = { urlText = it },
                         placeholder = { Text("https://api.example.com") },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { focusState ->
+                                if (!focusState.isFocused && urlText != customBaseUrl) {
+                                    scope.launch { viewModel.settingsRepo.saveCustomBaseUrl(urlText) }
+                                }
+                            },
                         singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onDone = {
+                                if (urlText != customBaseUrl) {
+                                    scope.launch { viewModel.settingsRepo.saveCustomBaseUrl(urlText) }
+                                }
+                            }
+                        ),
                     )
                 },
             ),
