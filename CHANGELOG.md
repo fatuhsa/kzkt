@@ -4,6 +4,38 @@ Semua perubahan signifikan pada CyKt dicatat di file ini.
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id-ID/1.1.0/), versi mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.25.1.13] - 2026-08-03
+
+### Added
+
+- **In-App Manga & PDF Reader**: fullscreen `HorizontalPager` with pinch-to-zoom, Original vs Translated toggle, and live text touch-up editing.
+- Reader integrated into the History tab and the PDF result card.
+- Interactive Touch-up Editor connected to the MainScreen edit action.
+- v2.0 feature set: custom fonts, OpenCV inpainting, translation cache memory, multi-language expansion, auto-fallback multi-provider chain.
+- Android CI workflow (JDK 17, `assembleDebug`).
+
+### Changed
+
+- History entries hoisted into a `StateFlow` (parsed once, replayed in memory); tweak sliders extracted to top-level composables — zero recomposition lag when switching tabs.
+- Cached date formatter and settings lists for 120 FPS zero-framedrop scrolling.
+- PDF extraction optimized to JPEG 90% at 2048px; mosaic payloads compressed to JPEG 85%; max bubbles raised to 35; rate-limiter delay cut to 0.5 s.
+- Settings converted to `LazyColumn` for smooth 60-120 FPS scroll.
+- Parallel inpainting pipeline; pre-allocated direct `FloatBuffer` in YOLO.
+- Output files routed to public `Download/KZKT` via MediaStore with fallback (fixes `EACCES` crash on Android 10+).
+- Full cypy-to-KZKT rebrand (`com.kzkt.app`); README rewritten, original cypy credited.
+
+### Fixed
+
+- Pager swipe unblocked: `pointerInput` tap detector replaced with `combinedClickable`; BottomSheet gesture trap removed.
+- History swipe gathers every image entry for horizontal navigation.
+- Swipe gesture disabled while zoomed; zoom reset on page switch.
+- Missing inpainting loop in `processImageBatch`; broader text-stroke thresholding.
+- Old cache files auto-cleaned before PDF extraction.
+- OpenCV access synchronized across coroutines; 350 ms debounce on text fields.
+- No live DataStore writes per keystroke; settings state reads scoped with `derivedStateOf`.
+- Eliminated card `animateContentSize` lag; fixed PDF progress bar 100% math; fixed PDF page memory leaks.
+- Tap coordinate letterbox calculation, OpenCV `submat` bounds clamping, and bitmap recycling safety hardened.
+
 ## [Unreleased]
 
 ### Added
