@@ -43,6 +43,9 @@ fun HistoryScreen(
     val entries by viewModel.historyRepo.entriesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     var confirmDelete by remember { mutableStateOf<HistoryEntry?>(null) }
     var preview by remember { mutableStateOf<HistoryEntry?>(null) }
+    var readerPages by remember { mutableStateOf<List<String>?>(null) }
+    var readerInitialIndex by remember { mutableIntStateOf(0) }
+    var isExtractingPdf by remember { mutableStateOf(false) }
 
     // BottomSheet preview — expanded on item tap, dismissed by swipe down / close
     val sheetState = rememberBottomSheetState(
@@ -102,12 +105,49 @@ fun HistoryScreen(
                 content = {
                     PreviewSheetContent(
                         entry = preview!!,
+                        isExtractingPdf = isExtractingPdf,
                         onClose = {
                             scope.launch { sheetState.dismiss() }
                             preview = null
                         },
+                        onReadManga = { entry ->
+                            val file = File(entry.outputPath)
+                            if (file.name.endsWith(".pdf", ignoreCase = true)) {
+                                isExtractingPdf = true
+                                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    val cacheDir = File(context.cacheDir, "pdf_reader_cache")
+                                    val pages = com.kzkt.app.util.PdfImporter.extractPdfToImages(file, cacheDir)
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        isExtractingPdf = false
+                                        if (pages.isNotEmpty()) {
+                                            readerPages = pages
+                                            readerInitialIndex = 0
+                                        }
+                                    }
+                                }
+                            } else if (file.exists()) {
+                                val parent = file.parentFile
+                                val allImages = parent?.listFiles()
+                                    ?.filter { it.isFile && (it.name.endsWith(".png", true) || it.name.endsWith(".jpg", true) || it.name.endsWith(".jpeg", true)) }
+                                    ?.sortedBy { it.name }
+                                    ?.map { it.absolutePath } ?: listOf(file.absolutePath)
+                                val idx = allImages.indexOf(file.absolutePath).coerceAtLeast(0)
+                                readerPages = allImages
+                                readerInitialIndex = idx
+                            }
+                        }
                     )
                 },
+            )
+        }
+
+        if (readerPages != null && readerPages!!.isNotEmpty()) {
+            com.kzkt.app.ui.component.MangaReaderDialog(
+                pagePaths = readerPages!!,
+                initialIndex = readerInitialIndex,
+                targetLanguage = viewModel.settings.value.targetLanguage,
+                customFontPath = viewModel.settings.value.customFontPath,
+                onDismiss = { readerPages = null }
             )
         }
     }
@@ -137,7 +177,9 @@ fun HistoryScreen(
 @Composable
 private fun PreviewSheetContent(
     entry: HistoryEntry,
+    isExtractingPdf: Boolean = false,
     onClose: () -> Unit,
+    onReadManga: (HistoryEntry) -> Unit = {},
 ) {
     val context = LocalContext.current
     val isPdf = entry.outputPath.endsWith(".pdf", ignoreCase = true)
@@ -198,7 +240,7 @@ private fun PreviewSheetContent(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        if (isPdf) "PDF document" else "File not found",
+                        if (isPdf) "PDF document (${entry.pageCount} pages)" else "File not found",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -221,20 +263,29 @@ private fun PreviewSheetContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Button(
-                onClick = { FileUtils.openFileInSystemViewer(context, entry.outputPath) },
+                onClick = { onReadManga(entry) },
                 modifier = Modifier.weight(1f),
+                enabled = !isExtractingPdf
             ) {
-                Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Open")
+                if (isExtractingPdf) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Loading PDF...")
+                } else {
+                    Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Read Manga 📖")
+                }
+            }
+            OutlinedButton(
+                onClick = { FileUtils.openFileInSystemViewer(context, entry.outputPath) },
+            ) {
+                Icon(Icons.Filled.OpenInNew, contentDescription = "System Open", modifier = Modifier.size(16.dp))
             }
             OutlinedButton(
                 onClick = { FileUtils.shareFile(context, entry.outputPath) },
-                modifier = Modifier.weight(1f),
             ) {
-                Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Share")
+                Icon(Icons.Filled.Share, contentDescription = "Share", modifier = Modifier.size(16.dp))
             }
         }
     }

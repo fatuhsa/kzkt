@@ -466,15 +466,36 @@ private fun ResultPreview(
 
         val lastResult = viewModel.lastResultForEditing.value
         val allResultPaths = viewModel.resultPaths.toList()
+        var pdfReaderPages by remember { mutableStateOf<List<String>?>(null) }
+
+        LaunchedEffect(showFullscreenViewer, currentPath) {
+            if (showFullscreenViewer && currentPath.endsWith(".pdf", ignoreCase = true)) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val cacheDir = File(context.cacheDir, "pdf_reader_cache")
+                    val pages = com.kzkt.app.util.PdfImporter.extractPdfToImages(File(currentPath), cacheDir)
+                    pdfReaderPages = pages
+                }
+            } else {
+                pdfReaderPages = null
+            }
+        }
 
         if (showFullscreenViewer) {
-            com.kzkt.app.ui.component.MangaReaderDialog(
-                pagePaths = if (allResultPaths.isNotEmpty()) allResultPaths else listOf(currentPath),
-                pipelineResult = lastResult,
-                targetLanguage = viewModel.settings.value.targetLanguage,
-                customFontPath = viewModel.settings.value.customFontPath,
-                onDismiss = { showFullscreenViewer = false }
-            )
+            val pagesToDisplay = when {
+                currentPath.endsWith(".pdf", ignoreCase = true) -> pdfReaderPages ?: emptyList()
+                allResultPaths.isNotEmpty() -> allResultPaths
+                else -> listOf(currentPath)
+            }
+
+            if (pagesToDisplay.isNotEmpty()) {
+                com.kzkt.app.ui.component.MangaReaderDialog(
+                    pagePaths = pagesToDisplay,
+                    pipelineResult = lastResult,
+                    targetLanguage = viewModel.settings.value.targetLanguage,
+                    customFontPath = viewModel.settings.value.customFontPath,
+                    onDismiss = { showFullscreenViewer = false }
+                )
+            }
         }
 
         if (viewModel.showInteractiveEditor.value && lastResult?.originalBitmap != null) {
