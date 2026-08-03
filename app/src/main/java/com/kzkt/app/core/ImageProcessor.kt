@@ -30,15 +30,15 @@ object ImageProcessor {
 
     // ── Image I/O ──────────────────────────────────────────────────
 
-    fun bitmapToBase64(bitmap: Bitmap): String {
+    fun bitmapToBase64(bitmap: Bitmap, format: Bitmap.CompressFormat = Bitmap.CompressFormat.JPEG, quality: Int = 85): String {
         val stream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        bitmap.compress(format, quality, stream)
         val bytes = stream.toByteArray()
         return Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
 
     fun bitmapToBase64DataUri(bitmap: Bitmap): String {
-        return "data:image/png;base64,${bitmapToBase64(bitmap)}"
+        return "data:image/jpeg;base64,${bitmapToBase64(bitmap, Bitmap.CompressFormat.JPEG, 85)}"
     }
 
     fun matToBitmap(mat: Mat): Bitmap {

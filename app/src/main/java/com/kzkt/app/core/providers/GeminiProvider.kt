@@ -41,7 +41,7 @@ class GeminiProvider(
                 "parts" to listOf(
                     mapOf(
                         "inlineData" to mapOf(
-                            "mimeType" to "image/png",
+                            "mimeType" to "image/jpeg",
                             "data" to base64
                         )
                     ),

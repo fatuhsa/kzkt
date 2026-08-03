@@ -22,7 +22,7 @@ object PdfImporter {
      *
      * [dpiScale] 1.5–2.0 keeps bubble text sharp enough for YOLO detection.
      */
-    fun extractPdfToImages(pdfFile: File, outputDir: File, dpiScale: Float = 2.0f): List<String> {
+    fun extractPdfToImages(pdfFile: File, outputDir: File, dpiScale: Float = 1.5f): List<String> {
         val imagePaths = mutableListOf<String>()
         outputDir.mkdirs()
 
@@ -33,15 +33,15 @@ object PdfImporter {
                 for (i in 0 until renderer.pageCount) {
                     val page = renderer.openPage(i)
                     try {
-                        // Cap resolution so a huge PDF page can't OOM the bitmap
-                        val width = (page.width * dpiScale).toInt().coerceIn(1, 4096)
-                        val height = (page.height * dpiScale).toInt().coerceIn(1, 4096)
+                        // Cap resolution to 2048px for ultra-fast rendering & zero OOM
+                        val width = (page.width * dpiScale).toInt().coerceIn(1, 2048)
+                        val height = (page.height * dpiScale).toInt().coerceIn(1, 2048)
                         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                         try {
                             page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                            val imageFile = File(outputDir, "${pdfFile.nameWithoutExtension}_page_${i + 1}.png")
+                            val imageFile = File(outputDir, "${pdfFile.nameWithoutExtension}_page_${i + 1}.jpg")
                             imageFile.outputStream().use { out ->
-                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
                             }
                             imagePaths.add(imageFile.absolutePath)
                         } finally {
