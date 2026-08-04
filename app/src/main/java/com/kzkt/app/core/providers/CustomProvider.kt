@@ -126,5 +126,62 @@ class CustomProvider(
     }
 
 
+    override suspend fun translateText(textJson: String, prompt: String): String? {
+        val endpoint = if (baseUrl.isNotBlank()) {
+            val normalized = baseUrl.trimEnd('/')
+            if (normalized.endsWith("/v1/chat/completions")) normalized
+            else "$normalized/v1/chat/completions"
+        } else "https://api.openai.com/v1/chat/completions"
+
+        val headers = mutableMapOf("Content-Type" to "application/json")
+        if (apiKey.isNotBlank()) headers["Authorization"] = "Bearer $apiKey"
+
+        val payload = mapOf(
+            "model" to modelName,
+            "temperature" to 0,
+            "top_p" to 0.1,
+            "max_tokens" to 4096,
+            "stream" to false,
+            "messages" to listOf(
+                mapOf("role" to "user", "content" to "$prompt\n\nJSON input to translate:\n$textJson")
+            )
+        )
+
+        val request = Request.Builder()
+            .url(endpoint)
+            .apply { headers.forEach { (k, v) -> addHeader(k, v) } }
+            .post(gson.toJson(payload).toRequestBody("application/json".toMediaTypeOrNull()))
+            .build()
+
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val response = client.newCall(request).execute()
+                val body = response.body?.string() ?: ""
+
+                if (response.code in listOf(401, 402)) throw ValueError("API_KEY_ERROR")
+                if (!response.isSuccessful) {
+                    throw RuntimeException("Custom API error ${response.code}: ${body.take(200)}")
+                }
+
+                val lenientReader = JsonReader(StringReader(body)).apply { isLenient = true }
+                val json = JsonParser.parseReader(lenientReader)
+
+                if (!json.isJsonObject) return@withContext body
+                val jsonObj = json.asJsonObject
+
+                if (jsonObj.has("choices") && jsonObj.getAsJsonArray("choices").size() > 0) {
+                    val choice = jsonObj.getAsJsonArray("choices")[0].asJsonObject
+                    if (choice.has("message") && choice.getAsJsonObject("message").has("content")) {
+                        val contentElem = choice.getAsJsonObject("message").get("content")
+                        if (contentElem.isJsonPrimitive) return@withContext contentElem.asString
+                    }
+                }
+                body
+            } catch (e: java.io.IOException) {
+                throw RuntimeException("Custom network error: ${e.message}")
+            }
+        }
+    }
+
     class ValueError(message: String) : Exception(message)
 }

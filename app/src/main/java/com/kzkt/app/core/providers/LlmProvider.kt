@@ -17,5 +17,11 @@ interface LlmProvider {
      */
     suspend fun translateImage(image: Bitmap, prompt: String): String?
 
+    /**
+     * Send pure JSON text prompt to the LLM without image payload (for Local OCR mode).
+     * Compatible with ALL text-only and vision models.
+     */
+    suspend fun translateText(textJson: String, prompt: String): String? = null
+
     fun validateApiKey(): Boolean = apiKey.isNotBlank()
 }

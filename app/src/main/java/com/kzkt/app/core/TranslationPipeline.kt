@@ -391,7 +391,7 @@ class TranslationPipeline(
                     onProgress("  Translating text with ${prov.providerName}...")
                     try {
                         val result = rateLimiter.executeWithRetry(
-                            apiCall = { prov.translateImage(dummyBmp, textPrompt) },
+                            apiCall = { prov.translateText(textJson, textPrompt) ?: prov.translateImage(dummyBmp, textPrompt) },
                             providerName = prov.providerName,
                             isCancelled = isCancelled,
                             onWait = { msg -> onProgress(msg) }
@@ -695,7 +695,7 @@ class TranslationPipeline(
                 onProgress("  Translating text with ${prov.providerName}...")
                 try {
                     val result = rateLimiter.executeWithRetry(
-                        apiCall = { prov.translateImage(dummyBmp, textPrompt) },
+                        apiCall = { prov.translateText(textJson, textPrompt) ?: prov.translateImage(dummyBmp, textPrompt) },
                         providerName = prov.providerName,
                         isCancelled = isCancelled,
                         onWait = { msg -> onProgress(msg) }
