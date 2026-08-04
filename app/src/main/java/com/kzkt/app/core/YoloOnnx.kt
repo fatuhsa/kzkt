@@ -50,6 +50,7 @@ class YoloOnnx(
             Log.d("KZKT/YOLO", "Creating SessionOptions...")
             val opts = OrtSession.SessionOptions()
             opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+
             Log.d("KZKT/YOLO", "Creating session from ${onnxFile.absolutePath}...")
             ortSession = ortEnv!!.createSession(onnxFile.absolutePath, opts)
             Log.d("KZKT/YOLO", "Session created OK")

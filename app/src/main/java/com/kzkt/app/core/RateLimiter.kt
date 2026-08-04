@@ -71,12 +71,9 @@ class RateLimiter(
                     if (attempt == maxRetries - 1) throw ex
 
                     val totalSecs = ceil(waitSeconds).toInt()
-                    val msg = "[Rate Limit] Hit rate limit for ${providerName}. Retrying in ${totalSecs}s..."
-                    Log.w("KZKT", msg)
-                    onWait?.invoke(msg)
-
                     for (s in totalSecs downTo 1) {
                         if (isCancelled()) return null
+                        onWait?.invoke("[Rate Limit] Hit rate limit for ${providerName}. Retrying in ${s}s...")
                         delay(1000L)
                     }
                     continue
@@ -91,16 +88,23 @@ class RateLimiter(
 
                 if (isTimeout) {
                     if (attempt == maxRetries - 1) throw ex
-                    val msg = "[Network Warning] Attempt ${attempt + 1}/${maxRetries} for $providerName timed out. Retrying in 2s..."
-                    Log.w("KZKT", msg)
-                    onWait?.invoke(msg)
-                    delay(2000L)
+                    for (s in 2 downTo 1) {
+                        if (isCancelled()) return null
+                        val msg = "[Network Warning] Attempt ${attempt + 1}/${maxRetries} for $providerName timed out. Retrying in ${s}s..."
+                        Log.w("KZKT", msg)
+                        onWait?.invoke(msg)
+                        delay(1000L)
+                    }
                     continue
                 }
 
                 // Non-retryable or last attempt
                 if (attempt == maxRetries - 1) throw ex
-                delay(3000L)
+                for (s in 3 downTo 1) {
+                    if (isCancelled()) return null
+                    onWait?.invoke("[Network Warning] Request failed. Retrying in ${s}s...")
+                    delay(1000L)
+                }
             }
         }
         return null

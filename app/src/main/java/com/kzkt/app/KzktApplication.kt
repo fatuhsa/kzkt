@@ -28,5 +28,11 @@ class KzktApplication : Application() {
     companion object {
         lateinit var instance: KzktApplication
             private set
+
+        @Volatile
+        var yolo: com.kzkt.app.core.YoloOnnx? = null
+
+        @Volatile
+        var textRenderer: com.kzkt.app.core.TextRenderer? = null
     }
 }

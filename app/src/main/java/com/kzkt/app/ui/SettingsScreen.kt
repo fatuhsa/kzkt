@@ -8,8 +8,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.AutoAwesome
@@ -90,6 +93,8 @@ fun SettingsScreen(
 
     val providerChips = remember { Config.PROVIDER_REGISTRY.values.map { it.key to it.displayName } }
     val languageChips = remember { Config.LANGUAGE_CHOICES.map { it to it } }
+    val selectedProvider by remember { derivedStateOf { viewModel.settings.value.llmProvider } }
+    var showAdvanced by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -229,37 +234,90 @@ fun SettingsScreen(
                     modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
                 )
                 ModelSection(viewModel)
+            }
+        }
 
-                val selectedProvider by remember { derivedStateOf { viewModel.settings.value.llmProvider } }
-                if (selectedProvider == "custom") {
-                    CustomUrlSection(viewModel)
+        // ── Advanced Options Header ──
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showAdvanced = !showAdvanced },
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        SettingsIcon(Icons.Outlined.Science)
+                        Spacer(Modifier.width(16.dp))
+                        Column {
+                            Text("Advanced settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (showAdvanced) "Hide sliders and custom configurations" else "Show OCR padding and API latency tweaks",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = if (showAdvanced) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = null
+                    )
                 }
             }
         }
 
-        // ── Tweak Parameters ──
-        item {
-            Column {
-                Text(
-                    "Tweak Parameters",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
-                )
-                TweakParamsSection(viewModel)
+        if (showAdvanced) {
+            if (selectedProvider == "custom") {
+                item {
+                    Column {
+                        Text(
+                            "Custom API Configuration",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
+                        )
+                        CustomUrlSection(viewModel)
+                    }
+                }
             }
-        }
 
-        // ── SFX Filter Mode ──
-        item {
-            Column {
-                Text(
-                    "SFX Filter Mode",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
-                )
-                SfxFilterSection(viewModel)
+            // ── Tweak Parameters ──
+            item {
+                Column {
+                    Text(
+                        "Tweak Parameters",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
+                    )
+                    TweakParamsSection(viewModel)
+                }
+            }
+
+            // ── SFX Filter Mode ──
+            item {
+                Column {
+                    Text(
+                        "SFX Filter Mode",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
+                    )
+                    SfxFilterSection(viewModel)
+                }
             }
         }
 

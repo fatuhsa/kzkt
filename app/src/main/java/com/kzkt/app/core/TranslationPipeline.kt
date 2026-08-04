@@ -11,6 +11,7 @@ import com.kzkt.app.core.providers.LlmProvider
 import com.kzkt.app.ui.FileUtils
 import com.kzkt.app.util.JsonUtils
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.withPermit
 import org.opencv.android.Utils
 import org.opencv.core.Core
 import org.opencv.core.Mat
@@ -45,6 +46,19 @@ class TranslationPipeline(
         val originalBitmap: Bitmap? = null,
         val translations: Map<String, String> = emptyMap(),
         val coordinateMap: Map<String, IntArray> = emptyMap(),
+    )
+
+    data class PageData(
+        val path: String,
+        val pil: Bitmap,
+        val draws: Canvas?,
+        val imgWidth: Int,
+        val imgHeight: Int,
+        val crops: MutableList<Pair<String, Bitmap>>,
+        val coordMap: MutableMap<String, IntArray>,
+        val bubbleColors: MutableMap<String, Int> = mutableMapOf(),
+        val alreadyDone: Boolean = false,
+        val failed: Boolean = false,
     )
 
     /**
@@ -152,6 +166,8 @@ class TranslationPipeline(
         imgHeight: Int,
     ): Int {
         var count = 0
+        
+        // Pass 1: Draw all background patches first
         for ((num, text) in translations) {
             if (num !in coordinateMap || text.uppercase() == "SKIP" || text.isBlank()) continue
 
@@ -162,7 +178,6 @@ class TranslationPipeline(
             val areaRatio = (w * h).toDouble() / maxOf(1, imgWidth * imgHeight)
             val bgColor = bubbleColors[num] ?: Color.WHITE
 
-            // Skip suspicious boxes (same logic as Python)
             if (ratio >= 3.2 && w >= imgWidth * 0.35) continue
             if (areaRatio >= 0.035 && ratio >= 2.8) continue
 
@@ -170,16 +185,7 @@ class TranslationPipeline(
                 w >= imgWidth * params.lebarBoxGepengRatio &&
                 h <= imgHeight * params.tinggiBoxGepengRatio
 
-            if (params.useInpainting) {
-                // Background was inpainted seamlessly by OpenCV! Render text without solid patch
-                textRenderer.renderTextInBubble(canvas, coordinateMap[num]!!, text,
-                    backgroundPatch = false, targetLanguage = targetLanguage, bgColor = bgColor,
-                    customFontPath = params.customFontPath)
-            } else if (params.pakaiPatchUntukBoxGepeng && suspiciousFlat) {
-                textRenderer.renderTextInBubble(canvas, coordinateMap[num]!!, text,
-                    backgroundPatch = true, targetLanguage = targetLanguage, bgColor = bgColor,
-                    customFontPath = params.customFontPath)
-            } else {
+            if (!params.useInpainting && !(params.pakaiPatchUntukBoxGepeng && suspiciousFlat)) {
                 // Background: blurred adaptive patch, drawn on a bubble-sized overlay
                 val marginX = (w * params.maskMarginRatio).toInt()
                 val marginY = (h * params.maskMarginRatio).toInt()
@@ -212,7 +218,36 @@ class TranslationPipeline(
                     maskFilter = BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL)
                 }
                 canvas.drawBitmap(overlay, x1 - marginX - pad, y1 - marginY - pad, blurPaint)
+            }
+        }
 
+        // Pass 2: Render all translated texts on top
+        for ((num, text) in translations) {
+            if (num !in coordinateMap || text.uppercase() == "SKIP" || text.isBlank()) continue
+
+            val (x1, y1, x2, y2) = coordinateMap[num]!!
+            val w = maxOf(1, x2 - x1)
+            val h = maxOf(1, y2 - y1)
+            val ratio = w.toDouble() / h
+            val areaRatio = (w * h).toDouble() / maxOf(1, imgWidth * imgHeight)
+            val bgColor = bubbleColors[num] ?: Color.WHITE
+
+            if (ratio >= 3.2 && w >= imgWidth * 0.35) continue
+            if (areaRatio >= 0.035 && ratio >= 2.8) continue
+
+            val suspiciousFlat = ratio >= params.rasioBoxGepeng &&
+                w >= imgWidth * params.lebarBoxGepengRatio &&
+                h <= imgHeight * params.tinggiBoxGepengRatio
+
+            if (params.useInpainting) {
+                textRenderer.renderTextInBubble(canvas, coordinateMap[num]!!, text,
+                    backgroundPatch = false, targetLanguage = targetLanguage, bgColor = bgColor,
+                    customFontPath = params.customFontPath)
+            } else if (params.pakaiPatchUntukBoxGepeng && suspiciousFlat) {
+                textRenderer.renderTextInBubble(canvas, coordinateMap[num]!!, text,
+                    backgroundPatch = true, targetLanguage = targetLanguage, bgColor = bgColor,
+                    customFontPath = params.customFontPath)
+            } else {
                 textRenderer.renderTextInBubble(canvas, coordinateMap[num]!!, text,
                     backgroundPatch = false, targetLanguage = targetLanguage, bgColor = bgColor,
                     customFontPath = params.customFontPath)
@@ -451,107 +486,128 @@ class TranslationPipeline(
     suspend fun processImageBatch(
         imagePaths: List<String>,
         outputDir: String,
+        cachedPages: List<PageData>? = null
     ): List<PipelineResult> {
         if (imagePaths.isEmpty()) return emptyList()
-        onProgress("[Multi-Page Batch] Processing ${imagePaths.size} pages...")
 
-        // Phase 1: Process each page (detection + crop), skip already done
-        data class PageData(
-            val path: String,
-            val pil: Bitmap,
-            val draws: Canvas?,
-            val imgWidth: Int,
-            val imgHeight: Int,
-            val crops: MutableList<Pair<String, Bitmap>>,
-            val coordMap: MutableMap<String, IntArray>,
-            val bubbleColors: MutableMap<String, Int> = mutableMapOf(),
-            val alreadyDone: Boolean = false,
-            val failed: Boolean = false,
-        )
+        val pageDataList = if (cachedPages != null) {
+            onProgress("[Multi-Page Batch] Reusing ${cachedPages.size} cached pages (Skipping YOLO/OCR detection).")
+            cachedPages
+        } else {
+            onProgress("[Multi-Page Batch] Processing ${imagePaths.size} pages...")
 
-        val pageDataList = mutableListOf<PageData>()
+            val semaphore = kotlinx.coroutines.sync.Semaphore(3)
+            val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
 
-        for ((idx, imgPath) in imagePaths.withIndex()) {
-            if (isCancelled()) return emptyList()
+            val list = coroutineScope {
+                imagePaths.mapIndexed { idx, imgPath ->
+                    async(Dispatchers.Default) {
+                        if (isCancelled()) {
+                            val doneCount = completedCount.incrementAndGet()
+                            return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
+                                mutableListOf(), mutableMapOf(), failed = true)
+                        }
 
-            val expectedOutput = MosaicBuilder.makeOutputPath(imgPath, targetLanguage, outputDir)
-            if (File(expectedOutput).exists()) {
-                onProgress("  [${idx + 1}/${imagePaths.size}] Skipping ${File(imgPath).name} (Already translated).")
-                pageDataList.add(PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
-                    mutableListOf(), mutableMapOf(), alreadyDone = true))
-                continue
+                        val expectedOutput = MosaicBuilder.makeOutputPath(imgPath, targetLanguage, outputDir)
+                        if (File(expectedOutput).exists()) {
+                            val doneCount = completedCount.incrementAndGet()
+                            onProgress("  [Page $doneCount/${imagePaths.size}] Skipping ${File(imgPath).name} (Already translated).")
+                            return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
+                                mutableListOf(), mutableMapOf(), alreadyDone = true)
+                        }
+
+                        val bitmap = ImageProcessor.loadBitmap(imgPath)
+                        if (bitmap == null) {
+                            val doneCount = completedCount.incrementAndGet()
+                            onProgress("  [Page $doneCount/${imagePaths.size}] Failed to load ${File(imgPath).name}")
+                            return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
+                                mutableListOf(), mutableMapOf(), failed = true)
+                        }
+
+                        val imgHeight = bitmap.height
+                        val imgWidth = bitmap.width
+
+                        val result = semaphore.withPermit {
+                            if (isCancelled()) {
+                                PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
+                                    mutableListOf(), mutableMapOf(), failed = true)
+                            } else {
+                                // YOLO detection — 3-stage cascade (each stage: distinct conf/iou threshold)
+                                val rawBoxes = mutableListOf<IntArray>()
+                                for ((conf, iou) in Constants.YOLO_PREDICTION_STAGES) {
+                                    val detections = yolo?.predict(bitmap, confThreshold = conf, iouThreshold = iou) ?: continue
+                                    for (d in detections) rawBoxes.add(intArrayOf(d.x1, d.y1, d.x2, d.y2))
+                                }
+                                var filtered = ImageProcessor.removeFalseGiants(rawBoxes)
+                                filtered = ImageProcessor.mergeOverlapping(filtered)
+                                filtered = ImageProcessor.removeNonsense(filtered, imgWidth, imgHeight)
+                                val sfxMat = ImageProcessor.bitmapToMat(bitmap)
+                                try {
+                                    filtered = ImageProcessor.removeSfxAndImages(sfxMat, filtered, params)
+                                } finally {
+                                    sfxMat.release()
+                                }
+
+                                val resultBmp = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                                val crops = mutableListOf<Pair<String, Bitmap>>()
+                                val coordMap = mutableMapOf<String, IntArray>()
+                                val bubbleColors = mutableMapOf<String, Int>()
+
+                                val cropMatFull = ImageProcessor.bitmapToMat(bitmap)
+                                try {
+                                    for ((order, box) in filtered.withIndex()) {
+                                        val (x1, y1, x2, y2) = box
+                                        val boxW = maxOf(1, x2 - x1)
+                                        val boxH = maxOf(1, y2 - y1)
+                                        val padX = maxOf(params.minPad, (boxW * params.padXRatio).toInt())
+                                        val padY = maxOf(params.minPad, (boxH * params.padYRatio).toInt())
+                                        val id = "${idx + 1}_${order + 1}"
+
+                                        val bgColor = ImageProcessor.detectBubbleBackgroundColor(cropMatFull, box)
+                                        bubbleColors[id] = bgColor
+
+                                        val (cropX1, cropY1, cropX2, cropY2) = ImageProcessor.smartCropBounds(
+                                            box, filtered, imgWidth, imgHeight, padX, padY, params)
+                                        val cropMat = cropMatFull.submat(org.opencv.core.Rect(cropX1, cropY1, cropX2 - cropX1, cropY2 - cropY1))
+                                        val maskedMat = ImageProcessor.maskOutsideBubble(cropMat, cropX1, cropY1, x1, y1, x2, y2, params)
+                                        cropMat.release()
+
+                                        val scale = params.skalaPotonganMosaik
+                                        val cropBitmap = ImageProcessor.matToBitmap(maskedMat)
+                                        maskedMat.release()
+                                        val scaled = if (scale != 1.0) {
+                                            val s = Bitmap.createScaledBitmap(cropBitmap,
+                                                maxOf(1, (cropBitmap.width * scale).toInt()),
+                                                maxOf(1, (cropBitmap.height * scale).toInt()), true)
+                                            if (s != cropBitmap && !cropBitmap.isRecycled) cropBitmap.recycle()
+                                            s
+                                        } else cropBitmap
+
+                                        crops.add(id to scaled)
+                                        coordMap[id] = box
+                                    }
+                                } finally {
+                                    cropMatFull.release()
+                                }
+
+                                PageData(imgPath, resultBmp, Canvas(resultBmp), imgWidth, imgHeight,
+                                    crops.toMutableList(), coordMap, bubbleColors)
+                            }
+                        }
+
+                        val doneCount = completedCount.incrementAndGet()
+                        if (!result.failed) {
+                            onProgress("  [Page $doneCount/${imagePaths.size}] Processed ${File(imgPath).name} (Found ${result.crops.size} bubbles)")
+                        } else {
+                            onProgress("  [Page $doneCount/${imagePaths.size}] Failed/Cancelled ${File(imgPath).name}")
+                        }
+                        result
+                    }
+                }.awaitAll()
             }
-
-            val bitmap = ImageProcessor.loadBitmap(imgPath)
-            if (bitmap == null) {
-                pageDataList.add(PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
-                    mutableListOf(), mutableMapOf(), failed = true))
-                continue
-            }
-
-            val imgHeight = bitmap.height
-            val imgWidth = bitmap.width
-
-            // YOLO detection — 3-stage cascade (each stage: distinct conf/iou threshold)
-            val rawBoxes = mutableListOf<IntArray>()
-            for ((conf, iou) in Constants.YOLO_PREDICTION_STAGES) {
-                val detections = yolo?.predict(bitmap, confThreshold = conf, iouThreshold = iou) ?: continue
-                for (d in detections) rawBoxes.add(intArrayOf(d.x1, d.y1, d.x2, d.y2))
-            }
-            var filtered = ImageProcessor.removeFalseGiants(rawBoxes)
-            filtered = ImageProcessor.mergeOverlapping(filtered)
-            filtered = ImageProcessor.removeNonsense(filtered, imgWidth, imgHeight)
-            val sfxMat = ImageProcessor.bitmapToMat(bitmap)
-            try {
-                filtered = ImageProcessor.removeSfxAndImages(sfxMat, filtered, params)
-            } finally {
-                sfxMat.release()
-            }
-
-            val resultBmp = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-            val crops = mutableListOf<Pair<String, Bitmap>>()
-            val coordMap = mutableMapOf<String, IntArray>()
-            val bubbleColors = mutableMapOf<String, Int>()
-
-            val cropMatFull = ImageProcessor.bitmapToMat(bitmap)
-            try {
-                for ((order, box) in filtered.withIndex()) {
-                    val (x1, y1, x2, y2) = box
-                    val boxW = maxOf(1, x2 - x1)
-                    val boxH = maxOf(1, y2 - y1)
-                    val padX = maxOf(params.minPad, (boxW * params.padXRatio).toInt())
-                    val padY = maxOf(params.minPad, (boxH * params.padYRatio).toInt())
-                    val id = "${idx + 1}_${order + 1}"
-
-                    val bgColor = ImageProcessor.detectBubbleBackgroundColor(cropMatFull, box)
-                    bubbleColors[id] = bgColor
-
-                    val (cropX1, cropY1, cropX2, cropY2) = ImageProcessor.smartCropBounds(
-                        box, filtered, imgWidth, imgHeight, padX, padY, params)
-                    val cropMat = cropMatFull.submat(org.opencv.core.Rect(cropX1, cropY1, cropX2 - cropX1, cropY2 - cropY1))
-                    val maskedMat = ImageProcessor.maskOutsideBubble(cropMat, cropX1, cropY1, x1, y1, x2, y2, params)
-                    cropMat.release()
-
-                    val scale = params.skalaPotonganMosaik
-                    val cropBitmap = ImageProcessor.matToBitmap(maskedMat)
-                    maskedMat.release()
-                    val scaled = if (scale != 1.0) {
-                        val s = Bitmap.createScaledBitmap(cropBitmap,
-                            maxOf(1, (cropBitmap.width * scale).toInt()),
-                            maxOf(1, (cropBitmap.height * scale).toInt()), true)
-                        if (s != cropBitmap && !cropBitmap.isRecycled) cropBitmap.recycle()
-                        s
-                    } else cropBitmap
-
-                    crops.add(id to scaled)
-                    coordMap[id] = box
-                }
-            } finally {
-                cropMatFull.release()
-            }
-
-            pageDataList.add(PageData(imgPath, resultBmp, Canvas(resultBmp), imgWidth, imgHeight,
-                crops.toMutableList(), coordMap, bubbleColors))
+            // Save page data cache for fast retry support
+            TranslationProgressTracker.cachedPageData = list
+            list
         }
 
         // Phase 2: Collect all crops across pages and batch
@@ -674,6 +730,11 @@ class TranslationPipeline(
         // Clean up crop bitmaps
         for ((_, bmp) in allCrops) {
             if (!bmp.isRecycled) bmp.recycle()
+        }
+
+        val hasFailure = results.any { it.failed }
+        if (!hasFailure) {
+            TranslationProgressTracker.clearCache()
         }
 
         return results

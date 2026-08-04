@@ -132,10 +132,10 @@ object FileUtils {
     /**
      * Copy translated file to public MediaStore Download/Pictures gallery.
      */
-    fun saveToMediaStore(context: Context, filePath: String) {
+    fun saveToMediaStore(context: Context, filePath: String): String? {
         try {
             val file = File(filePath)
-            if (!file.exists()) return
+            if (!file.exists()) return null
 
             val fileName = file.name
             val isPdf = fileName.endsWith(".pdf", ignoreCase = true)
@@ -154,13 +154,23 @@ object FileUtils {
                 android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
             }
 
-            context.contentResolver.insert(targetUri, values)?.let { uri ->
-                context.contentResolver.openOutputStream(uri)?.use { out ->
-                    file.inputStream().use { input -> input.copyTo(out) }
+            val insertedUri = context.contentResolver.insert(targetUri, values) ?: return null
+            context.contentResolver.openOutputStream(insertedUri)?.use { out ->
+                file.inputStream().use { input -> input.copyTo(out) }
+            }
+
+            var actualPath: String? = null
+            val projection = arrayOf(android.provider.MediaStore.MediaColumns.DATA)
+            context.contentResolver.query(insertedUri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns.DATA)
+                    actualPath = cursor.getString(idx)
                 }
             }
+            return actualPath ?: file.absolutePath
         } catch (e: Exception) {
             android.util.Log.w("KZKT", "Failed to copy to MediaStore: ${e.message}")
+            return null
         }
     }
 

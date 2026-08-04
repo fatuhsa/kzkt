@@ -95,7 +95,7 @@ dependencies {
     // OpenCV Android SDK (local module)
     implementation(project(":opencv"))
 
-    // ONNX Runtime
+    // ONNX Runtime (includes NNAPI support)
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.21.0")
 
     // HTTP + JSON

@@ -51,9 +51,22 @@ fun MainScreen(
         if (logSize > 0) logListState.scrollToItem(logSize - 1)
     }
 
-    // Initialize YOLO on first composition
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
+    // Initialize YOLO on first composition and request notification permission
     LaunchedEffect(Unit) {
         viewModel.initialize(context)
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            val permissionCheck = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                "android.permission.POST_NOTIFICATIONS"
+            )
+            if (permissionCheck != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch("android.permission.POST_NOTIFICATIONS")
+            }
+        }
     }
 
     // File picker
@@ -286,14 +299,30 @@ private fun ActionButtons(
                 Text("Cancel")
             }
         } else {
-            Button(
-                onClick = { viewModel.startTranslation() },
-                enabled = hasFiles && yoloReady,
-                modifier = Modifier.weight(1f),
-            ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Translate")
+            val canRetry by derivedStateOf { viewModel.canRetry.value }
+            if (canRetry) {
+                Button(
+                    onClick = { viewModel.retryTranslation() },
+                    enabled = hasFiles && yoloReady,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                    ),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Retry")
+                }
+            } else {
+                Button(
+                    onClick = { viewModel.startTranslation() },
+                    enabled = hasFiles && yoloReady,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Translate")
+                }
             }
         }
     }

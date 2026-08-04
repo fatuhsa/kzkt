@@ -129,5 +129,5 @@ object Config {
     )
 
     val SUPPORTED_IMAGE_EXTENSIONS: Set<String> = setOf(".png", ".jpg", ".jpeg", ".webp")
-    val REQUEST_TIMEOUT_MS: Long = 120_000L
+    val REQUEST_TIMEOUT_MS: Long = 20_000L
 }

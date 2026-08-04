@@ -1,6 +1,7 @@
 package com.kzkt.app.ui
 
 import android.app.Application
+import com.kzkt.app.KzktApplication
 import android.net.Uri
 import android.os.Environment
 import androidx.compose.runtime.mutableStateListOf
@@ -50,6 +51,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val translationProgress = mutableStateOf(0f)
     val translationTotal = mutableStateOf(0)
     val translationDone = mutableStateOf(0)
+    val canRetry = mutableStateOf(false)
 
     // Result
     val resultPaths = mutableStateListOf<String>()
@@ -94,6 +96,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             historyRepo.entriesFlow.collect { historyEntries.value = it }
         }
+        // Observe background service progress flow
+        viewModelScope.launch {
+            com.kzkt.app.core.TranslationProgressTracker.progressFlow.collect { event ->
+                post {
+                    when (event) {
+                        is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Log -> {
+                            translationLog.add(event.message)
+                        }
+                        is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Progress -> {
+                            translationProgress.value = event.done.toFloat() / maxOf(1, event.total)
+                            translationDone.value = event.done
+                            translationTotal.value = event.total
+                            translationActive.value = event.done < event.total
+                        }
+                        is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.ResultPath -> {
+                            if (!resultPaths.contains(event.path)) {
+                                resultPaths.add(event.path)
+                            }
+                            currentPreviewPath.value = event.path
+                        }
+                        is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Completed -> {
+                            translationActive.value = false
+                            canRetry.value = false
+                        }
+                        is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Error -> {
+                            translationLog.add("[!] Error: ${event.error}")
+                            translationActive.value = false
+                            canRetry.value = com.kzkt.app.core.TranslationProgressTracker.cachedPageData != null
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fun initialize(context: android.content.Context) {
@@ -101,12 +136,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         pipelineLaunched = true
 
         viewModelScope.launch(Dispatchers.IO) {
-            yolo = YoloOnnx(context)
-            val ok = yolo!!.initialize()
-            val renderer = TextRenderer(context)
-            post {
-                textRenderer = renderer
+            val yInstance = KzktApplication.yolo ?: YoloOnnx(context).also {
+                val ok = it.initialize()
                 if (ok) {
+                    KzktApplication.yolo = it
+                }
+            }
+            val rInstance = KzktApplication.textRenderer ?: TextRenderer(context).also {
+                KzktApplication.textRenderer = it
+            }
+            yolo = yInstance
+            textRenderer = rInstance
+
+            post {
+                if (KzktApplication.yolo != null) {
                     yoloReady.value = true
                     translationLog.add("YOLO model loaded successfully")
                 } else {
@@ -162,182 +205,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return fallbacks
     }
 
-    private var translationJob: kotlinx.coroutines.Job? = null
-
     fun startTranslation() {
-        if (translationActive.value) return
-        val yolo = yolo ?: run {
-            translationLog.add("[!] YOLO model is not ready.")
-            return
-        }
-        val provider = createProvider() ?: run {
-            translationLog.add("[!] Provider configuration is incomplete.")
-            return
-        }
+        if (translationActive.value || selectedFiles.isEmpty()) return
 
-        _cancelled = false
         translationActive.value = true
+        canRetry.value = false
+        com.kzkt.app.core.TranslationProgressTracker.clearCache()
         translationLog.clear()
         resultPaths.clear()
         translationProgress.value = 0f
         translationTotal.value = selectedFiles.size
         translationDone.value = 0
 
-        val filesToProcess = selectedFiles.toList()
-        val downloadFolder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        val outputFolder = File(downloadFolder, "KZKT")
-        outputFolder.mkdirs()
-        val outputDir = outputFolder.absolutePath
+        com.kzkt.app.core.TranslationService.startTranslation(getApplication(), selectedFiles.toList())
+    }
 
-        translationJob?.cancel()
-        translationJob = viewModelScope.launch(Dispatchers.Default) {
-            try {
-                val params = Config.TweakParams(
-                    maxBubblesPerRequest = settings.value.maxBubblesPerRequest,
-                    minRequestDelay = settings.value.minRequestDelay.toDouble(),
-                    filterSfxMode = settings.value.filterSfxMode,
-                    padXRatio = settings.value.padXRatio.toDouble(),
-                    padYRatio = settings.value.padYRatio.toDouble(),
-                    minPad = settings.value.minPad,
-                    customFontPath = settings.value.customFontPath,
-                    useInpainting = settings.value.useInpainting,
-                )
+    fun retryTranslation() {
+        if (translationActive.value || selectedFiles.isEmpty()) return
 
-                val cacheRepo = com.kzkt.app.data.TranslationCacheRepository(getApplication())
-                val fallbackProviders = createFallbackProviders(settings.value.llmProvider)
-
-                val pipeline = TranslationPipeline(
-                    yolo = yolo,
-                    provider = provider,
-                    textRenderer = textRenderer!!,
-                    params = params,
-                    targetLanguage = settings.value.targetLanguage,
-                    cacheRepo = cacheRepo,
-                    fallbackProviders = fallbackProviders,
-                    context = getApplication(),
-                    onProgress = { msg ->
-                        post {
-                            translationLog.add(msg)
-                            if (msg.contains("Done!")) {
-                                translationDone.value = translationDone.value + 1
-                                translationProgress.value = translationDone.value.toFloat() / translationTotal.value
-                            }
-                        }
-                    },
-                    isCancelled = { _cancelled }
-                )
-
-                var completed = 0
-                // extract + translate + reassemble for PDFs, 1 step for images
-                val totalSteps = filesToProcess.fold(0) { acc, f ->
-                    acc + if (f.endsWith(".pdf", ignoreCase = true)) 3 else 1
-                }
-                val tempDir = File(getApplication<Application>().cacheDir, "pdf_input")
-                val translatedPages = mutableListOf<String>()
-
-                for ((idx, path) in filesToProcess.withIndex()) {
-                    if (_cancelled) {
-                        post { translationLog.add("[Cancelled] Translation stopped by user.") }
-                        break
-                    }
-
-                    if (path.endsWith(".pdf", ignoreCase = true)) {
-                        // ── PDF: extract pages → batch translate → reassemble ──
-                        val fileName = File(path).name
-                        post { translationLog.add("[${idx + 1}/${filesToProcess.size}] Opening PDF $fileName...") }
-                        val pdfFile = File(path)
-                        val pages = PdfImporter.extractPdfToImages(pdfFile, tempDir)
-                        if (pages.isEmpty()) {
-                            post {
-                                translationLog.add("[!] Could not read PDF: $fileName")
-                                completed += 3
-                                translationDone.value = completed
-                                translationProgress.value = completed.toFloat() / totalSteps
-                            }
-                            continue
-                        }
-                        post {
-                            translationLog.add("  Extracted ${pages.size} pages from PDF.")
-                            completed++
-                            translationDone.value = completed
-                            translationProgress.value = completed.toFloat() / totalSteps
-                        }
-
-                        val results = pipeline.processImageBatch(pages, outputDir)
-                        val translated = results.mapNotNull { it.outputPath }
-                        post {
-                            translationLog.add("  Translated ${translated.size}/${pages.size} pages.")
-                            completed++
-                            translationDone.value = completed
-                            translationProgress.value = completed.toFloat() / totalSteps
-                        }
-
-                        val outputPdf = File(outputFolder, "${pdfFile.nameWithoutExtension}.pdf")
-                        PdfExporter.createPdfFromImages(translated, outputPdf)
-                        if (outputPdf.exists()) {
-                            FileUtils.saveToMediaStore(getApplication(), outputPdf.absolutePath)
-                            post {
-                                translationLog.add("  PDF saved: ${outputPdf.absolutePath}")
-                                resultPaths.add(outputPdf.absolutePath)
-                                currentPreviewPath.value = outputPdf.absolutePath
-                            }
-                            recordHistory(fileName, outputPdf.absolutePath, pages.size)
-                        } else {
-                            post { translationLog.add("[!] Failed to assemble PDF.") }
-                        }
-
-                        // Cleanup temporary page images
-                        pages.forEach { File(it).delete() }
-                        post {
-                            completed++
-                            translationDone.value = completed
-                            translationProgress.value = completed.toFloat() / totalSteps
-                        }
-                    } else {
-                        // ── Single image ──
-                        val fileName = File(path).name
-                        post { translationLog.add("[${idx + 1}/${filesToProcess.size}] Processing $fileName...") }
-                        val result = pipeline.processSingleImage(path, outputDir)
-                        if (result.outputPath != null) {
-                            FileUtils.saveToMediaStore(getApplication(), result.outputPath)
-                            post {
-                                resultPaths.add(result.outputPath)
-                                currentPreviewPath.value = result.outputPath
-                                lastResultForEditing.value = result
-                            }
-                            recordHistory(fileName, result.outputPath, 1)
-                        }
-                        post {
-                            translationDone.value = ++completed
-                            translationProgress.value = completed.toFloat() / totalSteps
-                        }
-                    }
-                }
-
-                if (!_cancelled) {
-                    post { translationLog.add("Translation complete.") }
-                }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                post { translationLog.add("[Cancelled] Translation stopped by user.") }
-            } finally {
-                post { translationActive.value = false }
-            }
-        }
+        translationActive.value = true
+        translationLog.add("[System] Retrying from last cached step...")
+        com.kzkt.app.core.TranslationService.startTranslation(getApplication(), selectedFiles.toList())
     }
 
     fun cancelTranslation() {
-        _cancelled = true
-        translationJob?.cancel()
-        translationJob = null
+        com.kzkt.app.core.TranslationService.cancelTranslation(getApplication())
         translationActive.value = false
-        if (!translationLog.lastOrNull().orEmpty().contains("[Cancelled]")) {
-            translationLog.add("[Cancelled] Translation stopped by user.")
-        }
+        canRetry.value = com.kzkt.app.core.TranslationProgressTracker.cachedPageData != null
     }
 
     fun addFiles(paths: List<String>) {
         selectedFiles.clear()
         selectedFiles.addAll(paths)
+        canRetry.value = false
+        com.kzkt.app.core.TranslationProgressTracker.clearCache()
     }
 
     fun addLog(msg: String) {
@@ -366,6 +267,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         yolo?.close()
+        com.kzkt.app.core.TranslationProgressTracker.clearCache()
     }
 
     // ── Custom provider model auto-detect ──

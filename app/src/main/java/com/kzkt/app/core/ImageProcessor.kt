@@ -79,7 +79,7 @@ object ImageProcessor {
         if (inter == 0) return false
         val iou = inter.toDouble() / (areaA + areaB - inter)
         val coverSmall = inter.toDouble() / minOf(areaA, areaB)
-        return iou >= 0.28 || coverSmall >= 0.82
+        return iou >= 0.20 || coverSmall >= 0.60
     }
 
     private fun overlap1D(a1: Int, a2: Int, b1: Int, b2: Int): Int {
@@ -90,7 +90,7 @@ object ImageProcessor {
 
     /**
      * Remove false giant boxes: if a big box overlaps a small box by >= 80% of the small one's area
-     * and is > 2.5x the area, keep the small one.
+     * and is > 6.0x the area, keep the small one.
      * buang_kotak_raksasa_palsu()
      */
     fun removeFalseGiants(boxes: List<IntArray>): List<IntArray> {
@@ -105,7 +105,7 @@ object ImageProcessor {
             for (j in i + 1 until withArea.size) {
                 if (!keep[j]) continue
                 val (boxJ, areaJ) = withArea[j] to areaBox(withArea[j])
-                if (areaI > 2.5 * areaJ) {
+                if (areaI > 6.0 * areaJ) {
                     val inter = intersectionArea(boxI, boxJ)
                     if (inter >= 0.8 * areaJ) {
                         keep[i] = false

@@ -48,7 +48,7 @@ class SettingsRepository(private val context: Context) {
         private val KEY_CUSTOM_FONT = stringPreferencesKey("custom_font_path")
         private val KEY_USE_INPAINTING = booleanPreferencesKey("use_inpainting")
     }
-
+ 
     data class Settings(
         val llmProvider: String = "gemini",
         val targetLanguage: String = "Indonesian",
@@ -75,11 +75,11 @@ class SettingsRepository(private val context: Context) {
         val customFontPath: String = "",
         val useInpainting: Boolean = false,
     )
-
+ 
     private object Defaults {
         val settings = Settings()
     }
-
+ 
     val settingsFlow: Flow<Settings> = context.dataStore.data.map { prefs ->
         Settings(
             llmProvider = prefs[KEY_PROVIDER] ?: Defaults.settings.llmProvider,
@@ -108,15 +108,15 @@ class SettingsRepository(private val context: Context) {
             useInpainting = prefs[KEY_USE_INPAINTING] ?: Defaults.settings.useInpainting,
         )
     }
-
+ 
     suspend fun saveProvider(provider: String) {
         context.dataStore.edit { it[KEY_PROVIDER] = provider }
     }
-
+ 
     suspend fun saveLanguage(language: String) {
         context.dataStore.edit { it[KEY_LANGUAGE] = language }
     }
-
+ 
     suspend fun saveApiKey(providerName: String, key: String) {
         context.dataStore.edit { prefs ->
             val keyPref = when (providerName) {
@@ -131,7 +131,7 @@ class SettingsRepository(private val context: Context) {
             prefs[keyPref] = key
         }
     }
-
+ 
     suspend fun saveModel(providerName: String, model: String) {
         context.dataStore.edit { prefs ->
             val key = when (providerName) {
@@ -146,19 +146,19 @@ class SettingsRepository(private val context: Context) {
             prefs[key] = model
         }
     }
-
+ 
     suspend fun saveCustomBaseUrl(url: String) {
         context.dataStore.edit { it[KEY_CUSTOM_BASE_URL] = url }
     }
-
+ 
     suspend fun saveCustomFontPath(path: String) {
         context.dataStore.edit { it[KEY_CUSTOM_FONT] = path }
     }
-
+ 
     suspend fun saveUseInpainting(enabled: Boolean) {
         context.dataStore.edit { it[KEY_USE_INPAINTING] = enabled }
     }
-
+ 
     suspend fun saveTweakParam(keyField: String, value: Any) {
         context.dataStore.edit { prefs ->
             when (keyField) {
@@ -172,7 +172,7 @@ class SettingsRepository(private val context: Context) {
             }
         }
     }
-
+ 
     suspend fun saveLastDir(dir: String) {
         context.dataStore.edit { it[KEY_LAST_DIR] = dir }
     }
