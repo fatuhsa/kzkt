@@ -19,7 +19,7 @@ local.properties
 Thumbs.db
 *.swp
 # Local workspace caches
-models/
+/models/
 .serena/
 .kotlin/
 .remember/
