@@ -132,45 +132,72 @@ object FileUtils {
     /**
      * Copy translated file to public MediaStore Download/Pictures gallery.
      */
+    /**
+     * Copy translated file to public MediaStore Download/KZKT directory.
+     */
     fun saveToMediaStore(context: Context, filePath: String): String? {
         try {
             val file = File(filePath)
             if (!file.exists()) return null
 
             val fileName = file.name
-            val isPdf = fileName.endsWith(".pdf", ignoreCase = true)
+            val lowerName = fileName.lowercase()
+            val mimeType = when {
+                lowerName.endsWith(".pdf") -> "application/pdf"
+                lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") -> "image/jpeg"
+                lowerName.endsWith(".webp") -> "image/webp"
+                else -> "image/png"
+            }
 
-            val values = android.content.ContentValues().apply {
-                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, if (isPdf) "application/pdf" else "image/png")
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
                     put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "${android.os.Environment.DIRECTORY_DOWNLOADS}/KZKT")
                 }
-            }
 
-            val targetUri = if (isPdf || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
-                android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
-            } else {
-                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-            }
+                val targetUri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                val insertedUri = context.contentResolver.insert(targetUri, values)
+                if (insertedUri != null) {
+                    context.contentResolver.openOutputStream(insertedUri)?.use { out ->
+                        file.inputStream().use { input -> input.copyTo(out) }
+                    }
 
-            val insertedUri = context.contentResolver.insert(targetUri, values) ?: return null
-            context.contentResolver.openOutputStream(insertedUri)?.use { out ->
-                file.inputStream().use { input -> input.copyTo(out) }
-            }
-
-            var actualPath: String? = null
-            val projection = arrayOf(android.provider.MediaStore.MediaColumns.DATA)
-            context.contentResolver.query(insertedUri, projection, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val idx = cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns.DATA)
-                    actualPath = cursor.getString(idx)
+                    var actualPath: String? = null
+                    val projection = arrayOf(android.provider.MediaStore.MediaColumns.DATA)
+                    context.contentResolver.query(insertedUri, projection, null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val idx = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.DATA)
+                            if (idx != -1) {
+                                actualPath = cursor.getString(idx)
+                            }
+                        }
+                    }
+                    return actualPath ?: file.absolutePath
                 }
             }
-            return actualPath ?: file.absolutePath
+
+            // Fallback for pre-Android Q or if MediaStore insert fails
+            val downloadFolder = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val outputFolder = File(downloadFolder, "KZKT")
+            outputFolder.mkdirs()
+            val destFile = File(outputFolder, fileName)
+            file.copyTo(destFile, overwrite = true)
+            return destFile.absolutePath
+
         } catch (e: Exception) {
-            android.util.Log.w("KZKT", "Failed to copy to MediaStore: ${e.message}")
-            return null
+            android.util.Log.w("KZKT", "Failed to save to MediaStore: ${e.message}")
+            return try {
+                val file = File(filePath)
+                val downloadFolder = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                val outputFolder = File(downloadFolder, "KZKT")
+                outputFolder.mkdirs()
+                val destFile = File(outputFolder, file.name)
+                file.copyTo(destFile, overwrite = true)
+                destFile.absolutePath
+            } catch (_: Exception) {
+                null
+            }
         }
     }
 
@@ -179,7 +206,13 @@ object FileUtils {
      */
     fun saveBitmapToMediaStore(context: Context, bitmap: android.graphics.Bitmap, fileName: String, subDirName: String = "KZKT"): Uri? {
         return try {
-            val isPdf = fileName.endsWith(".pdf", ignoreCase = true)
+            val lowerName = fileName.lowercase()
+            val mimeType = when {
+                lowerName.endsWith(".pdf") -> "application/pdf"
+                lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") -> "image/jpeg"
+                lowerName.endsWith(".webp") -> "image/webp"
+                else -> "image/png"
+            }
             val relPath = if (subDirName.isNotBlank() && subDirName != "KZKT") {
                 "${android.os.Environment.DIRECTORY_DOWNLOADS}/KZKT/$subDirName"
             } else {
@@ -188,13 +221,13 @@ object FileUtils {
 
             val values = android.content.ContentValues().apply {
                 put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, if (isPdf) "application/pdf" else "image/png")
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                     put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, relPath)
                 }
             }
 
-            val targetUri = if (isPdf || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+            val targetUri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                 android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
             } else {
                 android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
@@ -202,7 +235,8 @@ object FileUtils {
 
             val uri = context.contentResolver.insert(targetUri, values) ?: return null
             context.contentResolver.openOutputStream(uri)?.use { out ->
-                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                val format = if (mimeType == "image/jpeg") android.graphics.Bitmap.CompressFormat.JPEG else android.graphics.Bitmap.CompressFormat.PNG
+                bitmap.compress(format, 95, out)
             }
             uri
         } catch (e: Exception) {
