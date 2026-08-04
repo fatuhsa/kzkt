@@ -12,14 +12,15 @@ KZKT is a native Android application for automatic manga and comic translation. 
 
 ## Highlights
 
-- **On-device bubble detection** — YOLO via Microsoft ONNX Runtime Android, with a 3-stage cascade for accurate detection of speech bubbles, SFX, and overlapping boxes.
-- **Multi-provider vision LLM** — Google Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, plus any custom or local endpoint (Ollama, LM Studio, LocalAI, vLLM) with automatic model detection.
-- **Cost-efficient mosaic batching** — speech bubbles are cropped and packed into vertical RTL mosaics to cut API requests by up to 80%.
-- **PDF in, PDF out** — render PDF pages to images and reassemble translated pages back into PDF using only the built-in Android `PdfRenderer` and `PdfDocument`.
-- **Resilient JSON parsing** — tolerates duplicate keys and malformed LLM output so a single bad response never aborts a batch.
-- **Adaptive text rendering** — automatic bubble masking with rounded or oval shapes, font auto-scaling, and word wrapping via `Canvas` and `StaticLayout`.
-- **Gallery-ready output** — translated pages are saved to `/Download/KZKT/` and appear instantly in your gallery and Google Photos.
-- **Modern, safe storage** — built for Android 10 through Android 15+, scoped storage only; no dangerous permissions, no root.
+- **Background translation service** - runs translation pipeline inside a Foreground Service with dynamic status bar progress notifications, letting tasks continue even when the app is closed.
+- **Fast retry page cache** - stashes YOLO coordinates and bubble crop bitmaps after initial detection to let user resume interrupted/cancelled jobs instantly without repeating detection from scratch.
+- **On-device bubble detection** - YOLO via Microsoft ONNX Runtime Android, with a 3-stage cascade for accurate detection of speech bubbles, SFX, and overlapping boxes.
+- **Multi-provider vision LLM** - Google Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, plus any custom or local endpoint (Ollama, LM Studio, LocalAI, vLLM) with automatic model detection.
+- **Cost-efficient mosaic batching** - speech bubbles are cropped and packed into vertical RTL mosaics to cut API requests by up to 80%.
+- **PDF in, PDF out** - render PDF pages to images and reassemble translated pages back into PDF using only the built-in Android `PdfRenderer` and `PdfDocument`.
+- **Resilient JSON parsing** - tolerates duplicate keys and malformed LLM output so a single bad response never aborts a batch.
+- **Adaptive text rendering** - automatic bubble masking with rounded or oval shapes, font auto-scaling, and word wrapping via `Canvas` and `StaticLayout`.
+- **Scoped storage compatibility** - writes intermediate bitmaps and outputs to private app cache first before publishing them via MediaStore, preventing EACCES permissions errors on Android 10+.
 
 ---
 
