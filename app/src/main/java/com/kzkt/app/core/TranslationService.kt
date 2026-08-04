@@ -91,8 +91,9 @@ class TranslationService : Service() {
         TranslationProgressTracker.isCancelled = false
         setupNotification()
 
-        translationJob?.cancel()
+        val oldJob = translationJob
         translationJob = serviceScope.launch {
+            oldJob?.cancelAndJoin()
             try {
                 // Initialize model if VM hasn't initialized it yet
                 val yoloInstance = KzktApplication.yolo ?: run {
@@ -280,9 +281,15 @@ class TranslationService : Service() {
                     TranslationProgressTracker.progressFlow.emit(TranslationProgressTracker.ProgressEvent.Completed)
                 }
 
-            } catch (e: Exception) {
-                emitError("Execution error: ${e.message}")
-                showFinalNotification("Translation Failed", "An error occurred: ${e.message}")
+            } catch (e: Throwable) {
+                if (e is CancellationException || TranslationProgressTracker.isCancelled) {
+                    emitLog("[Cancelled] Translation stopped by user.")
+                    showFinalNotification("Translation Cancelled", "The operation was stopped by the user.")
+                } else {
+                    val msg = e.message ?: "Unknown error"
+                    emitError("Execution error: $msg")
+                    showFinalNotification("Translation Failed", "An error occurred: $msg")
+                }
             } finally {
                 ServiceCompat.stopForeground(this@TranslationService, ServiceCompat.STOP_FOREGROUND_REMOVE)
                 stopSelf()
