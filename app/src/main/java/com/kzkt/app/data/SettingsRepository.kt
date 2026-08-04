@@ -47,6 +47,8 @@ class SettingsRepository(private val context: Context) {
         private val KEY_LAST_DIR = stringPreferencesKey("last_opened_dir")
         private val KEY_CUSTOM_FONT = stringPreferencesKey("custom_font_path")
         private val KEY_USE_INPAINTING = booleanPreferencesKey("use_inpainting")
+        private val KEY_USE_LOCAL_OCR = booleanPreferencesKey("use_local_ocr")
+        private val KEY_LOCAL_OCR_SCRIPT = stringPreferencesKey("local_ocr_script")
     }
  
     data class Settings(
@@ -74,6 +76,8 @@ class SettingsRepository(private val context: Context) {
         val lastOpenedDir: String = "",
         val customFontPath: String = "",
         val useInpainting: Boolean = false,
+        val useLocalOcr: Boolean = false,
+        val localOcrScript: String = "Japanese (ML Kit)",
     )
  
     private object Defaults {
@@ -106,7 +110,17 @@ class SettingsRepository(private val context: Context) {
             lastOpenedDir = prefs[KEY_LAST_DIR] ?: Defaults.settings.lastOpenedDir,
             customFontPath = prefs[KEY_CUSTOM_FONT] ?: Defaults.settings.customFontPath,
             useInpainting = prefs[KEY_USE_INPAINTING] ?: Defaults.settings.useInpainting,
+            useLocalOcr = prefs[KEY_USE_LOCAL_OCR] ?: Defaults.settings.useLocalOcr,
+            localOcrScript = prefs[KEY_LOCAL_OCR_SCRIPT] ?: Defaults.settings.localOcrScript,
         )
+    }
+
+    suspend fun saveUseLocalOcr(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_USE_LOCAL_OCR] = enabled }
+    }
+
+    suspend fun saveLocalOcrScript(script: String) {
+        context.dataStore.edit { it[KEY_LOCAL_OCR_SCRIPT] = script }
     }
  
     suspend fun saveProvider(provider: String) {

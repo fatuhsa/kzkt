@@ -370,51 +370,96 @@ class TranslationPipeline(
         }
 
         if (cropsToTranslate.isNotEmpty()) {
-            val maxPerBatch = params.maxBubblesPerRequest
-            val chunks = MosaicBuilder.chunkCrops(cropsToTranslate, maxPerBatch)
-
-            for ((chunkIdx, chunk) in chunks.withIndex()) {
-                if (isCancelled()) return PipelineResult(null, failed = true)
-
-                if (chunks.size > 1) {
-                    onProgress("  [Chunk ${chunkIdx + 1}/${chunks.size}] Processing bubbles ${chunk.first().id}..${chunk.last().id}")
+            if (params.useLocalOcr) {
+                onProgress("  [Local OCR Engine] Extracting text from ${cropsToTranslate.size} speech bubbles via Google ML Kit (${params.localOcrScript})...")
+                val ocrMap = mutableMapOf<String, String>()
+                for (crop in cropsToTranslate) {
+                    val recognized = com.kzkt.app.core.ocr.LocalOcrEngine.recognizeText(crop.bitmap, params.localOcrScript)
+                    if (recognized.isNotBlank()) {
+                        ocrMap[crop.id] = recognized
+                    }
                 }
+                onProgress("  [Local OCR] Extracted ${ocrMap.size} text entries. Sending text JSON to ${provider.providerName}...")
 
-                val shrunk = MosaicBuilder.shrinkCropsIfTooTall(chunk, params.maxTinggiMosaik, params.jarakAntarPotongan)
-                val mosaic = MosaicBuilder.buildMosaic(shrunk, params)
-
-                val prompt = Constants.buildPrompt(targetLanguage)
+                val textJson = com.google.gson.Gson().toJson(ocrMap)
+                val textPrompt = "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage. Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
                 val providersChain = listOf(provider) + fallbackProviders
+                val dummyBmp = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
 
                 for (prov in providersChain) {
                     if (isCancelled()) break
-                    onProgress("  Translating with ${prov.providerName}...")
+                    onProgress("  Translating text with ${prov.providerName}...")
                     try {
                         val result = rateLimiter.executeWithRetry(
-                            apiCall = { prov.translateImage(mosaic, prompt) },
+                            apiCall = { prov.translateImage(dummyBmp, textPrompt) },
                             providerName = prov.providerName,
                             isCancelled = isCancelled,
                             onWait = { msg -> onProgress(msg) }
                         )
-
                         if (result != null) {
                             val cleaned = JsonUtils.sanitizeJson(result)
                             val parsed = JsonUtils.parseTranslationMap(cleaned)
-                            allTranslations.putAll(parsed)
-                            if (cacheRepo != null) {
-                                for ((id, text) in parsed) {
-                                    val item = cropItems.find { it.id == id }
-                                    if (item != null) cacheRepo.saveTranslation(item.bitmap, targetLanguage, text)
-                                }
+                            if (parsed.isNotEmpty()) {
+                                allTranslations.putAll(parsed)
+                                break
                             }
-                            break
                         }
                     } catch (e: Exception) {
-                        if (e is kotlinx.coroutines.CancellationException || isCancelled()) {
-                            throw e
+                        if (e is kotlinx.coroutines.CancellationException || isCancelled()) throw e
+                    }
+                }
+                if (!dummyBmp.isRecycled) dummyBmp.recycle()
+            } else {
+                val maxPerBatch = params.maxBubblesPerRequest
+                val chunks = MosaicBuilder.chunkCrops(cropsToTranslate, maxPerBatch)
+
+                for ((chunkIdx, chunk) in chunks.withIndex()) {
+                    if (isCancelled()) return PipelineResult(null, failed = true)
+
+                    if (chunks.size > 1) {
+                        onProgress("  [Chunk ${chunkIdx + 1}/${chunks.size}] Processing bubbles ${chunk.first().id}..${chunk.last().id}")
+                    }
+
+                    val shrunk = MosaicBuilder.shrinkCropsIfTooTall(chunk, params.maxTinggiMosaik, params.jarakAntarPotongan)
+                    val mosaic = MosaicBuilder.buildMosaic(shrunk, params)
+
+                    val prompt = Constants.buildPrompt(targetLanguage)
+                    val providersChain = listOf(provider) + fallbackProviders
+
+                    for (prov in providersChain) {
+                        if (isCancelled()) break
+                        onProgress("  Translating with ${prov.providerName}...")
+                        try {
+                            val result = rateLimiter.executeWithRetry(
+                                apiCall = { prov.translateImage(mosaic, prompt) },
+                                providerName = prov.providerName,
+                                isCancelled = isCancelled,
+                                onWait = { msg -> onProgress(msg) }
+                            )
+
+                            if (result != null) {
+                                val cleaned = JsonUtils.sanitizeJson(result)
+                                val parsed = JsonUtils.parseTranslationMap(cleaned)
+                                if (parsed.isNotEmpty()) {
+                                    allTranslations.putAll(parsed)
+                                    if (cacheRepo != null) {
+                                        for ((id, text) in parsed) {
+                                            val item = cropItems.find { it.id == id }
+                                            if (item != null) cacheRepo.saveTranslation(item.bitmap, targetLanguage, text)
+                                        }
+                                    }
+                                    break
+                                } else {
+                                    onProgress("  [!] ${prov.providerName} returned unparseable output (raw: ${cleaned.take(80)}). Trying next provider...")
+                                }
+                            }
+                        } catch (e: Exception) {
+                            if (e is kotlinx.coroutines.CancellationException || isCancelled()) {
+                                throw e
+                            }
+                            val msg = e.message ?: "Unknown error"
+                            onProgress("  [Failover] ${prov.providerName} failed ($msg). Trying fallback provider...")
                         }
-                        val msg = e.message ?: "Unknown error"
-                        onProgress("  [Failover] ${prov.providerName} failed ($msg). Trying fallback provider...")
                     }
                 }
             }
@@ -627,57 +672,104 @@ class TranslationPipeline(
 
         // Phase 3: Chunk → Mosaic → LLM
         val cropItems = allCrops.map { MosaicBuilder.CropItem(it.first, it.second) }
-        val chunks = MosaicBuilder.chunkCrops(cropItems, params.maxBubblesPerRequest)
         val allTranslations = mutableMapOf<String, String>()
 
-        for ((chunkIdx, chunk) in chunks.withIndex()) {
-            if (isCancelled()) return emptyList()
-            val batchPercent = (25 + (65f * (chunkIdx + 1) / chunks.size)).toInt().coerceIn(25, 90)
-            val batchMsg = "  [Batch ${chunkIdx + 1}/${chunks.size}] ${chunk.size} bubbles..."
-            onProgress(batchMsg)
-            onStepProgress(batchPercent, batchMsg)
+        if (params.useLocalOcr) {
+            onProgress("  [Local OCR Engine] Extracting text from ${cropItems.size} bubbles via Google ML Kit (${params.localOcrScript})...")
+            val ocrMap = mutableMapOf<String, String>()
+            for (crop in cropItems) {
+                val recognized = com.kzkt.app.core.ocr.LocalOcrEngine.recognizeText(crop.bitmap, params.localOcrScript)
+                if (recognized.isNotBlank()) {
+                    ocrMap[crop.id] = recognized
+                }
+            }
+            onProgress("  [Local OCR] Extracted ${ocrMap.size} text entries. Sending JSON to ${provider.providerName}...")
 
-            val shrunk = MosaicBuilder.shrinkCropsIfTooTall(chunk, params.maxTinggiMosaik, params.jarakAntarPotongan)
-            val mosaic = MosaicBuilder.buildMosaic(shrunk, params)
-            val prompt = Constants.buildPrompt(targetLanguage)
+            val textJson = com.google.gson.Gson().toJson(ocrMap)
+            val textPrompt = "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage. Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
             val providersChain = listOf(provider) + fallbackProviders
-            var batchSucceeded = false
+            val dummyBmp = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
 
-            try {
-                for (prov in providersChain) {
-                    if (isCancelled()) break
-                    try {
-                        val result = rateLimiter.executeWithRetry(
-                            apiCall = { prov.translateImage(mosaic, prompt) },
-                            providerName = prov.providerName,
-                            isCancelled = isCancelled,
-                            onWait = { msg ->
-                                onProgress(msg)
-                                onStepProgress(batchPercent, msg)
-                            }
-                        )
-                        if (result != null) {
-                            val cleaned = JsonUtils.sanitizeJson(result)
-                            allTranslations.putAll(JsonUtils.parseTranslationMap(cleaned))
-                            batchSucceeded = true
+            for (prov in providersChain) {
+                if (isCancelled()) break
+                onProgress("  Translating text with ${prov.providerName}...")
+                try {
+                    val result = rateLimiter.executeWithRetry(
+                        apiCall = { prov.translateImage(dummyBmp, textPrompt) },
+                        providerName = prov.providerName,
+                        isCancelled = isCancelled,
+                        onWait = { msg -> onProgress(msg) }
+                    )
+                    if (result != null) {
+                        val cleaned = JsonUtils.sanitizeJson(result)
+                        val parsed = JsonUtils.parseTranslationMap(cleaned)
+                        if (parsed.isNotEmpty()) {
+                            allTranslations.putAll(parsed)
                             break
                         }
-                    } catch (e: Exception) {
-                        if (e is kotlinx.coroutines.CancellationException || isCancelled()) {
-                            throw e
-                        }
-                        onProgress("  [Failover] ${prov.providerName} failed: ${e.message}. Trying fallback provider...")
                     }
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException || isCancelled()) throw e
                 }
-                if (!batchSucceeded) {
-                    val ids = chunk.joinToString(", ") { it.id }
-                    onProgress("  [!] Batch ${chunkIdx + 1} failed all providers. Skipping bubbles: $ids")
-                }
-            } finally {
-                if (!mosaic.isRecycled) mosaic.recycle()
-                for (item in shrunk) {
-                    if (item.bitmap != cropItems.firstOrNull { it.id == item.id }?.bitmap && !item.bitmap.isRecycled) {
-                        item.bitmap.recycle()
+            }
+            if (!dummyBmp.isRecycled) dummyBmp.recycle()
+        } else {
+            val chunks = MosaicBuilder.chunkCrops(cropItems, params.maxBubblesPerRequest)
+
+            for ((chunkIdx, chunk) in chunks.withIndex()) {
+                if (isCancelled()) return emptyList()
+                val batchPercent = (25 + (65f * (chunkIdx + 1) / chunks.size)).toInt().coerceIn(25, 90)
+                val batchMsg = "  [Batch ${chunkIdx + 1}/${chunks.size}] ${chunk.size} bubbles..."
+                onProgress(batchMsg)
+                onStepProgress(batchPercent, batchMsg)
+
+                val shrunk = MosaicBuilder.shrinkCropsIfTooTall(chunk, params.maxTinggiMosaik, params.jarakAntarPotongan)
+                val mosaic = MosaicBuilder.buildMosaic(shrunk, params)
+                val prompt = Constants.buildPrompt(targetLanguage)
+                val providersChain = listOf(provider) + fallbackProviders
+                var batchSucceeded = false
+
+                try {
+                    for (prov in providersChain) {
+                        if (isCancelled()) break
+                        try {
+                            val result = rateLimiter.executeWithRetry(
+                                apiCall = { prov.translateImage(mosaic, prompt) },
+                                providerName = prov.providerName,
+                                isCancelled = isCancelled,
+                                onWait = { msg ->
+                                    onProgress(msg)
+                                    onStepProgress(batchPercent, msg)
+                                }
+                            )
+                            if (result != null) {
+                                val cleaned = JsonUtils.sanitizeJson(result)
+                                val parsed = JsonUtils.parseTranslationMap(cleaned)
+                                if (parsed.isNotEmpty()) {
+                                    allTranslations.putAll(parsed)
+                                    batchSucceeded = true
+                                    break
+                                } else {
+                                    onProgress("  [!] ${prov.providerName} returned unparseable output (raw: ${cleaned.take(80)}). Trying next provider...")
+                                }
+                            }
+                        } catch (e: Exception) {
+                            if (e is kotlinx.coroutines.CancellationException || isCancelled()) {
+                                throw e
+                            }
+                            onProgress("  [Failover] ${prov.providerName} failed: ${e.message}. Trying fallback provider...")
+                        }
+                    }
+                    if (!batchSucceeded) {
+                        val ids = chunk.joinToString(", ") { it.id }
+                        onProgress("  [!] Batch ${chunkIdx + 1} failed all providers. Skipping bubbles: $ids")
+                    }
+                } finally {
+                    if (!mosaic.isRecycled) mosaic.recycle()
+                    for (item in shrunk) {
+                        if (item.bitmap != cropItems.firstOrNull { it.id == item.id }?.bitmap && !item.bitmap.isRecycled) {
+                            item.bitmap.recycle()
+                        }
                     }
                 }
             }

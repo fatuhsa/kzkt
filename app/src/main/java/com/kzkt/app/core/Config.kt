@@ -110,6 +110,8 @@ object Config {
         var tinggiBoxGepengRatio: Double = 0.22,
         var useInpainting: Boolean = false,
         var customFontPath: String = "",
+        var useLocalOcr: Boolean = false,
+        var localOcrScript: String = "Japanese (ML Kit)",
     )
 
     fun getLangCode(targetLanguage: String): String {

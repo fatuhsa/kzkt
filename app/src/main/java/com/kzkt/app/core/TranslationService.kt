@@ -128,6 +128,8 @@ class TranslationService : Service() {
                     minPad = s.minPad,
                     customFontPath = s.customFontPath,
                     useInpainting = s.useInpainting,
+                    useLocalOcr = s.useLocalOcr,
+                    localOcrScript = s.localOcrScript,
                 )
 
                 val cacheRepo = TranslationCacheRepository(applicationContext)
