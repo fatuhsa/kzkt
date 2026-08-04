@@ -88,44 +88,14 @@ KZKT is a native Android application for automatic manga and comic translation. 
 
 ## Build the APK
 
-### Prerequisites
+> This project uses Git LFS for the YOLO model file (`kzkt.dat`, ~100 MB).
+> Make sure [Git LFS](https://git-lfs.github.com) is installed before cloning.
+> If you already cloned without it, run `git lfs pull` afterwards to fetch the model.
 
-This project uses **Git LFS** to store the YOLO model file (`kzkt.dat`, ~100 MB). You must have Git LFS installed before cloning, otherwise the model file will not be downloaded correctly and the app will fail to load on startup.
-
-Install Git LFS (one-time setup, only needs to be done once per machine):
-
-- **Ubuntu / Debian / Linux Mint**:
-  ```bash
-  sudo apt install git-lfs
-  ```
-- **Arch / Manjaro**:
-  ```bash
-  sudo pacman -S git-lfs
-  ```
-- **macOS**:
-  ```bash
-  brew install git-lfs
-  ```
-- **Windows**: Download the installer from [git-lfs.github.com](https://git-lfs.github.com) and run it.
-
-Then activate LFS for your Git installation:
-```bash
-git lfs install
-```
-
----
-
-### Clone and Build
-
-1. Clone the repository (Git LFS will automatically download the model):
+1. Clone the repository:
    ```bash
    git clone https://github.com/kouzen-neo/kzkt.git
    cd kzkt
-   ```
-
-   If you already cloned without Git LFS installed, run this afterwards to pull the model:
-   ```bash
-   git lfs pull
    ```
 
 2. Open in Android Studio, let Gradle sync, then build:
