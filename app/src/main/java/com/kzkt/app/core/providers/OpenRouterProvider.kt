@@ -23,8 +23,8 @@ class OpenRouterProvider(
     private val baseUrl = "https://openrouter.ai/api/v1/chat/completions"
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(120, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
+        .connectTimeout(com.kzkt.app.core.Config.CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
+        .readTimeout(com.kzkt.app.core.Config.READ_TIMEOUT_SEC, TimeUnit.SECONDS)
         .build()
 
     private val gson = Gson()

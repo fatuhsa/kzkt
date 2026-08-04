@@ -35,6 +35,7 @@ class TranslationPipeline(
     private val fallbackProviders: List<LlmProvider> = emptyList(),
     private val context: Context? = null,
     private val onProgress: (String) -> Unit = {},
+    private val onStepProgress: (Int, String) -> Unit = { _, _ -> },
     private val isCancelled: () -> Boolean = { false },
 ) {
     data class PipelineResult(
@@ -596,11 +597,14 @@ class TranslationPipeline(
                         }
 
                         val doneCount = completedCount.incrementAndGet()
-                        if (!result.failed) {
-                            onProgress("  [Page $doneCount/${imagePaths.size}] Processed ${File(imgPath).name} (Found ${result.crops.size} bubbles)")
+                        val phase1Percent = (25f * doneCount / imagePaths.size).toInt().coerceIn(1, 25)
+                        val msg = if (!result.failed) {
+                            "  [Page $doneCount/${imagePaths.size}] Processed ${File(imgPath).name} (Found ${result.crops.size} bubbles)"
                         } else {
-                            onProgress("  [Page $doneCount/${imagePaths.size}] Failed/Cancelled ${File(imgPath).name}")
+                            "  [Page $doneCount/${imagePaths.size}] Failed/Cancelled ${File(imgPath).name}"
                         }
+                        onProgress(msg)
+                        onStepProgress(phase1Percent, msg)
                         result
                     }
                 }.awaitAll()
@@ -628,12 +632,16 @@ class TranslationPipeline(
 
         for ((chunkIdx, chunk) in chunks.withIndex()) {
             if (isCancelled()) return emptyList()
-            onProgress("  [Batch ${chunkIdx + 1}/${chunks.size}] ${chunk.size} bubbles...")
+            val batchPercent = (25 + (65f * (chunkIdx + 1) / chunks.size)).toInt().coerceIn(25, 90)
+            val batchMsg = "  [Batch ${chunkIdx + 1}/${chunks.size}] ${chunk.size} bubbles..."
+            onProgress(batchMsg)
+            onStepProgress(batchPercent, batchMsg)
 
             val shrunk = MosaicBuilder.shrinkCropsIfTooTall(chunk, params.maxTinggiMosaik, params.jarakAntarPotongan)
             val mosaic = MosaicBuilder.buildMosaic(shrunk, params)
             val prompt = Constants.buildPrompt(targetLanguage)
             val providersChain = listOf(provider) + fallbackProviders
+            var batchSucceeded = false
 
             try {
                 for (prov in providersChain) {
@@ -643,11 +651,15 @@ class TranslationPipeline(
                             apiCall = { prov.translateImage(mosaic, prompt) },
                             providerName = prov.providerName,
                             isCancelled = isCancelled,
-                            onWait = { msg -> onProgress(msg) }
+                            onWait = { msg ->
+                                onProgress(msg)
+                                onStepProgress(batchPercent, msg)
+                            }
                         )
                         if (result != null) {
                             val cleaned = JsonUtils.sanitizeJson(result)
                             allTranslations.putAll(JsonUtils.parseTranslationMap(cleaned))
+                            batchSucceeded = true
                             break
                         }
                     } catch (e: Exception) {
@@ -656,6 +668,10 @@ class TranslationPipeline(
                         }
                         onProgress("  [Failover] ${prov.providerName} failed: ${e.message}. Trying fallback provider...")
                     }
+                }
+                if (!batchSucceeded) {
+                    val ids = chunk.joinToString(", ") { it.id }
+                    onProgress("  [!] Batch ${chunkIdx + 1} failed all providers. Skipping bubbles: $ids")
                 }
             } finally {
                 if (!mosaic.isRecycled) mosaic.recycle()
@@ -669,7 +685,11 @@ class TranslationPipeline(
 
         // Phase 4: Render per-page
         val results = mutableListOf<PipelineResult>()
-        for (page in pageDataList) {
+        for ((pageIdx, page) in pageDataList.withIndex()) {
+            val renderPercent = (90 + (10f * (pageIdx + 1) / pageDataList.size)).toInt().coerceIn(90, 100)
+            val renderMsg = "  Rendering page ${pageIdx + 1}/${pageDataList.size}..."
+            onStepProgress(renderPercent, renderMsg)
+
             if (page.alreadyDone) {
                 results.add(PipelineResult(MosaicBuilder.makeOutputPath(page.path, targetLanguage, outputDir), alreadyDone = true))
                 continue

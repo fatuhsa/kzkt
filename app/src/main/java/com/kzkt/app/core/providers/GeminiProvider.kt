@@ -25,9 +25,9 @@ class GeminiProvider(
     override val providerName: String = "Google Gemini"
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-        .readTimeout(REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-        .writeTimeout(REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        .connectTimeout(com.kzkt.app.core.Config.CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
+        .readTimeout(com.kzkt.app.core.Config.READ_TIMEOUT_SEC, TimeUnit.SECONDS)
+        .writeTimeout(com.kzkt.app.core.Config.READ_TIMEOUT_SEC, TimeUnit.SECONDS)
         .build()
 
     private val gson = Gson()

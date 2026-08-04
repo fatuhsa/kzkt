@@ -144,6 +144,12 @@ class TranslationService : Service() {
                     onProgress = { msg ->
                         serviceScope.launch { emitLog(msg) }
                     },
+                    onStepProgress = { percent, msg ->
+                        serviceScope.launch {
+                            emitProgress(percent, 100)
+                            updateNotificationProgress(msg, percent, 100)
+                        }
+                    },
                     isCancelled = { TranslationProgressTracker.isCancelled }
                 )
 

@@ -46,7 +46,10 @@ class RateLimiter(
 
             try {
                 synchronized(lock) { lastCallTimeMs = System.currentTimeMillis() }
-                return apiCall()
+                onWait?.invoke("  [Connecting] Connecting to $providerName (Attempt ${attempt + 1}/$maxRetries)...")
+                val result = apiCall()
+                onWait?.invoke("  [Connected] Connected to $providerName, response received.")
+                return result
             } catch (ex: Exception) {
                 if (ex is kotlinx.coroutines.CancellationException || isCancelled()) {
                     throw ex
