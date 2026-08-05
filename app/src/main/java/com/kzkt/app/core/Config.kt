@@ -5,8 +5,8 @@ package com.kzkt.app.core
  * Ported from the original Python config module
  */
 object Config {
-    const val CONNECT_TIMEOUT_SEC = 5L
-    const val READ_TIMEOUT_SEC = 12L
+    const val CONNECT_TIMEOUT_SEC = 15L
+    const val READ_TIMEOUT_SEC = 45L
 
     // ── Provider Metadata ──────────────────────────────────────────
     data class ProviderMeta(
