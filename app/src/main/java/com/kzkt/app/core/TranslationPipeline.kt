@@ -372,7 +372,7 @@ class TranslationPipeline(
         if (cropsToTranslate.isNotEmpty()) {
             if (params.useLocalOcr) {
                 onProgress("  [Local OCR Engine] Extracting text from ${cropsToTranslate.size} speech bubbles via Google ML Kit (${params.localOcrScript})...")
-                val maxPerBatch = params.maxBubblesPerRequest
+                val maxPerBatch = minOf(params.maxBubblesPerRequest, 6)
                 val cropItems = cropsToTranslate.map { MosaicBuilder.CropItem(it.id, it.bitmap) }
                 val chunks = MosaicBuilder.chunkCrops(cropItems, maxPerBatch)
 
@@ -692,7 +692,7 @@ class TranslationPipeline(
 
         if (params.useLocalOcr) {
             onProgress("  [Local OCR Engine] Extracting text from ${cropItems.size} bubbles via Google ML Kit (${params.localOcrScript})...")
-            val maxPerBatch = params.maxBubblesPerRequest
+            val maxPerBatch = minOf(params.maxBubblesPerRequest, 6)
             val chunks = MosaicBuilder.chunkCrops(cropItems, maxPerBatch)
 
             for ((chunkIdx, chunk) in chunks.withIndex()) {
