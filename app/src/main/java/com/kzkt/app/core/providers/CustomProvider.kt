@@ -32,17 +32,26 @@ class CustomProvider(
 
     override fun validateApiKey(): Boolean = true  // optional key
 
+    private fun buildEndpoint(): String {
+        if (baseUrl.isBlank()) return "https://api.openai.com/v1/chat/completions"
+        var normalized = baseUrl.trimEnd('/')
+        if (normalized.endsWith("/chat/completions")) {
+            normalized = normalized.removeSuffix("/chat/completions").trimEnd('/')
+        }
+        return if (normalized.endsWith("/v1")) {
+            "$normalized/chat/completions"
+        } else {
+            "$normalized/v1/chat/completions"
+        }
+    }
+
     override suspend fun translateImage(image: Bitmap, prompt: String): String? {
         if (baseUrl.isBlank()) {
             throw RuntimeException("Custom provider base URL is not configured.")
         }
 
         val dataUri = ImageProcessor.bitmapToBase64DataUri(image)
-        // Normalize base URL: remove trailing /chat/completions, /v1, or /
-        var normalized = baseUrl.trimEnd('/')
-        if (normalized.endsWith("/chat/completions")) normalized = normalized.removeSuffix("/chat/completions")
-        val endpoint = if (normalized.endsWith("/v1")) "$normalized/chat/completions"
-            else "$normalized/v1/chat/completions"
+        val endpoint = buildEndpoint()
 
         val headers = mutableMapOf("Content-Type" to "application/json")
         if (apiKey.isNotBlank()) headers["Authorization"] = "Bearer $apiKey"
@@ -127,11 +136,7 @@ class CustomProvider(
 
 
     override suspend fun translateText(textJson: String, prompt: String): String? {
-        val endpoint = if (baseUrl.isNotBlank()) {
-            val normalized = baseUrl.trimEnd('/')
-            if (normalized.endsWith("/v1/chat/completions")) normalized
-            else "$normalized/v1/chat/completions"
-        } else "https://api.openai.com/v1/chat/completions"
+        val endpoint = buildEndpoint()
 
         val headers = mutableMapOf("Content-Type" to "application/json")
         if (apiKey.isNotBlank()) headers["Authorization"] = "Bearer $apiKey"
