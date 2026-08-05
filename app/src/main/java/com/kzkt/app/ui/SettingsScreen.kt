@@ -623,6 +623,7 @@ private fun TweakParamsSection(viewModel: MainViewModel) {
 
     TweakSlider(viewModel, "max_bubbles", "Bubbles per request", 5f..50f)
     TweakSlider(viewModel, "request_delay", "Min request delay (s)", 0.5f..10f)
+    TweakSlider(viewModel, "custom_timeout", "Custom request timeout (s)", 30f..600f)
     TweakSlider(viewModel, "pad_x", "Pad X ratio", 0.1f..1.0f)
     TweakSlider(viewModel, "pad_y", "Pad Y ratio", 0.1f..1.0f)
     TweakSlider(viewModel, "min_pad", "Min padding (px)", 5f..100f)
