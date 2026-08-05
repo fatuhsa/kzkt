@@ -89,6 +89,7 @@ class TranslationService : Service() {
 
     private fun startTask(files: List<String>) {
         TranslationProgressTracker.isCancelled = false
+        TranslationProgressTracker.clearCache()
         setupNotification()
 
         val oldJob = translationJob
@@ -224,8 +225,7 @@ class TranslationService : Service() {
 
                             val groupResults = groupPipeline.processImageBatch(
                                 imagePaths = pageGroup,
-                                outputDir = outputDir,
-                                cachedPages = TranslationProgressTracker.cachedPageData
+                                outputDir = outputDir
                             )
                             allTranslatedPages.addAll(groupResults)
                         }
