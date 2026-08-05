@@ -226,7 +226,9 @@ class TranslationService : Service() {
 
                             val groupResults = groupPipeline.processImageBatch(
                                 imagePaths = pageGroup,
-                                outputDir = outputDir
+                                outputDir = outputDir,
+                                pageOffset = groupIdx * pageGroupSize,
+                                totalBatchPages = pages.size
                             )
                             allTranslatedPages.addAll(groupResults)
                         }

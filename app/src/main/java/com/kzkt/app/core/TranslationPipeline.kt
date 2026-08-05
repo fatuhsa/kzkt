@@ -551,15 +551,17 @@ class TranslationPipeline(
     suspend fun processImageBatch(
         imagePaths: List<String>,
         outputDir: String,
-        cachedPages: List<PageData>? = null
+        cachedPages: List<PageData>? = null,
+        pageOffset: Int = 0,
+        totalBatchPages: Int = imagePaths.size,
     ): List<PipelineResult> {
         if (imagePaths.isEmpty()) return emptyList()
 
         val pageDataList = if (cachedPages != null) {
-            onProgress("[Multi-Page Batch] Reusing ${cachedPages.size} cached pages (Skipping YOLO/OCR detection).")
+            if (params.enableDevLogs) onProgress("[Multi-Page Batch] Reusing ${cachedPages.size} cached pages (Skipping YOLO/OCR detection).")
             cachedPages
         } else {
-            onProgress("[Multi-Page Batch] Processing ${imagePaths.size} pages...")
+            if (params.enableDevLogs) onProgress("[Multi-Page Batch] Processing ${imagePaths.size} pages...")
 
             val semaphore = kotlinx.coroutines.sync.Semaphore(3)
             val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
@@ -573,10 +575,17 @@ class TranslationPipeline(
                                 mutableListOf(), mutableMapOf(), failed = true)
                         }
 
+                        val actualPageNum = pageOffset + idx + 1
+                        val totalPages = if (totalBatchPages > 0) totalBatchPages else imagePaths.size
+
                         val expectedOutput = MosaicBuilder.makeOutputPath(imgPath, targetLanguage, outputDir)
                         if (File(expectedOutput).exists()) {
                             val doneCount = completedCount.incrementAndGet()
-                            onProgress("  [Page $doneCount/${imagePaths.size}] Skipping ${File(imgPath).name} (Already translated).")
+                            if (params.enableDevLogs) {
+                                onProgress("  [Page $actualPageNum/$totalPages] Skipping ${File(imgPath).name} (Already translated).")
+                            } else {
+                                onProgress("  [Page $actualPageNum/$totalPages] Skipping (Already translated).")
+                            }
                             return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
                                 mutableListOf(), mutableMapOf(), alreadyDone = true)
                         }
@@ -584,7 +593,7 @@ class TranslationPipeline(
                         val bitmap = ImageProcessor.loadBitmap(imgPath)
                         if (bitmap == null) {
                             val doneCount = completedCount.incrementAndGet()
-                            onProgress("  [Page $doneCount/${imagePaths.size}] Failed to load ${File(imgPath).name}")
+                            onProgress("  [Page $actualPageNum/$totalPages] Failed to load image.")
                             return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
                                 mutableListOf(), mutableMapOf(), failed = true)
                         }
@@ -626,7 +635,7 @@ class TranslationPipeline(
                                         val boxH = maxOf(1, y2 - y1)
                                         val padX = maxOf(params.minPad, (boxW * params.padXRatio).toInt())
                                         val padY = maxOf(params.minPad, (boxH * params.padYRatio).toInt())
-                                        val id = "${idx + 1}_${order + 1}"
+                                        val id = "${actualPageNum}_${order + 1}"
 
                                         val bgColor = ImageProcessor.detectBubbleBackgroundColor(cropMatFull, box)
                                         bubbleColors[id] = bgColor
@@ -663,9 +672,13 @@ class TranslationPipeline(
                         val doneCount = completedCount.incrementAndGet()
                         val phase1Percent = (25f * doneCount / imagePaths.size).toInt().coerceIn(1, 25)
                         val msg = if (!result.failed) {
-                            "  [Page $doneCount/${imagePaths.size}] Processed ${File(imgPath).name} (Found ${result.crops.size} bubbles)"
+                            if (params.enableDevLogs) {
+                                "  [Page $actualPageNum/$totalPages] Processed ${File(imgPath).name} (Found ${result.crops.size} bubbles)"
+                            } else {
+                                "  [Page $actualPageNum/$totalPages] Processed (${result.crops.size} bubbles)"
+                            }
                         } else {
-                            "  [Page $doneCount/${imagePaths.size}] Failed/Cancelled ${File(imgPath).name}"
+                            "  [Page $actualPageNum/$totalPages] Failed ${File(imgPath).name}"
                         }
                         onProgress(msg)
                         onStepProgress(phase1Percent, msg)
@@ -687,21 +700,25 @@ class TranslationPipeline(
                 alreadyDone = it.alreadyDone, failed = it.failed) }
         }
 
-        onProgress("  Total bubbles across all pages: ${allCrops.size}")
+        if (params.enableDevLogs) onProgress("  Total bubbles across all pages: ${allCrops.size}")
 
         // Phase 3: Chunk → Mosaic → LLM
         val cropItems = allCrops.map { MosaicBuilder.CropItem(it.first, it.second) }
         val allTranslations = mutableMapOf<String, String>()
 
         if (params.useLocalOcr) {
-            onProgress("  [Local OCR Engine] Extracting text from ${cropItems.size} bubbles via Google ML Kit (${params.localOcrScript})...")
+            if (params.enableDevLogs) {
+                onProgress("  [Local OCR Engine] Extracting text from ${cropItems.size} bubbles via Google ML Kit (${params.localOcrScript})...")
+            } else {
+                onProgress("  [Local OCR] Extracting text from ${cropItems.size} bubbles...")
+            }
             val maxPerBatch = minOf(params.maxBubblesPerRequest, 6)
             val chunks = MosaicBuilder.chunkCrops(cropItems, maxPerBatch)
 
             var consecutiveFailures = 0
             for ((chunkIdx, chunk) in chunks.withIndex()) {
                 if (isCancelled()) break
-                if (chunks.size > 1) {
+                if (params.enableDevLogs && chunks.size > 1) {
                     onProgress("  [Local OCR Batch ${chunkIdx + 1}/${chunks.size}] Processing bubbles ${chunk.first().id}..${chunk.last().id}")
                 }
                 val ocrMap = mutableMapOf<String, String>()
@@ -715,7 +732,7 @@ class TranslationPipeline(
                     }
                 }
                 if (ocrMap.isEmpty()) {
-                    onProgress("  [Local OCR] No text recognized in batch ${chunkIdx + 1}. Continuing...")
+                    if (params.enableDevLogs) onProgress("  [Local OCR] No text recognized in batch ${chunkIdx + 1}. Continuing...")
                     continue
                 }
 
