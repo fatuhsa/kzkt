@@ -1,7 +1,6 @@
 package com.kzkt.app.core.providers
 
 import android.graphics.Bitmap
-import com.kzkt.app.core.Config.REQUEST_TIMEOUT_MS
 import com.kzkt.app.core.ImageProcessor
 import com.google.gson.Gson
 import com.google.gson.JsonParser

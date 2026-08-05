@@ -592,6 +592,8 @@ private fun CustomUrlSection(viewModel: MainViewModel) {
             onSelect = { scope.launch { viewModel.settingsRepo.saveModel("custom", it) } }
         )
     }
+    Spacer(Modifier.height(8.dp))
+    TweakSlider(viewModel, "custom_timeout", "Custom request timeout (s)", 30f..600f)
 }
 
 @Composable
@@ -646,6 +648,7 @@ private fun TweakSlider(
             "pad_x" -> viewModel.settings.value.padXRatio
             "pad_y" -> viewModel.settings.value.padYRatio
             "min_pad" -> viewModel.settings.value.minPad.toFloat()
+            "custom_timeout" -> viewModel.settings.value.customTimeoutSec.toFloat()
             else -> 0f
         }
     } }
@@ -662,8 +665,8 @@ private fun TweakSlider(
                             Text(label, style = MaterialTheme.typography.bodyMedium)
                             val fmt = when (keyField) {
                                 "request_delay" -> "%.1fs".format(sliderValue)
-                                "min_pad" -> "${sliderValue.toInt()}"
-                                "max_bubbles" -> "${sliderValue.toInt()}"
+                                "min_pad", "max_bubbles" -> "${sliderValue.toInt()}"
+                                "custom_timeout" -> "${sliderValue.toInt()}s"
                                 else -> "%.2f".format(sliderValue)
                             }
                             Text(fmt, style = MaterialTheme.typography.bodySmall,
@@ -674,12 +677,16 @@ private fun TweakSlider(
                             onValueChange = { sliderValue = it },
                             onValueChangeFinished = {
                                 scope.launch {
-                                    viewModel.settingsRepo.saveTweakParam(keyField,
-                                        when (keyField) {
-                                            "max_bubbles", "min_pad" -> sliderValue.toInt()
-                                            else -> sliderValue
-                                        }
-                                    )
+                                    if (keyField == "custom_timeout") {
+                                        viewModel.settingsRepo.saveCustomTimeoutSec(sliderValue.toInt())
+                                    } else {
+                                        viewModel.settingsRepo.saveTweakParam(keyField,
+                                            when (keyField) {
+                                                "max_bubbles", "min_pad" -> sliderValue.toInt()
+                                                else -> sliderValue
+                                            }
+                                        )
+                                    }
                                 }
                             },
                             valueRange = range,

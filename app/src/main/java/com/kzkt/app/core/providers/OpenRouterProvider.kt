@@ -25,6 +25,7 @@ class OpenRouterProvider(
     private val client = OkHttpClient.Builder()
         .connectTimeout(com.kzkt.app.core.Config.CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
         .readTimeout(com.kzkt.app.core.Config.READ_TIMEOUT_SEC, TimeUnit.SECONDS)
+        .writeTimeout(com.kzkt.app.core.Config.READ_TIMEOUT_SEC, TimeUnit.SECONDS)
         .build()
 
     private val gson = Gson()

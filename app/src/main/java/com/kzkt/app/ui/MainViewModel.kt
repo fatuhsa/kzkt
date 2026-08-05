@@ -189,7 +189,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "openrouter" -> OpenRouterProvider(apiKey, modelName)
             "zen" -> ZenProvider(apiKey, modelName)
             "opencodego" -> OpenCodeGoProvider(apiKey, modelName)
-            "custom" -> CustomProvider(apiKey, modelName, s.customBaseUrl)
+            "custom" -> CustomProvider(apiKey, modelName, s.customBaseUrl, s.customTimeoutSec)
             else -> null
         }
     }

@@ -1,7 +1,6 @@
 package com.kzkt.app.core.providers
 
 import android.graphics.Bitmap
-import com.kzkt.app.core.Config.REQUEST_TIMEOUT_MS
 import com.kzkt.app.core.ImageProcessor
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -26,6 +25,7 @@ class OpenAIProvider(
     private val client = OkHttpClient.Builder()
         .connectTimeout(com.kzkt.app.core.Config.CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
         .readTimeout(com.kzkt.app.core.Config.READ_TIMEOUT_SEC, TimeUnit.SECONDS)
+        .writeTimeout(com.kzkt.app.core.Config.READ_TIMEOUT_SEC, TimeUnit.SECONDS)
         .build()
 
     private val gson = Gson()

@@ -19,13 +19,15 @@ class CustomProvider(
     override val apiKey: String,
     override val modelName: String,
     var baseUrl: String = "",
+    val timeoutSec: Int = 120,
 ) : LlmProvider {
 
     override val providerName: String = "Custom"
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(com.kzkt.app.core.Config.CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
-        .readTimeout(com.kzkt.app.core.Config.READ_TIMEOUT_SEC, TimeUnit.SECONDS)
+        .connectTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
+        .readTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
+        .writeTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
         .connectionPool(ConnectionPool(10, 5, TimeUnit.MINUTES))
         .retryOnConnectionFailure(true)
         .build()

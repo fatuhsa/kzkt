@@ -49,6 +49,7 @@ class SettingsRepository(private val context: Context) {
         private val KEY_USE_INPAINTING = booleanPreferencesKey("use_inpainting")
         private val KEY_USE_LOCAL_OCR = booleanPreferencesKey("use_local_ocr")
         private val KEY_LOCAL_OCR_SCRIPT = stringPreferencesKey("local_ocr_script")
+        private val KEY_CUSTOM_TIMEOUT = intPreferencesKey("custom_timeout_sec")
     }
  
     data class Settings(
@@ -67,7 +68,7 @@ class SettingsRepository(private val context: Context) {
         val modelZen: String = "minimax-m3-free",
         val modelOpencodego: String = "mimo-v2.5",
         val modelCustom: String = "gpt-5.4-mini",
-        val maxBubblesPerRequest: Int = 35,
+        val maxBubblesPerRequest: Int = 15,
         val minRequestDelay: Float = 0.5f,
         val filterSfxMode: String = "balanced",
         val padXRatio: Float = 0.40f,
@@ -78,6 +79,7 @@ class SettingsRepository(private val context: Context) {
         val useInpainting: Boolean = false,
         val useLocalOcr: Boolean = false,
         val localOcrScript: String = "Japanese (ML Kit)",
+        val customTimeoutSec: Int = 120,
     )
  
     private object Defaults {
@@ -112,6 +114,7 @@ class SettingsRepository(private val context: Context) {
             useInpainting = prefs[KEY_USE_INPAINTING] ?: Defaults.settings.useInpainting,
             useLocalOcr = prefs[KEY_USE_LOCAL_OCR] ?: Defaults.settings.useLocalOcr,
             localOcrScript = prefs[KEY_LOCAL_OCR_SCRIPT] ?: Defaults.settings.localOcrScript,
+            customTimeoutSec = prefs[KEY_CUSTOM_TIMEOUT] ?: Defaults.settings.customTimeoutSec,
         )
     }
 
@@ -173,6 +176,10 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[KEY_USE_INPAINTING] = enabled }
     }
  
+    suspend fun saveCustomTimeoutSec(seconds: Int) {
+        context.dataStore.edit { it[KEY_CUSTOM_TIMEOUT] = seconds.coerceIn(30, 600) }
+    }
+ 
     suspend fun saveTweakParam(keyField: String, value: Any) {
         context.dataStore.edit { prefs ->
             when (keyField) {
@@ -183,6 +190,7 @@ class SettingsRepository(private val context: Context) {
                 "pad_y" -> if (value is Float) prefs[KEY_PAD_Y] = value
                 "min_pad" -> if (value is Int) prefs[KEY_MIN_PAD] = value
                 "use_inpainting" -> if (value is Boolean) prefs[KEY_USE_INPAINTING] = value
+                "custom_timeout" -> if (value is Int) prefs[KEY_CUSTOM_TIMEOUT] = value.coerceIn(30, 600)
             }
         }
     }

@@ -6,7 +6,7 @@ package com.kzkt.app.core
  */
 object Config {
     const val CONNECT_TIMEOUT_SEC = 15L
-    const val READ_TIMEOUT_SEC = 90L
+    const val READ_TIMEOUT_SEC = 120L
 
     // ── Provider Metadata ──────────────────────────────────────────
     data class ProviderMeta(

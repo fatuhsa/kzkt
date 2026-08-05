@@ -24,6 +24,7 @@ class ZenProvider(
     private val client = OkHttpClient.Builder()
         .connectTimeout(com.kzkt.app.core.Config.CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
         .readTimeout(com.kzkt.app.core.Config.READ_TIMEOUT_SEC, TimeUnit.SECONDS)
+        .writeTimeout(com.kzkt.app.core.Config.READ_TIMEOUT_SEC, TimeUnit.SECONDS)
         .build()
 
     private val gson = Gson()
@@ -55,6 +56,34 @@ class ZenProvider(
             .post(gson.toJson(payload).toRequestBody("application/json".toMediaTypeOrNull()))
             .build()
 
+        return executeRequest(request)
+    }
+
+    override suspend fun translateText(textJson: String, prompt: String): String? {
+        val headers = mutableMapOf("Content-Type" to "application/json")
+        if (apiKey.isNotBlank()) headers["Authorization"] = "Bearer $apiKey"
+
+        val payload = mapOf(
+            "model" to modelName,
+            "temperature" to 0,
+            "top_p" to 0.1,
+            "max_tokens" to 4096,
+            "messages" to listOf(mapOf(
+                "role" to "user",
+                "content" to prompt
+            ))
+        )
+
+        val request = Request.Builder()
+            .url(baseUrl)
+            .apply { headers.forEach { (k, v) -> addHeader(k, v) } }
+            .post(gson.toJson(payload).toRequestBody("application/json".toMediaTypeOrNull()))
+            .build()
+
+        return executeRequest(request)
+    }
+
+    private suspend fun executeRequest(request: Request): String? {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val response = client.newCall(request).execute()
