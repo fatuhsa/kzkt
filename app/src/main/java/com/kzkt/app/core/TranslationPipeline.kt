@@ -737,7 +737,18 @@ class TranslationPipeline(
                 }
 
                 val textJson = com.google.gson.Gson().toJson(ocrMap)
-                val textPrompt = "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage. Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
+                val textPrompt = """
+                    You are a master comic & manga translator and editor.
+                    The input JSON map contains text extracted via local OCR (which may contain typos, missing characters, OCR noise, or broken words).
+
+                    INSTRUCTIONS:
+                    1. Smart OCR Correction: Infer and auto-correct any OCR errors, misread characters, typos, or incomplete words using comic/manga dialogue context before translating.
+                    2. Natural Translation: Translate the corrected meaning naturally into $targetLanguage while preserving tone, emotion, and nuance suitable for manga speech bubbles.
+                    3. Strict Output Format: Return ONLY a valid JSON object mapping the exact input keys to their translated values. Do not wrap in markdown or add commentary.
+
+                    Input JSON:
+                    $textJson
+                """.trimIndent()
                 val providersChain = listOf(provider) + fallbackProviders
                 val dummyBmp = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
                 var batchSucceeded = false
