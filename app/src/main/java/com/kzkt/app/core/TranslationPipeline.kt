@@ -372,43 +372,53 @@ class TranslationPipeline(
         if (cropsToTranslate.isNotEmpty()) {
             if (params.useLocalOcr) {
                 onProgress("  [Local OCR Engine] Extracting text from ${cropsToTranslate.size} speech bubbles via Google ML Kit (${params.localOcrScript})...")
-                val ocrMap = mutableMapOf<String, String>()
-                for (crop in cropsToTranslate) {
-                    val recognized = com.kzkt.app.core.ocr.LocalOcrEngine.recognizeText(crop.bitmap, params.localOcrScript)
-                    if (recognized.isNotBlank()) {
-                        ocrMap[crop.id] = recognized
-                    }
-                }
-                onProgress("  [Local OCR] Extracted ${ocrMap.size} text entries. Sending text JSON to ${provider.providerName}...")
+                val maxPerBatch = params.maxBubblesPerRequest
+                val cropItems = cropsToTranslate.map { MosaicBuilder.CropItem(it.id, it.bitmap) }
+                val chunks = MosaicBuilder.chunkCrops(cropItems, maxPerBatch)
 
-                val textJson = com.google.gson.Gson().toJson(ocrMap)
-                val textPrompt = "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage. Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
-                val providersChain = listOf(provider) + fallbackProviders
-                val dummyBmp = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
-
-                for (prov in providersChain) {
+                for ((chunkIdx, chunk) in chunks.withIndex()) {
                     if (isCancelled()) break
-                    onProgress("  Translating text with ${prov.providerName}...")
-                    try {
-                        val result = rateLimiter.executeWithRetry(
-                            apiCall = { prov.translateText(textJson, textPrompt) ?: prov.translateImage(dummyBmp, textPrompt) },
-                            providerName = prov.providerName,
-                            isCancelled = isCancelled,
-                            onWait = { msg -> onProgress(msg) }
-                        )
-                        if (result != null) {
-                            val cleaned = JsonUtils.sanitizeJson(result)
-                            val parsed = JsonUtils.parseTranslationMap(cleaned)
-                            if (parsed.isNotEmpty()) {
-                                allTranslations.putAll(parsed)
-                                break
-                            }
-                        }
-                    } catch (e: Exception) {
-                        if (e is kotlinx.coroutines.CancellationException || isCancelled()) throw e
+                    if (chunks.size > 1) {
+                        onProgress("  [Local OCR Chunk ${chunkIdx + 1}/${chunks.size}] Processing bubbles ${chunk.first().id}..${chunk.last().id}")
                     }
+                    val ocrMap = mutableMapOf<String, String>()
+                    for (item in chunk) {
+                        val recognized = com.kzkt.app.core.ocr.LocalOcrEngine.recognizeText(item.bitmap, params.localOcrScript)
+                        if (recognized.isNotBlank()) {
+                            ocrMap[item.id] = recognized
+                        }
+                    }
+                    if (ocrMap.isEmpty()) continue
+
+                    val textJson = com.google.gson.Gson().toJson(ocrMap)
+                    val textPrompt = "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage. Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
+                    val providersChain = listOf(provider) + fallbackProviders
+                    val dummyBmp = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+
+                    for (prov in providersChain) {
+                        if (isCancelled()) break
+                        onProgress("  Translating text with ${prov.providerName}...")
+                        try {
+                            val result = rateLimiter.executeWithRetry(
+                                apiCall = { prov.translateText(textJson, textPrompt) ?: prov.translateImage(dummyBmp, textPrompt) },
+                                providerName = prov.providerName,
+                                isCancelled = isCancelled,
+                                onWait = { msg -> onProgress(msg) }
+                            )
+                            if (result != null) {
+                                val cleaned = JsonUtils.sanitizeJson(result)
+                                val parsed = JsonUtils.parseTranslationMap(cleaned)
+                                if (parsed.isNotEmpty()) {
+                                    allTranslations.putAll(parsed)
+                                    break
+                                }
+                            }
+                        } catch (e: Exception) {
+                            if (e is kotlinx.coroutines.CancellationException || isCancelled()) throw e
+                        }
+                    }
+                    if (!dummyBmp.isRecycled) dummyBmp.recycle()
                 }
-                if (!dummyBmp.isRecycled) dummyBmp.recycle()
             } else {
                 val maxPerBatch = params.maxBubblesPerRequest
                 val chunks = MosaicBuilder.chunkCrops(cropsToTranslate, maxPerBatch)
@@ -676,43 +686,52 @@ class TranslationPipeline(
 
         if (params.useLocalOcr) {
             onProgress("  [Local OCR Engine] Extracting text from ${cropItems.size} bubbles via Google ML Kit (${params.localOcrScript})...")
-            val ocrMap = mutableMapOf<String, String>()
-            for (crop in cropItems) {
-                val recognized = com.kzkt.app.core.ocr.LocalOcrEngine.recognizeText(crop.bitmap, params.localOcrScript)
-                if (recognized.isNotBlank()) {
-                    ocrMap[crop.id] = recognized
-                }
-            }
-            onProgress("  [Local OCR] Extracted ${ocrMap.size} text entries. Sending JSON to ${provider.providerName}...")
+            val maxPerBatch = params.maxBubblesPerRequest
+            val chunks = MosaicBuilder.chunkCrops(cropItems, maxPerBatch)
 
-            val textJson = com.google.gson.Gson().toJson(ocrMap)
-            val textPrompt = "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage. Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
-            val providersChain = listOf(provider) + fallbackProviders
-            val dummyBmp = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
-
-            for (prov in providersChain) {
+            for ((chunkIdx, chunk) in chunks.withIndex()) {
                 if (isCancelled()) break
-                onProgress("  Translating text with ${prov.providerName}...")
-                try {
-                    val result = rateLimiter.executeWithRetry(
-                        apiCall = { prov.translateText(textJson, textPrompt) ?: prov.translateImage(dummyBmp, textPrompt) },
-                        providerName = prov.providerName,
-                        isCancelled = isCancelled,
-                        onWait = { msg -> onProgress(msg) }
-                    )
-                    if (result != null) {
-                        val cleaned = JsonUtils.sanitizeJson(result)
-                        val parsed = JsonUtils.parseTranslationMap(cleaned)
-                        if (parsed.isNotEmpty()) {
-                            allTranslations.putAll(parsed)
-                            break
-                        }
-                    }
-                } catch (e: Exception) {
-                    if (e is kotlinx.coroutines.CancellationException || isCancelled()) throw e
+                if (chunks.size > 1) {
+                    onProgress("  [Local OCR Batch ${chunkIdx + 1}/${chunks.size}] Processing bubbles ${chunk.first().id}..${chunk.last().id}")
                 }
+                val ocrMap = mutableMapOf<String, String>()
+                for (item in chunk) {
+                    val recognized = com.kzkt.app.core.ocr.LocalOcrEngine.recognizeText(item.bitmap, params.localOcrScript)
+                    if (recognized.isNotBlank()) {
+                        ocrMap[item.id] = recognized
+                    }
+                }
+                if (ocrMap.isEmpty()) continue
+
+                val textJson = com.google.gson.Gson().toJson(ocrMap)
+                val textPrompt = "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage. Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
+                val providersChain = listOf(provider) + fallbackProviders
+                val dummyBmp = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+
+                for (prov in providersChain) {
+                    if (isCancelled()) break
+                    onProgress("  Translating text with ${prov.providerName}...")
+                    try {
+                        val result = rateLimiter.executeWithRetry(
+                            apiCall = { prov.translateText(textJson, textPrompt) ?: prov.translateImage(dummyBmp, textPrompt) },
+                            providerName = prov.providerName,
+                            isCancelled = isCancelled,
+                            onWait = { msg -> onProgress(msg) }
+                        )
+                        if (result != null) {
+                            val cleaned = JsonUtils.sanitizeJson(result)
+                            val parsed = JsonUtils.parseTranslationMap(cleaned)
+                            if (parsed.isNotEmpty()) {
+                                allTranslations.putAll(parsed)
+                                break
+                            }
+                        }
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException || isCancelled()) throw e
+                    }
+                }
+                if (!dummyBmp.isRecycled) dummyBmp.recycle()
             }
-            if (!dummyBmp.isRecycled) dummyBmp.recycle()
         } else {
             val chunks = MosaicBuilder.chunkCrops(cropItems, params.maxBubblesPerRequest)
 
