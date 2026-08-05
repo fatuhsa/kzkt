@@ -749,15 +749,9 @@ class TranslationPipeline(
                 if (!dummyBmp.isRecycled) dummyBmp.recycle()
 
                 if (!batchSucceeded) {
-                    consecutiveFailures++
-                    onProgress("  [!] Batch ${chunkIdx + 1}/${chunks.size} failed all providers (no response received).")
-                    if (consecutiveFailures >= 2) {
-                        onProgress("  [!] 2 consecutive batches failed all providers. Aborting remaining batches due to connection failure.")
-                        break
-                    }
-                } else {
-                    consecutiveFailures = 0
+                    onProgress("  [!] Batch ${chunkIdx + 1}/${chunks.size} failed all providers (no response received; skipping these bubbles).")
                 }
+                kotlinx.coroutines.delay(500L)
             }
         } else {
             val chunks = MosaicBuilder.chunkCrops(cropItems, params.maxBubblesPerRequest)
