@@ -5,8 +5,8 @@ package com.kzkt.app.core
  * Ported from the original Python config module
  */
 object Config {
-    const val CONNECT_TIMEOUT_SEC = 10L
-    const val READ_TIMEOUT_SEC = 20L
+    const val CONNECT_TIMEOUT_SEC = 5L
+    const val READ_TIMEOUT_SEC = 12L
 
     // ── Provider Metadata ──────────────────────────────────────────
     data class ProviderMeta(
@@ -87,7 +87,7 @@ object Config {
     // ── Tweakable Parameters ───────────────────────────────────────
     data class TweakParams(
         var maxBubblesPerRequest: Int = 15,
-        var minRequestDelay: Double = 2.0,
+        var minRequestDelay: Double = 0.1,
         var filterSfxMode: String = "balanced",  // balanced | relaxed | strict
         var padXRatio: Double = 0.40,
         var padYRatio: Double = 0.25,
