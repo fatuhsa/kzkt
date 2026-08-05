@@ -19,6 +19,9 @@ object JsonUtils {
     fun sanitizeJson(rawText: String): String {
         var text = rawText.trim()
 
+        // Strip Reasoning / Thinking blocks (<think>...</think>)
+        text = text.replace(Regex("(?i)<think>[\\s\\S]*?</think>"), "").trim()
+
         // Remove ```json prefix
         if (text.startsWith("```json")) {
             text = text.removePrefix("```json").trim()
