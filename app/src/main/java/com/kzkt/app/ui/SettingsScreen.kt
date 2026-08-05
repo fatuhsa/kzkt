@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.BrightnessLow
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.GppGood
@@ -263,6 +264,22 @@ fun SettingsScreen(
                             },
                             onClick = {
                                 scope.launch { viewModel.settingsRepo.saveUseLocalOcr(!settingsState.useLocalOcr) }
+                            }
+                        ),
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.BugReport) },
+                            title = { Text("Verbose Developer Logs") },
+                            description = { Text(if (settingsState.enableDevLogs) "ON: Shows bubble-by-bubble OCR text and connection details." else "OFF: Clean & simple progress logs.") },
+                            trailingContent = {
+                                Switch(
+                                    checked = settingsState.enableDevLogs,
+                                    onCheckedChange = { enabled ->
+                                        scope.launch { viewModel.settingsRepo.saveEnableDevLogs(enabled) }
+                                    }
+                                )
+                            },
+                            onClick = {
+                                scope.launch { viewModel.settingsRepo.saveEnableDevLogs(!settingsState.enableDevLogs) }
                             }
                         )
                     )

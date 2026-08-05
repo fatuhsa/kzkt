@@ -386,9 +386,9 @@ class TranslationPipeline(
                         val recognized = com.kzkt.app.core.ocr.LocalOcrEngine.recognizeText(item.bitmap, params.localOcrScript)
                         if (recognized.isNotBlank()) {
                             ocrMap[item.id] = recognized
-                            onProgress("  [Local OCR] Bubble ${item.id} -> \"$recognized\"")
+                            if (params.enableDevLogs) onProgress("  [Local OCR] Bubble ${item.id} -> \"$recognized\"")
                         } else {
-                            onProgress("  [Local OCR] Bubble ${item.id} -> (No text recognized)")
+                            if (params.enableDevLogs) onProgress("  [Local OCR] Bubble ${item.id} -> (No text recognized)")
                         }
                     }
                     if (ocrMap.isEmpty()) {
@@ -706,9 +706,9 @@ class TranslationPipeline(
                     val recognized = com.kzkt.app.core.ocr.LocalOcrEngine.recognizeText(item.bitmap, params.localOcrScript)
                     if (recognized.isNotBlank()) {
                         ocrMap[item.id] = recognized
-                        onProgress("  [Local OCR] Bubble ${item.id} -> \"$recognized\"")
+                        if (params.enableDevLogs) onProgress("  [Local OCR] Bubble ${item.id} -> \"$recognized\"")
                     } else {
-                        onProgress("  [Local OCR] Bubble ${item.id} -> (No text recognized)")
+                        if (params.enableDevLogs) onProgress("  [Local OCR] Bubble ${item.id} -> (No text recognized)")
                     }
                 }
                 if (ocrMap.isEmpty()) {

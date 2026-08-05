@@ -112,6 +112,7 @@ object Config {
         var customFontPath: String = "",
         var useLocalOcr: Boolean = false,
         var localOcrScript: String = "Japanese (ML Kit)",
+        var enableDevLogs: Boolean = false,
     )
 
     fun getLangCode(targetLanguage: String): String {

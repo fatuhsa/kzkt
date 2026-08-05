@@ -131,6 +131,7 @@ class TranslationService : Service() {
                     useInpainting = s.useInpainting,
                     useLocalOcr = s.useLocalOcr,
                     localOcrScript = s.localOcrScript,
+                    enableDevLogs = s.enableDevLogs,
                 )
 
                 val cacheRepo = TranslationCacheRepository(applicationContext)
