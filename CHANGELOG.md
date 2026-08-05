@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - **Full KZKT Rebrand**: Complete application rebranding to **KZKT** (`com.kzkt.app`), redesigned README layout, and aligned UI theme across all screens.
+- **KZKT App Launcher Icon Redesign**: Updated app launcher icon across all screen densities (`mdpi` to `xxxhdpi`) featuring stylized handwritten ink-brush `kzkt` lettermark on a clean white background.
+- **Consolidated Provider Configuration Card**: Dedicated per-provider card that isolates API Key, Base URL, Model Selection, and Model Detection for the selected provider.
+- **Per-Provider Base URL Customization**: Individual Base URL settings for Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, and Custom providers with a one-click reset button to default official endpoints.
+- **Dynamic API Model Detection for All Providers**: Integrated "Detect Models from API" across all supported providers to dynamically query `/v1/models` and populate available models without fixed hardcoded lists.
 - **In-App Manga & PDF Reader**: Fullscreen reader with `HorizontalPager`, pinch-to-zoom, pan, *Original vs. Translated* toggle switch, and live text touch-up editor.
 - **Interactive Touch-up Editor**: Live text editing dialog directly accessible from the main translation card and History screen.
 - **Verbose Developer Logs Toggle**: Settings switch to toggle between clean progress logging and detailed telemetry mode for technical debugging.
@@ -20,6 +24,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Android CI Workflow**: Added GitHub Actions CI configuration (`JDK 17`, `assembleDebug`).
 
 ### Changed
+
+- **Optimized Default Settings**: Updated application default configuration to 30 bubbles/request (`maxBubblesPerRequest = 30`), 2.0s minimum delay (`minRequestDelay = 2.0s`), and 30s request timeout (`customTimeoutSec = 30s`).
+- **Clean Settings UI Layout**: Removed redundant stacked API Key lists and duplicate Base URL sections for a streamlined, clutter-free configuration screen.
 
 - **Background Translation Service**: Runs the translation pipeline inside a Foreground Service with dynamic status bar progress notifications and automatic retry timers.
 - **PDF Memory Optimization (6-Page Grouping)**: PDF page extraction and processing grouped into 6-page chunks with eager bitmap recycling to cap peak RAM consumption.
