@@ -19,6 +19,12 @@ class SettingsRepository(private val context: Context) {
         // Provider
         private val KEY_PROVIDER = stringPreferencesKey("llm_provider")
         private val KEY_LANGUAGE = stringPreferencesKey("target_language")
+        // Base URLs
+        private val KEY_BASE_URL_GEMINI = stringPreferencesKey("base_url_gemini")
+        private val KEY_BASE_URL_OPENAI = stringPreferencesKey("base_url_openai")
+        private val KEY_BASE_URL_OPENROUTER = stringPreferencesKey("base_url_openrouter")
+        private val KEY_BASE_URL_ZEN = stringPreferencesKey("base_url_zen")
+        private val KEY_BASE_URL_OPENCODEGO = stringPreferencesKey("base_url_opencodego")
         private val KEY_CUSTOM_BASE_URL = stringPreferencesKey("custom_base_url")
 
         // API Keys
@@ -56,6 +62,11 @@ class SettingsRepository(private val context: Context) {
     data class Settings(
         val llmProvider: String = "gemini",
         val targetLanguage: String = "Indonesian",
+        val baseUrlGemini: String = "https://generativelanguage.googleapis.com/v1beta",
+        val baseUrlOpenai: String = "https://api.openai.com/v1",
+        val baseUrlOpenrouter: String = "https://openrouter.ai/api/v1",
+        val baseUrlZen: String = "https://opencode.ai/zen/v1",
+        val baseUrlOpencodego: String = "https://opencode.ai/zen/go/v1",
         val customBaseUrl: String = "",
         val geminiApiKey: String = "",
         val openaiApiKey: String = "",
@@ -69,8 +80,8 @@ class SettingsRepository(private val context: Context) {
         val modelZen: String = "minimax-m3-free",
         val modelOpencodego: String = "mimo-v2.5",
         val modelCustom: String = "gpt-5.4-mini",
-        val maxBubblesPerRequest: Int = 15,
-        val minRequestDelay: Float = 0.5f,
+        val maxBubblesPerRequest: Int = 30,
+        val minRequestDelay: Float = 2.0f,
         val filterSfxMode: String = "balanced",
         val padXRatio: Float = 0.40f,
         val padYRatio: Float = 0.25f,
@@ -80,9 +91,19 @@ class SettingsRepository(private val context: Context) {
         val useInpainting: Boolean = false,
         val useLocalOcr: Boolean = false,
         val localOcrScript: String = "Japanese (ML Kit)",
-        val customTimeoutSec: Int = 120,
+        val customTimeoutSec: Int = 30,
         val enableDevLogs: Boolean = false,
-    )
+    ) {
+        fun getBaseUrl(provider: String): String = when (provider) {
+            "gemini" -> baseUrlGemini
+            "openai" -> baseUrlOpenai
+            "openrouter" -> baseUrlOpenrouter
+            "zen" -> baseUrlZen
+            "opencodego" -> baseUrlOpencodego
+            "custom" -> customBaseUrl
+            else -> ""
+        }
+    }
  
     private object Defaults {
         val settings = Settings()
@@ -92,6 +113,11 @@ class SettingsRepository(private val context: Context) {
         Settings(
             llmProvider = prefs[KEY_PROVIDER] ?: Defaults.settings.llmProvider,
             targetLanguage = prefs[KEY_LANGUAGE] ?: Defaults.settings.targetLanguage,
+            baseUrlGemini = prefs[KEY_BASE_URL_GEMINI] ?: Defaults.settings.baseUrlGemini,
+            baseUrlOpenai = prefs[KEY_BASE_URL_OPENAI] ?: Defaults.settings.baseUrlOpenai,
+            baseUrlOpenrouter = prefs[KEY_BASE_URL_OPENROUTER] ?: Defaults.settings.baseUrlOpenrouter,
+            baseUrlZen = prefs[KEY_BASE_URL_ZEN] ?: Defaults.settings.baseUrlZen,
+            baseUrlOpencodego = prefs[KEY_BASE_URL_OPENCODEGO] ?: Defaults.settings.baseUrlOpencodego,
             customBaseUrl = prefs[KEY_CUSTOM_BASE_URL] ?: Defaults.settings.customBaseUrl,
             geminiApiKey = prefs[KEY_GEMINI_KEY] ?: Defaults.settings.geminiApiKey,
             openaiApiKey = prefs[KEY_OPENAI_KEY] ?: Defaults.settings.openaiApiKey,
@@ -167,8 +193,23 @@ class SettingsRepository(private val context: Context) {
         }
     }
  
+    suspend fun saveBaseUrl(providerName: String, url: String) {
+        context.dataStore.edit { prefs ->
+            val key = when (providerName) {
+                "gemini" -> KEY_BASE_URL_GEMINI
+                "openai" -> KEY_BASE_URL_OPENAI
+                "openrouter" -> KEY_BASE_URL_OPENROUTER
+                "zen" -> KEY_BASE_URL_ZEN
+                "opencodego" -> KEY_BASE_URL_OPENCODEGO
+                "custom" -> KEY_CUSTOM_BASE_URL
+                else -> return@edit
+            }
+            prefs[key] = url
+        }
+    }
+
     suspend fun saveCustomBaseUrl(url: String) {
-        context.dataStore.edit { it[KEY_CUSTOM_BASE_URL] = url }
+        saveBaseUrl("custom", url)
     }
  
     suspend fun saveCustomFontPath(path: String) {

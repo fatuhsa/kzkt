@@ -159,7 +159,7 @@ fun SettingsScreen(
             )
         }
 
-        // ── Provider ──
+        // ── Provider & Configuration ──
         item {
             Column {
                 Text(
@@ -179,9 +179,11 @@ fun SettingsScreen(
                         meta.description,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 12.dp, top = 6.dp),
+                        modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 8.dp),
                     )
                 }
+                Spacer(Modifier.height(4.dp))
+                ActiveProviderConfigCard(viewModel)
             }
         }
 
@@ -200,41 +202,6 @@ fun SettingsScreen(
                     currentValue = language,
                     onValueUpdate = { lang -> scope.launch { viewModel.settingsRepo.saveLanguage(lang) } },
                 )
-            }
-        }
-
-        // ── API Keys ──
-        item {
-            Column {
-                Text(
-                    "API Keys",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
-                )
-                Material3SettingsGroup(
-                    items = listOf(
-                        ApiKeyItem("Gemini", viewModel, "geminiApiKey", Icons.Outlined.GppGood),
-                        ApiKeyItem("OpenAI", viewModel, "openaiApiKey", Icons.Outlined.AutoAwesome),
-                        ApiKeyItem("OpenRouter", viewModel, "openrouterApiKey", Icons.Outlined.Router),
-                        ApiKeyItem("Zen", viewModel, "zenApiKey", Icons.Outlined.Bolt),
-                        ApiKeyItem("OpenCode Go", viewModel, "opencodegoApiKey", Icons.Outlined.Code),
-                        ApiKeyItem("Custom", viewModel, "customApiKey", Icons.Outlined.SettingsEthernet),
-                    ),
-                )
-            }
-        }
-
-        // ── Model ──
-        item {
-            Column {
-                Text(
-                    "Model",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
-                )
-                ModelSection(viewModel)
             }
         }
 
@@ -350,19 +317,7 @@ fun SettingsScreen(
         }
 
         if (showAdvanced) {
-            if (selectedProvider == "custom") {
-                item {
-                    Column {
-                        Text(
-                            "Custom API Configuration",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
-                        )
-                        CustomUrlSection(viewModel)
-                    }
-                }
-            }
+
 
             // ── Tweak Parameters ──
             item {
@@ -508,109 +463,140 @@ private fun ApiKeyItem(
 }
 
 @Composable
-private fun ModelSection(viewModel: MainViewModel) {
+private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
     val scope = rememberCoroutineScope()
-    val selectedProvider by remember { derivedStateOf { viewModel.settings.value.llmProvider } }
-    val meta = Config.PROVIDER_REGISTRY[selectedProvider]
+    val settingsState by remember { derivedStateOf { viewModel.settings.value } }
+    val providerKey = settingsState.llmProvider
+    val meta = Config.PROVIDER_REGISTRY[providerKey] ?: return
 
-    val modelValue by remember(selectedProvider) { derivedStateOf {
-        when (selectedProvider) {
-            "gemini" -> viewModel.settings.value.modelGemini
-            "openai" -> viewModel.settings.value.modelOpenai
-            "openrouter" -> viewModel.settings.value.modelOpenrouter
-            "zen" -> viewModel.settings.value.modelZen
-            "opencodego" -> viewModel.settings.value.modelOpencodego
-            "custom" -> viewModel.settings.value.modelCustom
-            else -> ""
-        }
-    } }
-    val metaLabel = meta?.displayName ?: selectedProvider
+    val apiKey = when (providerKey) {
+        "gemini" -> settingsState.geminiApiKey
+        "openai" -> settingsState.openaiApiKey
+        "openrouter" -> settingsState.openrouterApiKey
+        "zen" -> settingsState.zenApiKey
+        "opencodego" -> settingsState.opencodegoApiKey
+        "custom" -> settingsState.customApiKey
+        else -> ""
+    }
+
+    val baseUrl = settingsState.getBaseUrl(providerKey)
+    val defaultBaseUrl = meta.defaultBaseUrl
+
+    val currentModel = when (providerKey) {
+        "gemini" -> settingsState.modelGemini
+        "openai" -> settingsState.modelOpenai
+        "openrouter" -> settingsState.modelOpenrouter
+        "zen" -> settingsState.modelZen
+        "opencodego" -> settingsState.modelOpencodego
+        "custom" -> settingsState.modelCustom
+        else -> meta.defaultModel
+    }
+
+    val detected: List<String> = viewModel.providerModels[providerKey] ?: emptyList()
+    val presetList: List<String> = Config.PRESET_MODELS[providerKey] ?: emptyList()
+    val allModels = remember(presetList, detected) { (presetList + detected).distinct().sorted() }
+    val isLoading = viewModel.modelsLoading.value
 
     Material3SettingsGroup(
+        title = "${meta.displayName} Configuration",
         items = listOf(
             Material3SettingsItem(
-                leadingContent = { SettingsIcon(Icons.Outlined.ModelTraining) },
+                leadingContent = { SettingsIcon(Icons.Outlined.GppGood) },
                 title = {
-                    ModelDropdownInput(
-                        label = metaLabel,
-                        value = modelValue,
-                        presets = Config.PRESET_MODELS[selectedProvider] ?: emptyList(),
-                        onValue = { scope.launch { viewModel.settingsRepo.saveModel(selectedProvider, it) } },
+                    var textState by remember(providerKey, apiKey) { mutableStateOf(apiKey) }
+                    var visible by remember { mutableStateOf(false) }
+                    LaunchedEffect(textState) {
+                        if (textState != apiKey) {
+                            kotlinx.coroutines.delay(350)
+                            viewModel.settingsRepo.saveApiKey(providerKey, textState)
+                        }
+                    }
+                    OutlinedTextField(
+                        value = textState,
+                        onValueChange = { textState = it },
+                        label = { Text(if (meta.requiresKey) "${meta.displayName} API Key" else "${meta.displayName} API Key (Optional)") },
+                        placeholder = { Text(if (meta.requiresKey) "Enter API Key" else "Optional API Key") },
+                        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { focusState ->
+                                if (!focusState.isFocused && textState != apiKey) {
+                                    scope.launch { viewModel.settingsRepo.saveApiKey(providerKey, textState) }
+                                }
+                            },
+                        singleLine = true,
+                        trailingIcon = {
+                            IconButton(onClick = { visible = !visible }) {
+                                Icon(
+                                    if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = if (visible) "Hide" else "Show",
+                                )
+                            }
+                        },
                     )
                 },
             ),
-        ),
-    )
-}
-
-@Composable
-private fun CustomUrlSection(viewModel: MainViewModel) {
-    val scope = rememberCoroutineScope()
-    val customBaseUrl by remember { derivedStateOf { viewModel.settings.value.customBaseUrl } }
-    val customModelsLoading = viewModel.customModelsLoading.value
-    val customModels = viewModel.customModels.toList()
-
-    Material3SettingsGroup(
-        items = listOf(
             Material3SettingsItem(
                 leadingContent = { SettingsIcon(Icons.Outlined.Link) },
                 title = {
-                    var urlText by remember(customBaseUrl) { mutableStateOf(customBaseUrl) }
+                    var urlText by remember(providerKey, baseUrl) { mutableStateOf(baseUrl) }
                     LaunchedEffect(urlText) {
-                        if (urlText != customBaseUrl) {
+                        if (urlText != baseUrl) {
                             kotlinx.coroutines.delay(350)
-                            viewModel.settingsRepo.saveCustomBaseUrl(urlText)
+                            viewModel.settingsRepo.saveBaseUrl(providerKey, urlText)
                         }
                     }
                     OutlinedTextField(
                         value = urlText,
                         onValueChange = { urlText = it },
-                        placeholder = { Text("https://api.example.com") },
+                        label = { Text("Base URL") },
+                        placeholder = { Text(if (defaultBaseUrl.isNotBlank()) defaultBaseUrl else "https://api.example.com") },
                         modifier = Modifier
                             .fillMaxWidth()
                             .onFocusChanged { focusState ->
-                                if (!focusState.isFocused && urlText != customBaseUrl) {
-                                    scope.launch { viewModel.settingsRepo.saveCustomBaseUrl(urlText) }
+                                if (!focusState.isFocused && urlText != baseUrl) {
+                                    scope.launch { viewModel.settingsRepo.saveBaseUrl(providerKey, urlText) }
                                 }
                             },
                         singleLine = true,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            imeAction = androidx.compose.ui.text.input.ImeAction.Done
-                        ),
-                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                            onDone = {
-                                if (urlText != customBaseUrl) {
-                                    scope.launch { viewModel.settingsRepo.saveCustomBaseUrl(urlText) }
+                        trailingIcon = {
+                            if (defaultBaseUrl.isNotBlank() && urlText != defaultBaseUrl) {
+                                TextButton(onClick = {
+                                    urlText = defaultBaseUrl
+                                    scope.launch { viewModel.settingsRepo.saveBaseUrl(providerKey, defaultBaseUrl) }
+                                }) {
+                                    Text("Reset", style = MaterialTheme.typography.labelSmall)
                                 }
                             }
-                        ),
+                        }
+                    )
+                },
+            ),
+            Material3SettingsItem(
+                leadingContent = { SettingsIcon(Icons.Outlined.ModelTraining) },
+                title = {
+                    ModelDropdownInput(
+                        label = meta.displayName,
+                        value = currentModel,
+                        presets = if (allModels.isNotEmpty()) allModels else listOf(meta.defaultModel),
+                        onValue = { scope.launch { viewModel.settingsRepo.saveModel(providerKey, it) } },
                     )
                 },
             ),
             Material3SettingsItem(
                 leadingContent = { SettingsIcon(Icons.Outlined.Science) },
                 title = { Text("Detect Models from API") },
-                description = { Text("Fetch /v1/models from the custom base URL") },
-                enabled = customBaseUrl.isNotBlank() && !customModelsLoading,
+                description = { Text("Fetch available models dynamically from Base URL") },
+                enabled = !isLoading,
                 trailingContent = {
-                    if (customModelsLoading) {
+                    if (isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     }
                 },
-                onClick = { viewModel.fetchCustomModels(customBaseUrl, viewModel.settings.value.customApiKey) },
-            ),
-        ),
-    )
-    if (customModels.isNotEmpty()) {
-        Spacer(Modifier.height(8.dp))
-        CustomModelSelector(
-            models = customModels,
-            selected = viewModel.settings.value.modelCustom,
-            onSelect = { scope.launch { viewModel.settingsRepo.saveModel("custom", it) } }
+                onClick = { viewModel.fetchModelsForProvider(providerKey, baseUrl, apiKey) },
+            )
         )
-    }
-    Spacer(Modifier.height(8.dp))
-    TweakSlider(viewModel, "custom_timeout", "Custom request timeout (s)", 30f..600f)
+    )
 }
 
 @Composable

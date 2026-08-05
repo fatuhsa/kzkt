@@ -19,7 +19,7 @@ class CustomProvider(
     override val apiKey: String,
     override val modelName: String,
     var baseUrl: String = "",
-    val timeoutSec: Int = 120,
+    val timeoutSec: Int = 30,
 ) : LlmProvider {
 
     override val providerName: String = "Custom"

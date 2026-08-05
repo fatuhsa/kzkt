@@ -16,10 +16,18 @@ import java.util.concurrent.TimeUnit
 class OpenCodeGoProvider(
     override val apiKey: String,
     override val modelName: String,
+    val customUrl: String = "",
 ) : LlmProvider {
 
     override val providerName: String = "OpenCode Go"
-    private val baseUrl = "https://opencode.ai/zen/go/v1/chat/completions"
+    private val baseUrl = if (customUrl.isNotBlank()) buildEndpoint(customUrl) else "https://opencode.ai/zen/go/v1/chat/completions"
+
+    private fun buildEndpoint(raw: String): String {
+        var base = raw.trimEnd('/')
+        if (base.endsWith("/chat/completions")) return base
+        if (base.endsWith("/v1")) return "$base/chat/completions"
+        return "$base/v1/chat/completions"
+    }
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(com.kzkt.app.core.Config.CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)

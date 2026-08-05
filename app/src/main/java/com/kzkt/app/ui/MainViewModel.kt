@@ -5,6 +5,7 @@ import com.kzkt.app.KzktApplication
 import android.net.Uri
 import android.os.Environment
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -63,9 +64,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val yoloReady = mutableStateOf(false)
     val yoloError = mutableStateOf<String?>(null)
 
-    // Custom provider model list (from /v1/models)
+    // Custom / Provider model state
     val customModels = mutableStateListOf<String>()
     val customModelsLoading = mutableStateOf(false)
+    val providerModels = mutableStateMapOf<String, List<String>>()
+    val modelsLoading = mutableStateOf(false)
 
     // Cancel flag
     private var _cancelled = false
@@ -183,13 +186,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             else -> meta.defaultModel
         }
 
+        val baseUrl = s.getBaseUrl(s.llmProvider)
+
         return when (s.llmProvider) {
-            "gemini" -> GeminiProvider(apiKey, modelName)
-            "openai" -> OpenAIProvider(apiKey, modelName)
-            "openrouter" -> OpenRouterProvider(apiKey, modelName)
-            "zen" -> ZenProvider(apiKey, modelName)
-            "opencodego" -> OpenCodeGoProvider(apiKey, modelName)
-            "custom" -> CustomProvider(apiKey, modelName, s.customBaseUrl, s.customTimeoutSec)
+            "gemini" -> GeminiProvider(apiKey, modelName, baseUrl)
+            "openai" -> OpenAIProvider(apiKey, modelName, baseUrl)
+            "openrouter" -> OpenRouterProvider(apiKey, modelName, baseUrl)
+            "zen" -> ZenProvider(apiKey, modelName, baseUrl)
+            "opencodego" -> OpenCodeGoProvider(apiKey, modelName, baseUrl)
+            "custom" -> CustomProvider(apiKey, modelName, baseUrl, s.customTimeoutSec)
             else -> null
         }
     }
@@ -197,11 +202,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun createFallbackProviders(primaryKey: String): List<LlmProvider> {
         val s = settings.value
         val fallbacks = mutableListOf<LlmProvider>()
-        if (primaryKey != "gemini" && s.geminiApiKey.isNotBlank()) fallbacks.add(GeminiProvider(s.geminiApiKey, s.modelGemini))
-        if (primaryKey != "openai" && s.openaiApiKey.isNotBlank()) fallbacks.add(OpenAIProvider(s.openaiApiKey, s.modelOpenai))
-        if (primaryKey != "openrouter" && s.openrouterApiKey.isNotBlank()) fallbacks.add(OpenRouterProvider(s.openrouterApiKey, s.modelOpenrouter))
-        if (primaryKey != "zen" && s.zenApiKey.isNotBlank()) fallbacks.add(ZenProvider(s.zenApiKey, s.modelZen))
-        if (primaryKey != "opencodego" && s.opencodegoApiKey.isNotBlank()) fallbacks.add(OpenCodeGoProvider(s.opencodegoApiKey, s.modelOpencodego))
+        if (primaryKey != "gemini" && s.geminiApiKey.isNotBlank()) fallbacks.add(GeminiProvider(s.geminiApiKey, s.modelGemini, s.baseUrlGemini))
+        if (primaryKey != "openai" && s.openaiApiKey.isNotBlank()) fallbacks.add(OpenAIProvider(s.openaiApiKey, s.modelOpenai, s.baseUrlOpenai))
+        if (primaryKey != "openrouter" && s.openrouterApiKey.isNotBlank()) fallbacks.add(OpenRouterProvider(s.openrouterApiKey, s.modelOpenrouter, s.baseUrlOpenrouter))
+        if (primaryKey != "zen" && s.zenApiKey.isNotBlank()) fallbacks.add(ZenProvider(s.zenApiKey, s.modelZen, s.baseUrlZen))
+        if (primaryKey != "opencodego" && s.opencodegoApiKey.isNotBlank()) fallbacks.add(OpenCodeGoProvider(s.opencodegoApiKey, s.modelOpencodego, s.baseUrlOpencodego))
         return fallbacks
     }
 
@@ -277,58 +282,77 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .readTimeout(10, TimeUnit.SECONDS)
         .build()
 
-    fun fetchCustomModels(baseUrl: String, apiKey: String) {
-        if (baseUrl.isBlank()) return
-        customModelsLoading.value = true
-        customModels.clear()
+    fun fetchModelsForProvider(providerKey: String, baseUrl: String, apiKey: String) {
+        val meta = Config.PROVIDER_REGISTRY[providerKey]
+        val rawUrl = if (baseUrl.isNotBlank()) baseUrl else (meta?.defaultBaseUrl ?: "")
+        if (rawUrl.isBlank()) {
+            translationLog.add("[!] Base URL is empty for $providerKey")
+            return
+        }
+
+        modelsLoading.value = true
+        if (providerKey == "custom") customModelsLoading.value = true
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Normalize: strip /chat/completions and /v1, then add /v1/models
-                var normalized = baseUrl.trimEnd('/')
+                var normalized = rawUrl.trimEnd('/')
                 if (normalized.endsWith("/chat/completions")) normalized = normalized.removeSuffix("/chat/completions")
                 if (normalized.endsWith("/v1")) normalized = normalized.removeSuffix("/v1")
-                val endpoint = "$normalized/v1/models"
-                val request = Request.Builder().url(endpoint)
-                if (apiKey.isNotBlank()) request.header("Authorization", "Bearer $apiKey")
-                val response = httpClient.newCall(request.build()).execute()
+                val endpoint = if (providerKey == "gemini") {
+                    val base = if (normalized.endsWith("/v1beta")) normalized else "$normalized/v1beta"
+                    "$base/models"
+                } else {
+                    "$normalized/v1/models"
+                }
+
+                val requestBuilder = Request.Builder().url(endpoint)
+                if (apiKey.isNotBlank()) {
+                    if (providerKey == "gemini") {
+                        requestBuilder.header("x-goog-api-key", apiKey)
+                    } else {
+                        requestBuilder.header("Authorization", "Bearer $apiKey")
+                    }
+                }
+                val response = httpClient.newCall(requestBuilder.build()).execute()
                 val body = response.body?.string() ?: ""
 
                 val json = JsonParser.parseString(body).asJsonObject
-                val data = json.getAsJsonArray("data")
                 val models = mutableListOf<String>()
+                val data = json.getAsJsonArray("data") ?: json.getAsJsonArray("models")
                 if (data != null) {
                     for (elem in data) {
-                        val id = elem.asJsonObject.get("id")?.asString
+                        val obj = elem.asJsonObject
+                        val id = obj.get("id")?.asString ?: obj.get("name")?.asString?.removePrefix("models/")
                         if (id != null) models.add(id)
-                    }
-                }
-                // Fallback: some providers use "models" key
-                if (models.isEmpty()) {
-                    val modelsArr = json.getAsJsonArray("models")
-                    if (modelsArr != null) {
-                        for (elem in modelsArr) {
-                            val id = elem.asJsonObject.get("id")?.asString
-                            if (id != null) models.add(id)
-                        }
                     }
                 }
 
                 post {
                     if (models.isNotEmpty()) {
-                        customModels.addAll(models.sorted())
-                        translationLog.add("Found ${models.size} models from custom provider")
+                        val sorted = models.sorted()
+                        providerModels[providerKey] = sorted
+                        if (providerKey == "custom") {
+                            customModels.clear()
+                            customModels.addAll(sorted)
+                        }
+                        translationLog.add("Found ${models.size} models for ${meta?.displayName ?: providerKey}")
                     } else {
-                        translationLog.add("[!] No models found at $baseUrl/v1/models")
+                        translationLog.add("[!] No models found at $endpoint")
                     }
+                    modelsLoading.value = false
                     customModelsLoading.value = false
                 }
             } catch (e: Exception) {
                 post {
-                    translationLog.add("[!] Failed to fetch models: ${e.message}")
+                    translationLog.add("[!] Failed to fetch models for $providerKey: ${e.message}")
+                    modelsLoading.value = false
                     customModelsLoading.value = false
                 }
             }
         }
+    }
+
+    fun fetchCustomModels(baseUrl: String, apiKey: String) {
+        fetchModelsForProvider("custom", baseUrl, apiKey)
     }
 }

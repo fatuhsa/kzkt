@@ -472,24 +472,26 @@ class TranslationService : Service() {
             else -> meta.defaultModel
         }
 
+        val baseUrl = s.getBaseUrl(s.llmProvider)
+
         return when (s.llmProvider) {
-            "gemini" -> GeminiProvider(apiKey, modelName)
-            "openai" -> OpenAIProvider(apiKey, modelName)
-            "openrouter" -> OpenRouterProvider(apiKey, modelName)
-            "zen" -> ZenProvider(apiKey, modelName)
-            "opencodego" -> OpenCodeGoProvider(apiKey, modelName)
-            "custom" -> CustomProvider(apiKey, modelName, s.customBaseUrl, s.customTimeoutSec)
+            "gemini" -> GeminiProvider(apiKey, modelName, baseUrl)
+            "openai" -> OpenAIProvider(apiKey, modelName, baseUrl)
+            "openrouter" -> OpenRouterProvider(apiKey, modelName, baseUrl)
+            "zen" -> ZenProvider(apiKey, modelName, baseUrl)
+            "opencodego" -> OpenCodeGoProvider(apiKey, modelName, baseUrl)
+            "custom" -> CustomProvider(apiKey, modelName, baseUrl, s.customTimeoutSec)
             else -> null
         }
     }
 
     private fun createFallbackProviders(s: SettingsRepository.Settings, primaryKey: String): List<LlmProvider> {
         val fallbacks = mutableListOf<LlmProvider>()
-        if (primaryKey != "gemini" && s.geminiApiKey.isNotBlank()) fallbacks.add(GeminiProvider(s.geminiApiKey, s.modelGemini))
-        if (primaryKey != "openai" && s.openaiApiKey.isNotBlank()) fallbacks.add(OpenAIProvider(s.openaiApiKey, s.modelOpenai))
-        if (primaryKey != "openrouter" && s.openrouterApiKey.isNotBlank()) fallbacks.add(OpenRouterProvider(s.openrouterApiKey, s.modelOpenrouter))
-        if (primaryKey != "zen" && s.zenApiKey.isNotBlank()) fallbacks.add(ZenProvider(s.zenApiKey, s.modelZen))
-        if (primaryKey != "opencodego" && s.opencodegoApiKey.isNotBlank()) fallbacks.add(OpenCodeGoProvider(s.opencodegoApiKey, s.modelOpencodego))
+        if (primaryKey != "gemini" && s.geminiApiKey.isNotBlank()) fallbacks.add(GeminiProvider(s.geminiApiKey, s.modelGemini, s.baseUrlGemini))
+        if (primaryKey != "openai" && s.openaiApiKey.isNotBlank()) fallbacks.add(OpenAIProvider(s.openaiApiKey, s.modelOpenai, s.baseUrlOpenai))
+        if (primaryKey != "openrouter" && s.openrouterApiKey.isNotBlank()) fallbacks.add(OpenRouterProvider(s.openrouterApiKey, s.modelOpenrouter, s.baseUrlOpenrouter))
+        if (primaryKey != "zen" && s.zenApiKey.isNotBlank()) fallbacks.add(ZenProvider(s.zenApiKey, s.modelZen, s.baseUrlZen))
+        if (primaryKey != "opencodego" && s.opencodegoApiKey.isNotBlank()) fallbacks.add(OpenCodeGoProvider(s.opencodegoApiKey, s.modelOpencodego, s.baseUrlOpencodego))
         return fallbacks
     }
 

@@ -19,9 +19,11 @@ import java.util.concurrent.TimeUnit
 class GeminiProvider(
     override val apiKey: String,
     override val modelName: String,
+    val customUrl: String = "",
 ) : LlmProvider {
 
     override val providerName: String = "Google Gemini"
+    private val apiBaseUrl = if (customUrl.isNotBlank()) customUrl.trimEnd('/') else "https://generativelanguage.googleapis.com/v1beta"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(com.kzkt.app.core.Config.CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
@@ -33,7 +35,7 @@ class GeminiProvider(
 
     override suspend fun translateImage(image: Bitmap, prompt: String): String? {
         val base64 = ImageProcessor.bitmapToBase64(image)
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent"
+        val url = "$apiBaseUrl/models/$modelName:generateContent"
 
         val requestBody = gson.toJson(mapOf(
             "contents" to listOf(mapOf(

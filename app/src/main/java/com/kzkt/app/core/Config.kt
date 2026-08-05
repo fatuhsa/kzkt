@@ -6,7 +6,7 @@ package com.kzkt.app.core
  */
 object Config {
     const val CONNECT_TIMEOUT_SEC = 15L
-    const val READ_TIMEOUT_SEC = 120L
+    const val READ_TIMEOUT_SEC = 30L
 
     // ── Provider Metadata ──────────────────────────────────────────
     data class ProviderMeta(
@@ -15,6 +15,7 @@ object Config {
         val envKey: String,
         val modelEnvKey: String,
         val defaultModel: String,
+        val defaultBaseUrl: String = "",
         val url: String = "",
         val description: String = "",
         val requiresKey: Boolean = true,
@@ -25,6 +26,7 @@ object Config {
             key = "gemini", displayName = "Google Gemini",
             envKey = "GEMINI_API_KEY", modelEnvKey = "MODEL_GEMINI",
             defaultModel = "gemini-3.1-flash-lite",
+            defaultBaseUrl = "https://generativelanguage.googleapis.com/v1beta",
             url = "https://aistudio.google.com/",
             description = "Free tier available",
         ),
@@ -32,6 +34,7 @@ object Config {
             key = "openai", displayName = "OpenAI",
             envKey = "OPENAI_API_KEY", modelEnvKey = "MODEL_OPENAI",
             defaultModel = "gpt-5.4-mini",
+            defaultBaseUrl = "https://api.openai.com/v1",
             url = "https://platform.openai.com/api-keys",
             description = "GPT-5.4, GPT-5.4-mini",
         ),
@@ -39,6 +42,7 @@ object Config {
             key = "zen", displayName = "Zen (opencode.ai)",
             envKey = "ZEN_API_KEY", modelEnvKey = "MODEL_ZEN",
             defaultModel = "minimax-m3-free",
+            defaultBaseUrl = "https://opencode.ai/zen/v1",
             url = "https://opencode.ai/auth",
             description = "Free models, optional API key for more quota",
             requiresKey = false,
@@ -47,6 +51,7 @@ object Config {
             key = "opencodego", displayName = "OpenCode Go",
             envKey = "OPENCODEGO_API_KEY", modelEnvKey = "MODEL_OPENCODEGO",
             defaultModel = "mimo-v2.5",
+            defaultBaseUrl = "https://opencode.ai/zen/go/v1",
             url = "https://opencode.ai/auth",
             description = "API key required, high-performance models",
         ),
@@ -54,6 +59,7 @@ object Config {
             key = "openrouter", displayName = "OpenRouter",
             envKey = "OPENROUTER_API_KEY", modelEnvKey = "MODEL_OPENROUTER",
             defaultModel = "qwen/qwen2.5-vl-72b-instruct:free",
+            defaultBaseUrl = "https://openrouter.ai/api/v1",
             url = "https://openrouter.ai/keys",
             description = "Access 100+ models (Claude, Llama, Mistral, etc.)",
         ),
@@ -61,6 +67,7 @@ object Config {
             key = "custom", displayName = "Custom",
             envKey = "CUSTOM_API_KEY", modelEnvKey = "MODEL_CUSTOM",
             defaultModel = "gpt-5.4-mini",
+            defaultBaseUrl = "",
             url = "",
             description = "OpenAI-compatible API, custom base URL",
             requiresKey = false,
@@ -86,8 +93,8 @@ object Config {
 
     // ── Tweakable Parameters ───────────────────────────────────────
     data class TweakParams(
-        var maxBubblesPerRequest: Int = 15,
-        var minRequestDelay: Double = 0.1,
+        var maxBubblesPerRequest: Int = 30,
+        var minRequestDelay: Double = 2.0,
         var filterSfxMode: String = "balanced",  // balanced | relaxed | strict
         var padXRatio: Double = 0.40,
         var padYRatio: Double = 0.25,
