@@ -1,57 +1,42 @@
 # Changelog
 
-Semua perubahan signifikan pada CyKt dicatat di file ini.
+All notable changes to KZKT are documented in this file.
 
-Format mengikuti [Keep a Changelog](https://keepachangelog.com/id-ID/1.1.0/), versi mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v1.25.1.13] - 2026-08-03
-
-### Added
-
-- **In-App Manga & PDF Reader**: fullscreen `HorizontalPager` with pinch-to-zoom, Original vs Translated toggle, and live text touch-up editing.
-- Reader integrated into the History tab and the PDF result card.
-- Interactive Touch-up Editor connected to the MainScreen edit action.
-- v2.0 feature set: custom fonts, OpenCV inpainting, translation cache memory, multi-language expansion, auto-fallback multi-provider chain.
-- Android CI workflow (JDK 17, `assembleDebug`).
-
-### Changed
-
-- History entries hoisted into a `StateFlow` (parsed once, replayed in memory); tweak sliders extracted to top-level composables — zero recomposition lag when switching tabs.
-- Cached date formatter and settings lists for 120 FPS zero-framedrop scrolling.
-- PDF extraction optimized to JPEG 90% at 2048px; mosaic payloads compressed to JPEG 85%; max bubbles raised to 35; rate-limiter delay cut to 0.5 s.
-- Settings converted to `LazyColumn` for smooth 60-120 FPS scroll.
-- Parallel inpainting pipeline; pre-allocated direct `FloatBuffer` in YOLO.
-- Output files routed to public `Download/KZKT` via MediaStore with fallback (fixes `EACCES` crash on Android 10+).
-- Full cypy-to-KZKT rebrand (`com.kzkt.app`); README rewritten, original cypy credited.
-
-### Fixed
-
-- Pager swipe unblocked: `pointerInput` tap detector replaced with `combinedClickable`; BottomSheet gesture trap removed.
-- History swipe gathers every image entry for horizontal navigation.
-- Swipe gesture disabled while zoomed; zoom reset on page switch.
-- Missing inpainting loop in `processImageBatch`; broader text-stroke thresholding.
-- Old cache files auto-cleaned before PDF extraction.
-- OpenCV access synchronized across coroutines; 350 ms debounce on text fields.
-- No live DataStore writes per keystroke; settings state reads scoped with `derivedStateOf`.
-- Eliminated card `animateContentSize` lag; fixed PDF progress bar 100% math; fixed PDF page memory leaks.
-- Tap coordinate letterbox calculation, OpenCV `submat` bounds clamping, and bitmap recycling safety hardened.
-
-## [Unreleased]
+## [v1.25.1.13] - 2026-08-05
 
 ### Added
 
-- **Pengaturan collapsible**: halaman Settings dirombak menjadi accordion Material — setiap grup (Provider, Target Language, API Keys, Model, Tweak Parameters, SFX Filter Mode) bisa di-hide/show dengan menekan header. Provider dan Target Language terbuka secara default karena paling sering dipakai.
-- **Komponen `SettingsSection`** baru: Card Material dengan header clickable, ikon chevron naik/turun, dan animasi buka-tutup. State ekspansi disimpan via `rememberSaveable` sehingga bertahan saat rotasi layar.
+- **Full KZKT Rebrand**: Complete application rebranding to **KZKT** (`com.kzkt.app`), redesigned README layout, and aligned UI theme across all screens.
+- **In-App Manga & PDF Reader**: Fullscreen reader with `HorizontalPager`, pinch-to-zoom, pan, *Original vs. Translated* toggle switch, and live text touch-up editor.
+- **Interactive Touch-up Editor**: Live text editing dialog directly accessible from the main translation card and History screen.
+- **Verbose Developer Logs Toggle**: Settings switch to toggle between clean progress logging and detailed telemetry mode for technical debugging.
+- **"Copy All Logs" Button**: Dedicated copy button on the `LogCard` header to instantly copy full execution logs to the clipboard.
+- **Custom API Timeout Slider**: User-adjustable API timeout slider added to Settings.
+- **On-Device Local OCR (Google ML Kit)**: Integrated local OCR (Japanese & Latin) to pre-extract text before sending to non-vision LLM endpoints.
+- **Reasoning LLMs Support (DeepSeek-R1)**: Automatic stripping of `<think>...</think>` tags and extended 90s read timeout for reasoning models.
+- **Expanded Multi-Provider Support**: Standalone text translation API support for `ZenProvider`, `OpenCodeGoProvider`, and `OpenRouterProvider`.
+- **Android CI Workflow**: Added GitHub Actions CI configuration (`JDK 17`, `assembleDebug`).
 
 ### Changed
 
-- **Model & Custom URL digabung**: bagian `Model` sekarang berisi pengaturan base URL custom beserta tombol "Detect Models from API" di dalamnya, tidak lagi terpisah di tengah layar.
-- **Toggler API Keys diseragamkan**: tombol `Show/Hide API Keys` yang lama diganti accordion yang konsisten dengan section lain.
+- **Background Translation Service**: Runs the translation pipeline inside a Foreground Service with dynamic status bar progress notifications and automatic retry timers.
+- **PDF Memory Optimization (6-Page Grouping)**: PDF page extraction and processing grouped into 6-page chunks with eager bitmap recycling to cap peak RAM consumption.
+- **HTTP Connection Pooling & Fast Request Delay**: Enabled persistent HTTP connection pooling and reduced inter-request delay to 0.1s for ultra-fast text translation.
+- **Scoped Storage & MediaStore**: Direct output routing to the public `/Download/KZKT/` folder via MediaStore API for Android 10+ compatibility.
+- **Git LFS Model Tracking**: Configured Git LFS to track the encrypted YOLO ONNX model file (`kzkt.dat`).
 
-### Fixed (terbaru, commit `b275190`)
+### Fixed & Performance
 
-- **JSON parsing toleran duplicate key**: LLM kadang mengembalikan JSON dengan key duplikat (mis. `"5_1": "..."` muncul 2×). Parser sebelumnya crash total, sekarang pakai fallback `JsonReader` streaming yang *skipValue()* duplikat — batch translasi selamat, halaman tengah tidak kehilangan terjemahan.
-- **YOLO init dipindahkan ke background**: inisialisasi model ONNX + dekripsi `eyecypy.dat` kini jalan di `Dispatchers.IO` via `viewModelScope.launch` — main thread tidak diblokir saat startup.
+- **PDF Fault Tolerance**: PDF processing continues through subsequent pages even if individual batches or pages encounter network/API errors.
+- **Local OCR Early Abort**: Automatically aborts remaining local OCR batches early if 2 consecutive batches fail across all configured providers.
+- **Custom Provider Endpoint Fixes**: Eliminated duplicate `/v1/v1` path bug and aligned CustomProvider payload structure with standard OpenAI Chat API specs.
+- **Unblocked Reader Gestures**: Replaced `pointerInput` with `combinedClickable` in the image viewer to allow unblocked `HorizontalPager` swipes.
+- **120 FPS Scrolling Optimization**: Hoisted History state into `StateFlow` and cached `SimpleDateFormat` instances to eliminate scroll frame drops.
+- **Tolerant Streaming JSON Parser**: Fallback `JsonReader` streaming parser to handle duplicate keys in LLM JSON responses without failing the batch.
+- **Background YOLO Initialization**: Offloaded ONNX model decryption and loading to `Dispatchers.IO` to keep the UI main thread responsive at startup.
+- **MediaStore Output Fixes**: Resolved `IllegalArgumentException` when saving standalone image outputs on Android 10+.
 
 ## [v1.0.0] - 2026-07-xx
 
