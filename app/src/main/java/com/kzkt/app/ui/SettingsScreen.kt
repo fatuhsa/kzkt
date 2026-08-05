@@ -232,7 +232,39 @@ fun SettingsScreen(
                             onClick = {
                                 scope.launch { viewModel.settingsRepo.saveUseLocalOcr(!settingsState.useLocalOcr) }
                             }
-                        ),
+                        )
+                    )
+                )
+                if (settingsState.useLocalOcr) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Local OCR Script Language",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 12.dp, bottom = 4.dp)
+                    )
+                    val ocrScriptChips = listOf(
+                        "Japanese (ML Kit)" to "Japanese (ML Kit)",
+                        "Latin / English (ML Kit)" to "Latin / English (ML Kit)"
+                    )
+                    ChipsRow(
+                        chips = ocrScriptChips,
+                        currentValue = settingsState.localOcrScript,
+                        onValueUpdate = { script ->
+                            scope.launch { viewModel.settingsRepo.saveLocalOcrScript(script) }
+                        }
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Developer & Telemetry",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                Material3SettingsGroup(
+                    items = listOf(
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.BugReport) },
                             title = { Text("Verbose Developer Logs") },
@@ -251,26 +283,6 @@ fun SettingsScreen(
                         )
                     )
                 )
-                if (settingsState.useLocalOcr) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Local OCR Language Script",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 12.dp, bottom = 4.dp)
-                    )
-                    val ocrScriptChips = listOf(
-                        "Japanese (ML Kit)" to "Japanese (ML Kit)",
-                        "Latin / English (ML Kit)" to "Latin / English (ML Kit)"
-                    )
-                    ChipsRow(
-                        chips = ocrScriptChips,
-                        currentValue = settingsState.localOcrScript,
-                        onValueUpdate = { script ->
-                            scope.launch { viewModel.settingsRepo.saveLocalOcrScript(script) }
-                        }
-                    )
-                }
             }
         }
 
@@ -594,22 +606,6 @@ private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
                     }
                 },
                 onClick = { viewModel.fetchModelsForProvider(providerKey, baseUrl, apiKey) },
-            ),
-            Material3SettingsItem(
-                leadingContent = { SettingsIcon(Icons.Outlined.Science) },
-                title = { Text("Use On-Device Local OCR") },
-                description = { Text(if (settingsState.useLocalOcr) "ON: Google ML Kit extracts text locally before LLM. Supports text-only LLMs." else "OFF: Sends full mosaic image to Vision LLM.") },
-                trailingContent = {
-                    Switch(
-                        checked = settingsState.useLocalOcr,
-                        onCheckedChange = { enabled ->
-                            scope.launch { viewModel.settingsRepo.saveUseLocalOcr(enabled) }
-                        }
-                    )
-                },
-                onClick = {
-                    scope.launch { viewModel.settingsRepo.saveUseLocalOcr(!settingsState.useLocalOcr) }
-                }
             )
         )
     )
