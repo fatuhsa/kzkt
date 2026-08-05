@@ -695,6 +695,7 @@ class TranslationPipeline(
             val maxPerBatch = minOf(params.maxBubblesPerRequest, 6)
             val chunks = MosaicBuilder.chunkCrops(cropItems, maxPerBatch)
 
+            var consecutiveFailures = 0
             for ((chunkIdx, chunk) in chunks.withIndex()) {
                 if (isCancelled()) break
                 if (chunks.size > 1) {
@@ -719,6 +720,7 @@ class TranslationPipeline(
                 val textPrompt = "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage. Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
                 val providersChain = listOf(provider) + fallbackProviders
                 val dummyBmp = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+                var batchSucceeded = false
 
                 for (prov in providersChain) {
                     if (isCancelled()) break
@@ -735,14 +737,27 @@ class TranslationPipeline(
                             val parsed = JsonUtils.parseTranslationMap(cleaned)
                             if (parsed.isNotEmpty()) {
                                 allTranslations.putAll(parsed)
+                                batchSucceeded = true
                                 break
                             }
                         }
                     } catch (e: Exception) {
                         if (e is kotlinx.coroutines.CancellationException || isCancelled()) throw e
+                        onProgress("  [Failover] ${prov.providerName} failed: ${e.message}. Trying fallback provider...")
                     }
                 }
                 if (!dummyBmp.isRecycled) dummyBmp.recycle()
+
+                if (!batchSucceeded) {
+                    consecutiveFailures++
+                    onProgress("  [!] Batch ${chunkIdx + 1}/${chunks.size} failed all providers (no response received).")
+                    if (consecutiveFailures >= 2) {
+                        onProgress("  [!] 2 consecutive batches failed all providers. Aborting remaining batches due to connection failure.")
+                        break
+                    }
+                } else {
+                    consecutiveFailures = 0
+                }
             }
         } else {
             val chunks = MosaicBuilder.chunkCrops(cropItems, params.maxBubblesPerRequest)
