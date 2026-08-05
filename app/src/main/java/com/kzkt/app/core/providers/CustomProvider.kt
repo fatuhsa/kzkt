@@ -58,9 +58,6 @@ class CustomProvider(
 
         val payload = mapOf(
             "model" to modelName,
-            "temperature" to 0,
-            "top_p" to 0.1,
-            "stream" to false,
             "messages" to listOf(mapOf(
                 "role" to "user",
                 "content" to listOf(
@@ -143,10 +140,6 @@ class CustomProvider(
 
         val payload = mapOf(
             "model" to modelName,
-            "temperature" to 0,
-            "top_p" to 0.1,
-            "max_tokens" to 4096,
-            "stream" to false,
             "messages" to listOf(
                 mapOf("role" to "user", "content" to prompt)
             )
