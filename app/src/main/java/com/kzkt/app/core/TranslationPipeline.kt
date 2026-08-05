@@ -784,10 +784,14 @@ class TranslationPipeline(
 
             if (page.alreadyDone) {
                 results.add(PipelineResult(MosaicBuilder.makeOutputPath(page.path, targetLanguage, outputDir), alreadyDone = true))
+                for ((_, cropBmp) in page.crops) { if (!cropBmp.isRecycled) cropBmp.recycle() }
+                if (!page.pil.isRecycled) page.pil.recycle()
                 continue
             }
             if (page.failed) {
                 results.add(PipelineResult(null, failed = true))
+                for ((_, cropBmp) in page.crops) { if (!cropBmp.isRecycled) cropBmp.recycle() }
+                if (!page.pil.isRecycled) page.pil.recycle()
                 continue
             }
 
@@ -795,6 +799,8 @@ class TranslationPipeline(
             val pageOutputPath = MosaicBuilder.makeOutputPath(page.path, targetLanguage, outputDir)
             if (File(pageOutputPath).exists()) {
                 results.add(PipelineResult(pageOutputPath, alreadyDone = true))
+                for ((_, cropBmp) in page.crops) { if (!cropBmp.isRecycled) cropBmp.recycle() }
+                if (!page.pil.isRecycled) page.pil.recycle()
                 continue
             }
 
@@ -835,11 +841,16 @@ class TranslationPipeline(
 
             saveBitmap(renderBitmap, pageOutputPath)
             results.add(PipelineResult(pageOutputPath, bubblesFound = page.crops.size, bubblesTranslated = translatedCount))
+
+            // Immediately recycle page full-res bitmap, render bitmap, and crop bitmaps for this page
             if (renderBitmap != page.pil && !renderBitmap.isRecycled) renderBitmap.recycle()
             if (!page.pil.isRecycled) page.pil.recycle()
+            for ((_, cropBmp) in page.crops) {
+                if (!cropBmp.isRecycled) cropBmp.recycle()
+            }
         }
 
-        // Clean up crop bitmaps
+        // Final safety cleanup for any remaining crop bitmaps across allCrops
         for ((_, bmp) in allCrops) {
             if (!bmp.isRecycled) bmp.recycle()
         }

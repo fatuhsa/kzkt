@@ -192,8 +192,45 @@ class TranslationService : Service() {
                         emitProgress(completed, totalSteps)
                         updateNotificationProgress("Translating pages for $fileName...", completed, totalSteps)
 
-                        val translatedPages = pipeline.processImageBatch(pages, outputDir, TranslationProgressTracker.cachedPageData)
-                        val translatedList = translatedPages.mapNotNull { it.outputPath }
+                        // PAGE-GROUP CHUNKING: Split PDF pages into groups of 6 pages per group.
+                        // Bounds peak memory usage to ~6 page bitmaps at a time instead of loading all 20-50+ page bitmaps into RAM simultaneously.
+                        // DO NOT optimize this back into a single processImageBatch call!
+                        val pageGroupSize = 6
+                        val pageGroups = pages.chunked(pageGroupSize)
+                        val allTranslatedPages = mutableListOf<TranslationPipeline.PipelineResult>()
+
+                        for ((groupIdx, pageGroup) in pageGroups.withIndex()) {
+                            if (TranslationProgressTracker.isCancelled) break
+
+                            val groupPipeline = TranslationPipeline(
+                                yolo = yoloInstance,
+                                provider = primaryProvider,
+                                textRenderer = textRendererInstance,
+                                params = params,
+                                targetLanguage = s.targetLanguage,
+                                cacheRepo = cacheRepo,
+                                fallbackProviders = fallbackProviders,
+                                context = applicationContext,
+                                onProgress = { msg -> serviceScope.launch { emitLog(msg) } },
+                                onStepProgress = { groupPercent, msg ->
+                                    val overallPercent = ((groupIdx * 100f + groupPercent) / pageGroups.size).toInt().coerceIn(0, 100)
+                                    serviceScope.launch {
+                                        emitProgress(completed, totalSteps)
+                                        updateNotificationProgress("[$fileName - Group ${groupIdx + 1}/${pageGroups.size}] $msg", completed, totalSteps)
+                                    }
+                                },
+                                isCancelled = { TranslationProgressTracker.isCancelled }
+                            )
+
+                            val groupResults = groupPipeline.processImageBatch(
+                                imagePaths = pageGroup,
+                                outputDir = outputDir,
+                                cachedPages = TranslationProgressTracker.cachedPageData
+                            )
+                            allTranslatedPages.addAll(groupResults)
+                        }
+
+                        val translatedList = allTranslatedPages.mapNotNull { it.outputPath }
                         if (TranslationProgressTracker.isCancelled) break
 
                         completed++
