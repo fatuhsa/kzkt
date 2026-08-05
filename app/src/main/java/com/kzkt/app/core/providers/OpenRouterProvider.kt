@@ -78,5 +78,47 @@ class OpenRouterProvider(
         }
     }
 
+    override suspend fun translateText(textJson: String, prompt: String): String? {
+        val payload = mapOf(
+            "model" to modelName,
+            "temperature" to 0,
+            "top_p" to 0.1,
+            "messages" to listOf(mapOf(
+                "role" to "user",
+                "content" to prompt
+            ))
+        )
+
+        val request = Request.Builder()
+            .url(baseUrl)
+            .addHeader("Authorization", "Bearer $apiKey")
+            .addHeader("Content-Type", "application/json")
+            .post(gson.toJson(payload).toRequestBody("application/json".toMediaTypeOrNull()))
+            .build()
+
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val response = client.newCall(request).execute()
+                val body = response.body?.string() ?: ""
+
+                if (response.code in listOf(401, 402)) throw ValueError("API_KEY_ERROR")
+                if (!response.isSuccessful) {
+                    throw RuntimeException("OpenRouter API error ${response.code}: ${body.take(200)}")
+                }
+
+                val json = JsonParser.parseString(body).asJsonObject
+                val choices = json.getAsJsonArray("choices")
+                if (choices != null && choices.size() > 0) {
+                    return@withContext choices[0].asJsonObject
+                        .getAsJsonObject("message")
+                        .get("content")?.asString
+                }
+                body
+            } catch (e: java.io.IOException) {
+                throw RuntimeException("OpenRouter network error: ${e.message}")
+            }
+        }
+    }
+
     class ValueError(message: String) : Exception(message)
 }

@@ -143,7 +143,7 @@ class CustomProvider(
             "max_tokens" to 4096,
             "stream" to false,
             "messages" to listOf(
-                mapOf("role" to "user", "content" to "$prompt\n\nJSON input to translate:\n$textJson")
+                mapOf("role" to "user", "content" to prompt)
             )
         )
 
