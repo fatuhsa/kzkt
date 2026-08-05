@@ -775,6 +775,14 @@ class TranslationPipeline(
             }
         }
 
+        if (allTranslations.isEmpty()) {
+            onProgress("  [!] All translation attempts failed for this group. Skipping rendering.")
+            for ((_, bmp) in allCrops) {
+                if (!bmp.isRecycled) bmp.recycle()
+            }
+            return pageDataList.map { PipelineResult(null, failed = true) }
+        }
+
         // Phase 4: Render per-page
         val results = mutableListOf<PipelineResult>()
         for ((pageIdx, page) in pageDataList.withIndex()) {
