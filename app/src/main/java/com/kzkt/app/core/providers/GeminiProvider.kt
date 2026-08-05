@@ -55,6 +55,28 @@ class GeminiProvider(
             )
         ))
 
+        return executeGeminiRequest(url, requestBody)
+    }
+
+    override suspend fun translateText(textJson: String, prompt: String): String? {
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent"
+        val requestBody = gson.toJson(mapOf(
+            "contents" to listOf(mapOf(
+                "parts" to listOf(
+                    mapOf("text" to prompt)
+                )
+            )),
+            "generationConfig" to mapOf(
+                "temperature" to 0,
+                "topP" to 0.1,
+                "maxOutputTokens" to 4096,
+                "responseMimeType" to "application/json"
+            )
+        ))
+        return executeGeminiRequest(url, requestBody)
+    }
+
+    private suspend fun executeGeminiRequest(url: String, requestBody: String): String? {
         val request = Request.Builder()
             .url("$url?key=$apiKey")
             .post(requestBody.toRequestBody("application/json".toMediaTypeOrNull()))

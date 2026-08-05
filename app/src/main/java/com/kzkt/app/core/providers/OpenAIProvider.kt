@@ -59,6 +59,29 @@ class OpenAIProvider(
         return executeRequest(request)
     }
 
+    override suspend fun translateText(textJson: String, prompt: String): String? {
+        val payload = mapOf(
+            "model" to modelName,
+            "temperature" to 0,
+            "top_p" to 0.1,
+            "max_tokens" to 4096,
+            "response_format" to mapOf("type" to "json_object"),
+            "messages" to listOf(mapOf(
+                "role" to "user",
+                "content" to prompt
+            ))
+        )
+
+        val request = Request.Builder()
+            .url(baseUrl)
+            .addHeader("Authorization", "Bearer $apiKey")
+            .addHeader("Content-Type", "application/json")
+            .post(gson.toJson(payload).toRequestBody("application/json".toMediaTypeOrNull()))
+            .build()
+
+        return executeRequest(request)
+    }
+
     protected suspend fun executeRequest(request: Request): String? {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {

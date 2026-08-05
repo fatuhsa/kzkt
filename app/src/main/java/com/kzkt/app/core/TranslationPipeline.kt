@@ -386,9 +386,15 @@ class TranslationPipeline(
                         val recognized = com.kzkt.app.core.ocr.LocalOcrEngine.recognizeText(item.bitmap, params.localOcrScript)
                         if (recognized.isNotBlank()) {
                             ocrMap[item.id] = recognized
+                            onProgress("  [Local OCR] Bubble ${item.id} -> \"$recognized\"")
+                        } else {
+                            onProgress("  [Local OCR] Bubble ${item.id} -> (No text recognized)")
                         }
                     }
-                    if (ocrMap.isEmpty()) continue
+                    if (ocrMap.isEmpty()) {
+                        onProgress("  [Local OCR] No text recognized in chunk ${chunkIdx + 1}. Continuing...")
+                        continue
+                    }
 
                     val textJson = com.google.gson.Gson().toJson(ocrMap)
                     val textPrompt = "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage. Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
@@ -699,9 +705,15 @@ class TranslationPipeline(
                     val recognized = com.kzkt.app.core.ocr.LocalOcrEngine.recognizeText(item.bitmap, params.localOcrScript)
                     if (recognized.isNotBlank()) {
                         ocrMap[item.id] = recognized
+                        onProgress("  [Local OCR] Bubble ${item.id} -> \"$recognized\"")
+                    } else {
+                        onProgress("  [Local OCR] Bubble ${item.id} -> (No text recognized)")
                     }
                 }
-                if (ocrMap.isEmpty()) continue
+                if (ocrMap.isEmpty()) {
+                    onProgress("  [Local OCR] No text recognized in batch ${chunkIdx + 1}. Continuing...")
+                    continue
+                }
 
                 val textJson = com.google.gson.Gson().toJson(ocrMap)
                 val textPrompt = "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage. Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
