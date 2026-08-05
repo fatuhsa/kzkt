@@ -525,7 +525,7 @@ private fun ResultPreview(
             if (showFullscreenViewer && currentPath.endsWith(".pdf", ignoreCase = true)) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     val cacheDir = File(context.cacheDir, "pdf_reader_cache")
-                    val pages = com.kzkt.app.util.PdfImporter.extractPdfToImages(File(currentPath), cacheDir)
+                    val pages = com.kzkt.app.util.PdfImporter.extractPdfToImages(File(currentPath), cacheDir, context = context)
                     pdfReaderPages = pages
                 }
             } else {

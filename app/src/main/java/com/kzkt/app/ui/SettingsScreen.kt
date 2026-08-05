@@ -594,6 +594,22 @@ private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
                     }
                 },
                 onClick = { viewModel.fetchModelsForProvider(providerKey, baseUrl, apiKey) },
+            ),
+            Material3SettingsItem(
+                leadingContent = { SettingsIcon(Icons.Outlined.Science) },
+                title = { Text("Use On-Device Local OCR") },
+                description = { Text(if (settingsState.useLocalOcr) "ON: Google ML Kit extracts text locally before LLM. Supports text-only LLMs." else "OFF: Sends full mosaic image to Vision LLM.") },
+                trailingContent = {
+                    Switch(
+                        checked = settingsState.useLocalOcr,
+                        onCheckedChange = { enabled ->
+                            scope.launch { viewModel.settingsRepo.saveUseLocalOcr(enabled) }
+                        }
+                    )
+                },
+                onClick = {
+                    scope.launch { viewModel.settingsRepo.saveUseLocalOcr(!settingsState.useLocalOcr) }
+                }
             )
         )
     )

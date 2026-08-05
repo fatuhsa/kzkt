@@ -54,7 +54,7 @@ fun HistoryScreen(
             isExtractingPdf = true
             scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 val cacheDir = File(context.cacheDir, "pdf_reader_cache")
-                val pages = com.kzkt.app.util.PdfImporter.extractPdfToImages(file, cacheDir)
+                val pages = com.kzkt.app.util.PdfImporter.extractPdfToImages(file, cacheDir, context = context)
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     isExtractingPdf = false
                     if (pages.isNotEmpty()) {

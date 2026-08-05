@@ -22,14 +22,18 @@ object PdfImporter {
      *
      * [dpiScale] 1.5–2.0 keeps bubble text sharp enough for YOLO detection.
      */
-    fun extractPdfToImages(pdfFile: File, outputDir: File, dpiScale: Float = 1.5f): List<String> {
+    fun extractPdfToImages(pdfFile: File, outputDir: File, dpiScale: Float = 1.5f, context: android.content.Context? = null): List<String> {
         val imagePaths = mutableListOf<String>()
         try {
             outputDir.mkdirs()
             outputDir.listFiles()?.forEach { if (it.isFile) it.delete() }
         } catch (_: Exception) {}
 
-        val fd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
+        val fd = openPdfFileDescriptor(context, pdfFile) ?: run {
+            Log.e("KZKT/PDF", "Unable to open ParcelFileDescriptor for PDF: ${pdfFile.absolutePath}")
+            return emptyList()
+        }
+
         try {
             val renderer = PdfRenderer(fd)
             try {
@@ -59,10 +63,58 @@ object PdfImporter {
             } finally {
                 renderer.close()
             }
+        } catch (e: Exception) {
+            Log.e("KZKT/PDF", "PdfRenderer error: ${e.message}")
         } finally {
-            fd.close()
+            try { fd.close() } catch (_: Exception) {}
         }
         return imagePaths
+    }
+
+    private fun openPdfFileDescriptor(context: android.content.Context?, pdfFile: File): ParcelFileDescriptor? {
+        if (pdfFile.exists() && pdfFile.canRead()) {
+            try {
+                return ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
+            } catch (e: Exception) {
+                Log.w("KZKT/PDF", "Direct file open failed for ${pdfFile.absolutePath}: ${e.message}")
+            }
+        }
+
+        if (context != null) {
+            // 1. Try querying MediaStore Downloads by DATA path
+            try {
+                val projection = arrayOf(android.provider.MediaStore.MediaColumns._ID)
+                val selection = "${android.provider.MediaStore.MediaColumns.DATA} = ?"
+                val selectionArgs = arrayOf(pdfFile.absolutePath)
+                val contentUri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+
+                context.contentResolver.query(contentUri, projection, selection, selectionArgs, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val id = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns._ID))
+                        val itemUri = android.content.ContentUris.withAppendedId(contentUri, id)
+                        return context.contentResolver.openFileDescriptor(itemUri, "r")
+                    }
+                }
+            } catch (_: Exception) {}
+
+            // 2. Try querying MediaStore Downloads by DISPLAY_NAME
+            try {
+                val projection = arrayOf(android.provider.MediaStore.MediaColumns._ID)
+                val selection = "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME} = ?"
+                val selectionArgs = arrayOf(pdfFile.name)
+                val contentUri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+
+                context.contentResolver.query(contentUri, projection, selection, selectionArgs, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val id = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns._ID))
+                        val itemUri = android.content.ContentUris.withAppendedId(contentUri, id)
+                        return context.contentResolver.openFileDescriptor(itemUri, "r")
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        return null
     }
 }
 
