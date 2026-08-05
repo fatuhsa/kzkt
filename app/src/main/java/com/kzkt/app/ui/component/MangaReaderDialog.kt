@@ -63,6 +63,10 @@ fun MangaReaderDialog(
     var showEditor by remember { mutableStateOf(false) }
     var isZoomed by remember { mutableStateOf(false) }
 
+    var activeEditorBmp by remember { mutableStateOf<Bitmap?>(null) }
+    var activeTranslations by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var activeCoords by remember { mutableStateOf<Map<String, IntArray>>(emptyMap()) }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -168,15 +172,29 @@ fun MangaReaderDialog(
                                 )
                             }
 
-                            // Edit Text Button (if editing metadata available)
-                            if (pipelineResult?.originalBitmap != null) {
-                                IconButton(onClick = { showEditor = true }) {
-                                    Icon(
-                                        Icons.Default.Edit,
-                                        contentDescription = "Edit Text",
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
+                            // Edit Text Button (Always available for touch-up editing)
+                            IconButton(onClick = {
+                                if (pipelineResult?.originalBitmap != null) {
+                                    activeEditorBmp = pipelineResult.originalBitmap
+                                    activeTranslations = pipelineResult.translations
+                                    activeCoords = pipelineResult.coordinateMap
+                                    showEditor = true
+                                } else {
+                                    val currentPath = pagePaths[pagerState.currentPage]
+                                    val pageBmp = com.kzkt.app.core.ImageProcessor.loadBitmap(currentPath)
+                                    if (pageBmp != null) {
+                                        activeEditorBmp = pageBmp
+                                        activeTranslations = emptyMap()
+                                        activeCoords = emptyMap()
+                                        showEditor = true
+                                    }
                                 }
+                            }) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = "Edit Text",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
                             }
 
                             // Share Button
@@ -197,11 +215,11 @@ fun MangaReaderDialog(
                 }
 
                 // ── Interactive Touch-up Editor Dialog ──
-                if (showEditor && pipelineResult?.originalBitmap != null) {
+                if (showEditor && activeEditorBmp != null) {
                     InteractiveEditorDialog(
-                        originalBitmap = pipelineResult.originalBitmap,
-                        translations = pipelineResult.translations,
-                        coordinateMap = pipelineResult.coordinateMap,
+                        originalBitmap = activeEditorBmp!!,
+                        translations = activeTranslations,
+                        coordinateMap = activeCoords,
                         textRenderer = com.kzkt.app.core.TextRenderer(context),
                         targetLanguage = targetLanguage,
                         customFontPath = customFontPath,
@@ -211,9 +229,11 @@ fun MangaReaderDialog(
                             try {
                                 val file = File(currentPath)
                                 file.outputStream().use { out ->
-                                    updatedBmp.compress(Bitmap.CompressFormat.PNG, 100, out)
+                                    updatedBmp.compress(Bitmap.CompressFormat.JPEG, 90, out)
                                 }
-                            } catch (_: Exception) {}
+                            } catch (e: Exception) {
+                                android.util.Log.e("KZKT", "Failed to save edited page: ${e.message}")
+                            }
                             showEditor = false
                         }
                     )
