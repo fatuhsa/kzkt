@@ -280,8 +280,6 @@ class TranslationPipeline(
         } finally {
             mat.release()
         }
-        onProgress("  Found ${rawBoxes.size} raw detections...")
-
         // ── Filtering ──
         var filtered = ImageProcessor.removeFalseGiants(rawBoxes)
         filtered = ImageProcessor.mergeOverlapping(filtered)
@@ -292,7 +290,12 @@ class TranslationPipeline(
         } finally {
             sfxMat.release()
         }
-        onProgress("  Filtered to ${filtered.size} speech bubbles...")
+
+        if (params.enableDevLogs) {
+            onProgress("  [YOLO Cascade] Raw detections: ${rawBoxes.size} -> Filtered: ${filtered.size} speech bubbles.")
+        } else {
+            onProgress("  Filtered to ${filtered.size} speech bubbles...")
+        }
 
         if (filtered.isEmpty()) {
             onProgress("  No text bubbles found.")
