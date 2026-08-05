@@ -11,8 +11,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.AutoAwesome
@@ -633,30 +635,84 @@ private fun TweakParamsSection(viewModel: MainViewModel) {
     )
     Spacer(Modifier.height(8.dp))
 
-    TweakSlider(viewModel, "max_bubbles", "Bubbles per request", 5f..50f)
-    TweakSlider(viewModel, "request_delay", "Min request delay (s)", 0.5f..10f)
-    TweakSlider(viewModel, "custom_timeout", "Custom request timeout (s)", 30f..600f)
-    TweakSlider(viewModel, "pad_x", "Pad X ratio", 0.1f..1.0f)
-    TweakSlider(viewModel, "pad_y", "Pad Y ratio", 0.1f..1.0f)
-    TweakSlider(viewModel, "min_pad", "Min padding (px)", 5f..100f)
+    TweakSlider(
+        viewModel,
+        "custom_timeout",
+        "Custom Request Timeout",
+        "Maximum HTTP network timeout per LLM API request (30s – 600s)",
+        30f..600f
+    )
+    TweakSlider(
+        viewModel,
+        "max_bubbles",
+        "Bubbles Per Request",
+        "Maximum text speech bubbles processed in a single LLM batch",
+        5f..50f
+    )
+    TweakSlider(
+        viewModel,
+        "request_delay",
+        "Min Request Delay",
+        "Minimum delay interval between API calls to prevent rate limits",
+        0.5f..10f
+    )
+    TweakSlider(
+        viewModel,
+        "pad_x",
+        "Pad X Ratio",
+        "Horizontal padding multiplier added to text bubble bounding boxes",
+        0.1f..1.0f
+    )
+    TweakSlider(
+        viewModel,
+        "pad_y",
+        "Pad Y Ratio",
+        "Vertical padding multiplier added to text bubble bounding boxes",
+        0.1f..1.0f
+    )
+    TweakSlider(
+        viewModel,
+        "min_pad",
+        "Min Padding (px)",
+        "Minimum absolute pixel padding added around detected text bubbles",
+        5f..100f
+    )
+}
+
+private fun saveTweakSliderValue(
+    scope: kotlinx.coroutines.CoroutineScope,
+    viewModel: MainViewModel,
+    keyField: String,
+    value: Float
+) {
+    scope.launch {
+        if (keyField == "custom_timeout") {
+            viewModel.settingsRepo.saveCustomTimeoutSec(value.toInt())
+        } else {
+            viewModel.settingsRepo.saveTweakParam(
+                keyField,
+                when (keyField) {
+                    "max_bubbles", "min_pad" -> value.toInt()
+                    else -> value
+                }
+            )
+        }
+    }
 }
 
 /**
- * One tweak-parameter slider, extracted to top-level (was a composable local to
- * [TweakParamsSection]). A local @Composable is recreated on every recomposition
- * of its parent, so dragging one slider re-composed all five sliders; top-level
- * makes each slider a stable call site that skips when its own state is unchanged.
+ * One tweak-parameter slider with descriptions and +/- stepper buttons for precise adjustment.
  */
 @Composable
 private fun TweakSlider(
     viewModel: MainViewModel,
     keyField: String,
     label: String,
+    description: String,
     range: ClosedFloatingPointRange<Float>,
 ) {
     val scope = rememberCoroutineScope()
 
-    // Each slider reads only its own field
     val value by remember { derivedStateOf {
         when (keyField) {
             "max_bubbles" -> viewModel.settings.value.maxBubblesPerRequest.toFloat()
@@ -669,6 +725,14 @@ private fun TweakSlider(
         }
     } }
     var sliderValue by remember(value) { mutableFloatStateOf(value) }
+
+    val step = when (keyField) {
+        "custom_timeout" -> 5f
+        "max_bubbles", "min_pad" -> 1f
+        "request_delay" -> 0.5f
+        else -> 0.05f
+    }
+
     Material3SettingsGroup(
         items = listOf(
             Material3SettingsItem(
@@ -677,37 +741,65 @@ private fun TweakSlider(
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                            Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                             val fmt = when (keyField) {
                                 "request_delay" -> "%.1fs".format(sliderValue)
                                 "min_pad", "max_bubbles" -> "${sliderValue.toInt()}"
                                 "custom_timeout" -> "${sliderValue.toInt()}s"
                                 else -> "%.2f".format(sliderValue)
                             }
-                            Text(fmt, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary)
+                            Text(fmt, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                         }
-                        Slider(
-                            value = sliderValue,
-                            onValueChange = { sliderValue = it },
-                            onValueChangeFinished = {
-                                scope.launch {
-                                    if (keyField == "custom_timeout") {
-                                        viewModel.settingsRepo.saveCustomTimeoutSec(sliderValue.toInt())
-                                    } else {
-                                        viewModel.settingsRepo.saveTweakParam(keyField,
-                                            when (keyField) {
-                                                "max_bubbles", "min_pad" -> sliderValue.toInt()
-                                                else -> sliderValue
-                                            }
-                                        )
-                                    }
-                                }
-                            },
-                            valueRange = range,
-                            modifier = Modifier.fillMaxWidth(),
+                        Text(
+                            description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
                         )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    val newValue = (sliderValue - step).coerceIn(range.start, range.endInclusive)
+                                    sliderValue = newValue
+                                    saveTweakSliderValue(scope, viewModel, keyField, newValue)
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Remove,
+                                    contentDescription = "Decrease",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Slider(
+                                value = sliderValue,
+                                onValueChange = { sliderValue = it },
+                                onValueChangeFinished = {
+                                    saveTweakSliderValue(scope, viewModel, keyField, sliderValue)
+                                },
+                                valueRange = range,
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(
+                                onClick = {
+                                    val newValue = (sliderValue + step).coerceIn(range.start, range.endInclusive)
+                                    sliderValue = newValue
+                                    saveTweakSliderValue(scope, viewModel, keyField, newValue)
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = "Increase",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
                     }
                 },
             ),
