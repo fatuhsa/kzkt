@@ -34,7 +34,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.focus.onFocusChanged
 import com.kzkt.app.core.Config
 import com.kzkt.app.ui.component.ChipsRow
 import com.kzkt.app.ui.component.Material3SettingsGroup
@@ -97,7 +96,7 @@ fun SettingsScreen(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
+        item(key = "header") {
             Text(
                 "Settings",
                 style = MaterialTheme.typography.headlineMedium,
@@ -107,7 +106,7 @@ fun SettingsScreen(
         }
 
         // ── Appearance ──
-        item {
+        item(key = "appearance") {
             val customFontPath by remember { derivedStateOf { viewModel.settings.value.customFontPath } }
             Material3SettingsGroup(
                 title = "Appearance",
@@ -154,7 +153,7 @@ fun SettingsScreen(
         }
 
         // ── Provider & Configuration ──
-        item {
+        item(key = "provider") {
             Column {
                 Text(
                     "Provider",
@@ -182,7 +181,7 @@ fun SettingsScreen(
         }
 
         // ── Target Language ──
-        item {
+        item(key = "language") {
             Column {
                 Text(
                     "Target Language",
@@ -200,7 +199,7 @@ fun SettingsScreen(
         }
 
         // ── OCR & Engine Mode (Experimental) ──
-        item {
+        item(key = "ocr_engine") {
             Column {
                 Text(
                     "OCR & Engine Mode (Experimental)",
@@ -208,28 +207,33 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
                 )
-                val settingsState by remember { derivedStateOf { viewModel.settings.value } }
+                // Read only the fields this group needs, each via its own
+                // derivedStateOf, so changing one setting recomposes just this
+                // group — not the whole Settings screen (recomposition storm).
+                val useLocalOcr by remember { derivedStateOf { viewModel.settings.value.useLocalOcr } }
+                val localOcrScript by remember { derivedStateOf { viewModel.settings.value.localOcrScript } }
+                val enableDevLogs by remember { derivedStateOf { viewModel.settings.value.enableDevLogs } }
                 Material3SettingsGroup(
                     items = listOf(
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.Science) },
                             title = { Text("Use On-Device Local OCR") },
-                            description = { Text(if (settingsState.useLocalOcr) "Google ML Kit extracts text locally before LLM. Supports ANY text-only LLM." else "Default: Sends mosaic image to Vision LLM.") },
+                            description = { Text(if (useLocalOcr) "Google ML Kit extracts text locally before LLM. Supports ANY text-only LLM." else "Default: Sends mosaic image to Vision LLM.") },
                             trailingContent = {
                                 Switch(
-                                    checked = settingsState.useLocalOcr,
+                                    checked = useLocalOcr,
                                     onCheckedChange = { enabled ->
                                         scope.launch { viewModel.settingsRepo.saveUseLocalOcr(enabled) }
                                     }
                                 )
                             },
                             onClick = {
-                                scope.launch { viewModel.settingsRepo.saveUseLocalOcr(!settingsState.useLocalOcr) }
+                                scope.launch { viewModel.settingsRepo.saveUseLocalOcr(!useLocalOcr) }
                             }
                         )
                     )
                 )
-                if (settingsState.useLocalOcr) {
+                if (useLocalOcr) {
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "Local OCR Script Language",
@@ -243,7 +247,7 @@ fun SettingsScreen(
                     )
                     ChipsRow(
                         chips = ocrScriptChips,
-                        currentValue = settingsState.localOcrScript,
+                        currentValue = localOcrScript,
                         onValueUpdate = { script ->
                             scope.launch { viewModel.settingsRepo.saveLocalOcrScript(script) }
                         }
@@ -262,17 +266,17 @@ fun SettingsScreen(
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.BugReport) },
                             title = { Text("Verbose Developer Logs") },
-                            description = { Text(if (settingsState.enableDevLogs) "ON: Shows bubble-by-bubble OCR text and connection details." else "OFF: Clean & simple progress logs.") },
+                            description = { Text(if (enableDevLogs) "ON: Shows bubble-by-bubble OCR text and connection details." else "OFF: Clean & simple progress logs.") },
                             trailingContent = {
                                 Switch(
-                                    checked = settingsState.enableDevLogs,
+                                    checked = enableDevLogs,
                                     onCheckedChange = { enabled ->
                                         scope.launch { viewModel.settingsRepo.saveEnableDevLogs(enabled) }
                                     }
                                 )
                             },
                             onClick = {
-                                scope.launch { viewModel.settingsRepo.saveEnableDevLogs(!settingsState.enableDevLogs) }
+                                scope.launch { viewModel.settingsRepo.saveEnableDevLogs(!enableDevLogs) }
                             }
                         )
                     )
@@ -281,7 +285,7 @@ fun SettingsScreen(
         }
 
         // ── Advanced Options Header ──
-        item {
+        item(key = "advanced_header") {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -326,7 +330,7 @@ fun SettingsScreen(
 
 
             // ── Tweak Parameters ──
-            item {
+            item(key = "tweak_params") {
                 Column {
                     Text(
                         "Tweak Parameters",
@@ -339,7 +343,7 @@ fun SettingsScreen(
             }
 
             // ── SFX Filter Mode ──
-            item {
+            item(key = "sfx_mode") {
                 Column {
                     Text(
                         "SFX Filter Mode",
@@ -352,7 +356,7 @@ fun SettingsScreen(
             }
         }
 
-        item {
+        item(key = "bottom_spacer") {
             Spacer(Modifier.height(32.dp))
         }
     }
@@ -390,32 +394,38 @@ private fun AccentColorRow(selected: Color, onSelect: (Color) -> Unit) {
 @Composable
 private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
     val scope = rememberCoroutineScope()
-    val settingsState by remember { derivedStateOf { viewModel.settings.value } }
-    val providerKey = settingsState.llmProvider
+    // Read only the fields this card needs, each via its own derivedStateOf, so a
+    // change to any single setting recomposes just this card — not the whole
+    // Settings screen (recomposition storm).
+    val providerKey by remember { derivedStateOf { viewModel.settings.value.llmProvider } }
     val meta = Config.PROVIDER_REGISTRY[providerKey] ?: return
 
-    val apiKey = when (providerKey) {
-        "gemini" -> settingsState.geminiApiKey
-        "openai" -> settingsState.openaiApiKey
-        "openrouter" -> settingsState.openrouterApiKey
-        "zen" -> settingsState.zenApiKey
-        "opencodego" -> settingsState.opencodegoApiKey
-        "custom" -> settingsState.customApiKey
-        else -> ""
-    }
+    val apiKey by remember(providerKey) { derivedStateOf {
+        when (providerKey) {
+            "gemini" -> viewModel.settings.value.geminiApiKey
+            "openai" -> viewModel.settings.value.openaiApiKey
+            "openrouter" -> viewModel.settings.value.openrouterApiKey
+            "zen" -> viewModel.settings.value.zenApiKey
+            "opencodego" -> viewModel.settings.value.opencodegoApiKey
+            "custom" -> viewModel.settings.value.customApiKey
+            else -> ""
+        }
+    } }
 
-    val baseUrl = settingsState.getBaseUrl(providerKey)
+    val baseUrl by remember(providerKey) { derivedStateOf { viewModel.settings.value.getBaseUrl(providerKey) } }
     val defaultBaseUrl = meta.defaultBaseUrl
 
-    val currentModel = when (providerKey) {
-        "gemini" -> settingsState.modelGemini
-        "openai" -> settingsState.modelOpenai
-        "openrouter" -> settingsState.modelOpenrouter
-        "zen" -> settingsState.modelZen
-        "opencodego" -> settingsState.modelOpencodego
-        "custom" -> settingsState.modelCustom
-        else -> meta.defaultModel
-    }
+    val currentModel by remember(providerKey) { derivedStateOf {
+        when (providerKey) {
+            "gemini" -> viewModel.settings.value.modelGemini
+            "openai" -> viewModel.settings.value.modelOpenai
+            "openrouter" -> viewModel.settings.value.modelOpenrouter
+            "zen" -> viewModel.settings.value.modelZen
+            "opencodego" -> viewModel.settings.value.modelOpencodego
+            "custom" -> viewModel.settings.value.modelCustom
+            else -> meta.defaultModel
+        }
+    } }
 
     val detected: List<String> = viewModel.providerModels[providerKey] ?: emptyList()
     val presetList: List<String> = Config.PRESET_MODELS[providerKey] ?: emptyList()
@@ -428,7 +438,11 @@ private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
             Material3SettingsItem(
                 leadingContent = { SettingsIcon(Icons.Outlined.GppGood) },
                 title = {
-                    var textState by remember(providerKey, apiKey) { mutableStateOf(apiKey) }
+                    // Key the field state on the provider only (not the persisted value), so
+                    // an autosave echo no longer resets the field mid-typing. The single
+                    // debounced LaunchedEffect below is the only write path — the old
+                    // duplicate onFocusChanged save was removed to cut DataStore writes.
+                    var textState by remember(providerKey) { mutableStateOf(apiKey) }
                     var visible by remember { mutableStateOf(false) }
                     LaunchedEffect(textState) {
                         if (textState != apiKey) {
@@ -442,13 +456,7 @@ private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
                         label = { Text(if (meta.requiresKey) "${meta.displayName} API Key" else "${meta.displayName} API Key (Optional)") },
                         placeholder = { Text(if (meta.requiresKey) "Enter API Key" else "Optional API Key") },
                         visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onFocusChanged { focusState ->
-                                if (!focusState.isFocused && textState != apiKey) {
-                                    scope.launch { viewModel.settingsRepo.saveApiKey(providerKey, textState) }
-                                }
-                            },
+                        modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         trailingIcon = {
                             IconButton(onClick = { visible = !visible }) {
@@ -464,7 +472,7 @@ private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
             Material3SettingsItem(
                 leadingContent = { SettingsIcon(Icons.Outlined.Link) },
                 title = {
-                    var urlText by remember(providerKey, baseUrl) { mutableStateOf(baseUrl) }
+                    var urlText by remember(providerKey) { mutableStateOf(baseUrl) }
                     LaunchedEffect(urlText) {
                         if (urlText != baseUrl) {
                             kotlinx.coroutines.delay(350)
@@ -476,13 +484,7 @@ private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
                         onValueChange = { urlText = it },
                         label = { Text("Base URL") },
                         placeholder = { Text(if (defaultBaseUrl.isNotBlank()) defaultBaseUrl else "https://api.example.com") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onFocusChanged { focusState ->
-                                if (!focusState.isFocused && urlText != baseUrl) {
-                                    scope.launch { viewModel.settingsRepo.saveBaseUrl(providerKey, urlText) }
-                                }
-                            },
+                        modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         trailingIcon = {
                             if (defaultBaseUrl.isNotBlank() && urlText != defaultBaseUrl) {
@@ -528,7 +530,8 @@ private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
 private fun TweakParamsSection(viewModel: MainViewModel) {
     val scope = rememberCoroutineScope()
 
-    val useInpainting = viewModel.settings.value.useInpainting
+    // Per-field derived read so the section doesn't recompose on unrelated settings.
+    val useInpainting by remember { derivedStateOf { viewModel.settings.value.useInpainting } }
     Material3SettingsGroup(
         items = listOf(
             Material3SettingsItem(

@@ -89,37 +89,72 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             historyRepo.entriesFlow.collect { historyEntries.value = it }
         }
-        // Observe background service progress flow
+        // Observe background service progress flow. Events are coalesced into
+        // short batches (max ~30 Hz) and applied to the UI in a single Main-thread
+        // pass instead of launching one coroutine per event — bursts of log/progress
+        // events used to flood the main queue and drop frames while the user
+        // scrolled History/Settings during an active background translation.
         viewModelScope.launch {
-            com.kzkt.app.core.TranslationProgressTracker.progressFlow.collect { event ->
-                post {
-                    when (event) {
-                        is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Log -> {
-                            translationLog.add(event.message)
+            val pendingLogs = mutableListOf<String>()
+            var pendingProgress: com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Progress? = null
+            // Keep a list (not a single latest value): a multi-file batch can emit
+            // several ResultPath events within one coalesce window, and dropping all
+            // but the last would silently remove finished files from the UI list.
+            val pendingResults = mutableListOf<com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.ResultPath>()
+            var pendingCompleted = false
+            var pendingError: String? = null
+            var flushJob: kotlinx.coroutines.Job? = null
+
+            fun scheduleFlush() {
+                if (flushJob?.isActive == true) return
+                flushJob = viewModelScope.launch {
+                    kotlinx.coroutines.delay(33) // coalesce window (~30 Hz max UI updates)
+                    val logs = pendingLogs.toList()
+                    val progress = pendingProgress
+                    val results = pendingResults.toList()
+                    val completed = pendingCompleted
+                    val error = pendingError
+                    pendingLogs.clear()
+                    pendingProgress = null
+                    pendingResults.clear()
+                    pendingCompleted = false
+                    pendingError = null
+                    post {
+                        if (logs.isNotEmpty()) translationLog.addAll(logs)
+                        if (progress != null) {
+                            translationProgress.value = progress.done.toFloat() / maxOf(1, progress.total)
+                            translationDone.value = progress.done
+                            translationTotal.value = progress.total
+                            translationActive.value = progress.done < progress.total
                         }
-                        is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Progress -> {
-                            translationProgress.value = event.done.toFloat() / maxOf(1, event.total)
-                            translationDone.value = event.done
-                            translationTotal.value = event.total
-                            translationActive.value = event.done < event.total
-                        }
-                        is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.ResultPath -> {
-                            if (!resultPaths.contains(event.path)) {
-                                resultPaths.add(event.path)
+                        for (result in results) {
+                            if (!resultPaths.contains(result.path)) {
+                                resultPaths.add(result.path)
                             }
-                            currentPreviewPath.value = event.path
+                            currentPreviewPath.value = result.path
                         }
-                        is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Completed -> {
+                        if (completed) {
                             translationActive.value = false
                             canRetry.value = false
                         }
-                        is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Error -> {
-                            translationLog.add("[!] Error: ${event.error}")
+                        if (error != null) {
+                            translationLog.add("[!] Error: $error")
                             translationActive.value = false
                             canRetry.value = com.kzkt.app.core.TranslationProgressTracker.cachedPageData != null
                         }
                     }
                 }
+            }
+
+            com.kzkt.app.core.TranslationProgressTracker.progressFlow.collect { event ->
+                when (event) {
+                    is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Log -> pendingLogs.add(event.message)
+                    is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Progress -> pendingProgress = event
+                    is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.ResultPath -> pendingResults.add(event)
+                    com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Completed -> pendingCompleted = true
+                    is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Error -> pendingError = event.error
+                }
+                scheduleFlush()
             }
         }
     }

@@ -37,6 +37,25 @@ import com.kzkt.app.ui.FileUtils
 import java.io.File
 
 /**
+ * Decode a page bitmap downsampled so its longest edge is at most [maxDim] px.
+ * Reading bounds first lets us pick an inSampleSize power-of-two before the
+ * actual decode, keeping reader memory bounded.
+ */
+private fun decodeSampledBitmap(path: String, maxDim: Int = 2048): Bitmap? {
+    return try {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        var sampleSize = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sampleSize * 2) >= maxDim) {
+            sampleSize *= 2
+        }
+        BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sampleSize })
+    } catch (_: Exception) {
+        null
+    }
+}
+
+/**
  * Fullscreen In-App Manga & PDF Reader Dialog with HorizontalPager,
  * Pinch-to-Zoom, Original vs. Translated toggle, and Live Touch-up Editing.
  */
@@ -84,10 +103,15 @@ fun MangaReaderDialog(
                 ) { pageIndex ->
                     val path = pagePaths[pageIndex]
 
-                    val bitmap = remember(path) {
-                        try {
-                            BitmapFactory.decodeFile(path)
-                        } catch (_: Exception) { null }
+                    // Decode off the main thread and downsample to at most ~2048px
+                    // on the long edge. Manga pages are shown with ContentScale.Fit,
+                    // so decoding the full-resolution file (often 3000–5000px, tens
+                    // of MB) on the UI thread is what caused page-flip jank and high
+                    // memory pressure in the reader.
+                    val bitmap by produceState<Bitmap?>(initialValue = null, key1 = path) {
+                        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            decodeSampledBitmap(path)
+                        }
                     }
 
                     ZoomablePageViewer(

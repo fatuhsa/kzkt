@@ -56,13 +56,19 @@ fun HistoryScreen(
                 }
             }
         } else if (file.exists()) {
-            val allHistoryImages = entries.mapNotNull { e ->
-                val path = e.outputPath
-                if (!path.endsWith(".pdf", ignoreCase = true) && File(path).exists()) path else null
+            // Resolve sibling pages off the main thread — File.exists() is
+            // synchronous disk I/O that stutters the UI when history is large.
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val allHistoryImages = entries.mapNotNull { e ->
+                    val path = e.outputPath
+                    if (!path.endsWith(".pdf", ignoreCase = true) && File(path).exists()) path else null
+                }
+                val idx = allHistoryImages.indexOf(file.absolutePath).coerceAtLeast(0)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    readerPages = if (allHistoryImages.isNotEmpty()) allHistoryImages else listOf(file.absolutePath)
+                    readerInitialIndex = idx
+                }
             }
-            val idx = allHistoryImages.indexOf(file.absolutePath).coerceAtLeast(0)
-            readerPages = if (allHistoryImages.isNotEmpty()) allHistoryImages else listOf(file.absolutePath)
-            readerInitialIndex = idx
         }
     }
 
@@ -82,7 +88,15 @@ fun HistoryScreen(
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
                 }
-                items(entries, key = { it.timestamp }) { entry ->
+                // Stable key: timestamp alone can collide when a multi-file batch is
+                // recorded in the same millisecond, which made LazyColumn throw
+                // "key already used" and stall the list. contentType lets LazyColumn
+                // reuse item composition while scrolling.
+                items(
+                    entries,
+                    key = { "${it.timestamp}_${it.fileName}_${it.pageCount}" },
+                    contentType = { "history_entry" },
+                ) { entry ->
                     HistoryItem(
                         entry = entry,
                         onClick = { openReaderForEntry(entry) },
