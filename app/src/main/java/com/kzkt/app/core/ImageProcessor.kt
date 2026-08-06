@@ -2,7 +2,6 @@ package com.kzkt.app.core
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import android.util.Base64
 import android.util.Log
 import com.kzkt.app.core.Config.TweakParams
@@ -441,17 +440,7 @@ object ImageProcessor {
         return mat
     }
 
-    /**
-     * Auto-detect if page/manga is Webtoon format (tall vertical aspect ratio > 2.2).
-     */
-    fun isWebtoonLayout(bitmap: Bitmap): Boolean {
-        val ratio = bitmap.height.toDouble() / maxOf(1, bitmap.width)
-        return ratio > 2.2
-    }
-
     // ── Landscape Auto-Split ───────────────────────────────────────
-
-    data class SplitResult(val partPath: String, val resultPath: String?)
 
     /**
      * Auto-split wide images (ratio > 1.2) into pages, processing right-to-left.

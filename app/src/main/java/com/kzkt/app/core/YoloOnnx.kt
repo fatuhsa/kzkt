@@ -21,13 +21,6 @@ class YoloOnnx(
 ) {
     private var ortEnv: OrtEnvironment? = null
     private var ortSession: OrtSession? = null
-    private var modelSize: Int = 0
-
-    // Pre-allocated reusable direct FloatBuffer (1 * 3 * 640 * 640 * 4 bytes) for zero-GC inference
-    private val inputBuffer: FloatBuffer = java.nio.ByteBuffer
-        .allocateDirect(1 * 3 * Constants.YOLO_INPUT_SIZE * Constants.YOLO_INPUT_SIZE * 4)
-        .order(java.nio.ByteOrder.nativeOrder())
-        .asFloatBuffer()
 
     data class Detection(val x1: Int, val y1: Int, val x2: Int, val y2: Int)
 
@@ -81,10 +74,10 @@ class YoloOnnx(
     private fun decryptModel(): File? {
         val onnxDirect = File(context.cacheDir, "kzkt.onnx")
 
-        // Check cached file validity — delete if corrupt (wrong key = wrong header)
+        // Check cached file validity — delete if corrupt (wrong key = wrong header).
+        // Only the 4-byte header is read here instead of the whole ~100 MB file.
         if (onnxDirect.exists()) {
-            val cachedBytes = onnxDirect.readBytes()
-            val header = cachedBytes.take(4).map { it.toInt().toChar() }.joinToString("")
+            val header = readHeader(onnxDirect)
             if (header == "ONNX") {
                 Log.d("KZKT/YOLO", "Using cached ONNX: ${onnxDirect.length()} bytes (header OK)")
                 return onnxDirect
@@ -95,38 +88,43 @@ class YoloOnnx(
         }
 
         return try {
-            Log.d("KZKT/YOLO", "Reading assets/models/$modelFilename ...")
-            val inputStream = context.assets.open("models/$modelFilename")
-            val encrypted = inputStream.readBytes()
-            inputStream.close()
-            Log.d("KZKT/YOLO", "Read ${encrypted.size} bytes from asset")
-
+            Log.d("KZKT/YOLO", "Decrypting assets/models/$modelFilename → cache (streamed)...")
             val key = Constants.MODEL_DECRYPT_KEY
-            Log.d("KZKT/YOLO", "XOR decrypting with key=$key ...")
-            val decrypted = ByteArray(encrypted.size)
-            for (i in encrypted.indices) {
-                decrypted[i] = (encrypted[i].toInt() xor key).toByte()
+            val tag = UUID.randomUUID().toString().take(8)
+            val modelFile = File(context.cacheDir, "kzkt_$tag.onnx")
+
+            // Stream XOR decryption chunk-by-chunk instead of loading the whole model
+            // into memory at once — avoids a large RAM spike during startup.
+            val inputStream = context.assets.open("models/$modelFilename")
+            try {
+                java.io.FileOutputStream(modelFile).use { out ->
+                    val buffer = ByteArray(64 * 1024)
+                    var total = 0L
+                    while (true) {
+                        val read = inputStream.read(buffer)
+                        if (read <= 0) break
+                        for (i in 0 until read) {
+                            buffer[i] = (buffer[i].toInt() xor key).toByte()
+                        }
+                        out.write(buffer, 0, read)
+                        total += read
+                    }
+                    Log.d("KZKT/YOLO", "Decrypted $total bytes")
+                }
+            } finally {
+                inputStream.close()
             }
-            Log.d("KZKT/YOLO", "Decrypted ${decrypted.size} bytes")
 
             // Verify it looks like an ONNX file (starts with "ONNX")
-            val header = decrypted.take(4).map { it.toInt().toChar() }.joinToString("")
+            val header = readHeader(modelFile)
             Log.d("KZKT/YOLO", "File header: \"$header\" (expected \"ONNX\")")
             if (header != "ONNX") {
                 Log.w("KZKT/YOLO", "Header mismatch after XOR — key may be wrong")
-            }
-
-            val tag = UUID.randomUUID().toString().take(8)
-            val modelFile = File(context.cacheDir, "kzkt_$tag.onnx")
-            modelFile.writeBytes(decrypted)
-            Log.d("KZKT/YOLO", "Written to ${modelFile.absolutePath}")
-
-            if (modelFile.exists()) {
-                modelSize = modelFile.length().toInt()
-                modelFile.copyTo(onnxDirect, overwrite = true)
-            } else {
                 return null
             }
+
+            modelFile.copyTo(onnxDirect, overwrite = true)
+            Log.d("KZKT/YOLO", "Written to ${modelFile.absolutePath}")
 
             // Clean up stale temp files from interrupted previous runs (keep the cached one)
             try {
@@ -145,7 +143,23 @@ class YoloOnnx(
         }
     }
 
-    @Synchronized
+    private fun readHeader(file: File): String {
+        val bytes = ByteArray(4)
+        return try {
+            file.inputStream().use { ins ->
+                var off = 0
+                while (off < 4) {
+                    val r = ins.read(bytes, off, 4 - off)
+                    if (r <= 0) break
+                    off += r
+                }
+            }
+            bytes.map { it.toInt().toChar() }.joinToString("")
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
     private fun prepareInput(bitmap: Bitmap): Triple<FloatBuffer, DoubleArray, DoubleArray> {
         val h = bitmap.height.toDouble()
         val w = bitmap.width.toDouble()
@@ -170,19 +184,20 @@ class YoloOnnx(
         if (resized != bitmap) resized.recycle()
 
         val area = Constants.YOLO_INPUT_SIZE * Constants.YOLO_INPUT_SIZE
-        inputBuffer.rewind()
+        val inputBuffer = java.nio.ByteBuffer
+            .allocateDirect(area * 3 * 4)
+            .order(java.nio.ByteOrder.nativeOrder())
+            .asFloatBuffer()
         for (i in pixels.indices) {
             val pixel = pixels[i]
             inputBuffer.put(i, ((pixel shr 16) and 0xFF) / 255.0f)
             inputBuffer.put(area + i, ((pixel shr 8) and 0xFF) / 255.0f)
             inputBuffer.put(2 * area + i, (pixel and 0xFF) / 255.0f)
         }
-        inputBuffer.rewind()
 
         return Triple(inputBuffer, doubleArrayOf(scale, scale), doubleArrayOf(dw.toDouble(), dh.toDouble()))
     }
 
-    @Synchronized
     fun predict(bitmap: Bitmap, confThreshold: Double = this.confThreshold, iouThreshold: Double = this.iouThreshold): List<Detection> {
         val env = ortEnv ?: throw IllegalStateException("ONNX Runtime not initialized")
         val session = ortSession ?: throw IllegalStateException("Model not loaded")

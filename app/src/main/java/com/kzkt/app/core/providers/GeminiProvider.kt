@@ -60,7 +60,7 @@ class GeminiProvider(
     }
 
     override suspend fun translateText(textJson: String, prompt: String): String? {
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent"
+        val url = "$apiBaseUrl/models/$modelName:generateContent"
         val requestBody = gson.toJson(mapOf(
             "contents" to listOf(mapOf(
                 "parts" to listOf(
@@ -111,6 +111,4 @@ class GeminiProvider(
             }
         }
     }
-
-    class ValueError(message: String) : Exception(message)
 }

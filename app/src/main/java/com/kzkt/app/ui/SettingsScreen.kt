@@ -6,10 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ExpandLess
@@ -17,19 +15,14 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.BrightnessLow
 import androidx.compose.material.icons.outlined.BugReport
-import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.GppGood
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.ModelTraining
 import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Router
 import androidx.compose.material.icons.outlined.Science
-import androidx.compose.material.icons.outlined.SettingsEthernet
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -96,7 +89,6 @@ fun SettingsScreen(
 
     val providerChips = remember { Config.PROVIDER_REGISTRY.values.map { it.key to it.displayName } }
     val languageChips = remember { Config.LANGUAGE_CHOICES.map { it to it } }
-    val selectedProvider by remember { derivedStateOf { viewModel.settings.value.llmProvider } }
     var showAdvanced by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -393,87 +385,6 @@ private fun AccentColorRow(selected: Color, onSelect: (Color) -> Unit) {
             )
         }
     }
-}
-
-@Composable
-private fun ApiKeyItem(
-    label: String,
-    viewModel: MainViewModel,
-    settingKey: String,
-    icon: ImageVector,
-): Material3SettingsItem {
-    val scope = rememberCoroutineScope()
-    val value by remember { derivedStateOf {
-        when (settingKey) {
-            "geminiApiKey" -> viewModel.settings.value.geminiApiKey
-            "openaiApiKey" -> viewModel.settings.value.openaiApiKey
-            "openrouterApiKey" -> viewModel.settings.value.openrouterApiKey
-            "zenApiKey" -> viewModel.settings.value.zenApiKey
-            "opencodegoApiKey" -> viewModel.settings.value.opencodegoApiKey
-            "customApiKey" -> viewModel.settings.value.customApiKey
-            else -> ""
-        }
-    } }
-    var textState by remember(value) { mutableStateOf(value) }
-    var visible by remember { mutableStateOf(false) }
-
-    LaunchedEffect(textState) {
-        if (textState != value) {
-            kotlinx.coroutines.delay(350)
-            viewModel.settingsRepo.saveApiKey(label.lowercase().replace(" ", ""), textState)
-        }
-    }
-
-    return Material3SettingsItem(
-        leadingContent = {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-            }
-        },
-        title = {
-            OutlinedTextField(
-                value = textState,
-                onValueChange = { textState = it },
-                label = { Text(label) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onFocusChanged { focusState ->
-                        if (!focusState.isFocused && textState != value) {
-                            scope.launch {
-                                viewModel.settingsRepo.saveApiKey(label.lowercase().replace(" ", ""), textState)
-                            }
-                        }
-                    },
-                singleLine = true,
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    imeAction = androidx.compose.ui.text.input.ImeAction.Done
-                ),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                    onDone = {
-                        if (textState != value) {
-                            scope.launch {
-                                viewModel.settingsRepo.saveApiKey(label.lowercase().replace(" ", ""), textState)
-                            }
-                        }
-                    }
-                ),
-                visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButton(onClick = { visible = !visible }) {
-                        Icon(
-                            if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                            contentDescription = if (visible) "Hide" else "Show",
-                        )
-                    }
-                },
-            )
-        },
-    )
 }
 
 @Composable
@@ -874,29 +785,3 @@ private fun ModelDropdownInput(
     }
 }
 
-@Composable
-private fun CustomModelSelector(
-    models: List<String>,
-    selected: String,
-    onSelect: (String) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-        OutlinedTextField(
-            value = selected,
-            onValueChange = {},
-            readOnly = true,
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            val displayModels = if (models.size > 200) models.take(200) + "… (${models.size} total)" else models
-            displayModels.forEach { model ->
-                DropdownMenuItem(
-                    text = { Text(model, style = MaterialTheme.typography.bodySmall) },
-                    onClick = { onSelect(model); expanded = false },
-                )
-            }
-        }
-    }
-}

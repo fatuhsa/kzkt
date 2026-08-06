@@ -22,6 +22,4 @@ interface LlmProvider {
      * Compatible with ALL text-only and vision models.
      */
     suspend fun translateText(textJson: String, prompt: String): String? = null
-
-    fun validateApiKey(): Boolean = apiKey.isNotBlank()
 }

@@ -4,8 +4,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -21,17 +19,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import coil.compose.AsyncImage
 import java.io.File
 
 @Composable
@@ -574,125 +567,3 @@ private fun ResultPreview(
     }
 }
 
-@Composable
-private fun FullscreenImageViewer(
-    path: String,
-    onDismiss: () -> Unit,
-) {
-    val context = LocalContext.current
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = Color.Black
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                if (path.endsWith(".pdf", ignoreCase = true)) {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            Icons.Default.PictureAsPdf,
-                            contentDescription = "PDF",
-                            tint = Color(0xFFE53935),
-                            modifier = Modifier.size(80.dp)
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            path.substringAfterLast('/'),
-                            color = Color.White,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(
-                                onClick = { FileUtils.openFileInSystemViewer(context, path) }
-                            ) {
-                                Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Open PDF")
-                            }
-                            OutlinedButton(
-                                onClick = { FileUtils.shareFile(context, path) },
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = Color.White
-                                )
-                            ) {
-                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Share")
-                            }
-                        }
-                    }
-                } else {
-                    var scale by remember { mutableStateOf(1f) }
-                    var offsetX by remember { mutableStateOf(0f) }
-                    var offsetY by remember { mutableStateOf(0f) }
-
-                    val transformState = rememberTransformableState { zoomChange, panChange, _ ->
-                        scale = (scale * zoomChange).coerceIn(0.8f, 5f)
-                        offsetX += panChange.x
-                        offsetY += panChange.y
-                    }
-
-                    AsyncImage(
-                        model = File(path),
-                        contentDescription = "Translated Manga Page",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer(
-                                scaleX = scale,
-                                scaleY = scale,
-                                translationX = offsetX,
-                                translationY = offsetY
-                            )
-                            .transformable(state = transformState)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                        .align(Alignment.TopCenter),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = onDismiss,
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = Color.Black.copy(alpha = 0.6f)
-                        )
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        IconButton(
-                            onClick = { FileUtils.shareFile(context, path) },
-                            colors = IconButtonDefaults.iconButtonColors(
-                                containerColor = Color.Black.copy(alpha = 0.6f)
-                            )
-                        ) {
-                            Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White)
-                        }
-
-                        IconButton(
-                            onClick = { FileUtils.openFileInSystemViewer(context, path) },
-                            colors = IconButtonDefaults.iconButtonColors(
-                                containerColor = Color.Black.copy(alpha = 0.6f)
-                            )
-                        ) {
-                            Icon(Icons.Default.OpenInNew, contentDescription = "Open in Gallery", tint = Color.White)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}

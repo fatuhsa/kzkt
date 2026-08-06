@@ -50,7 +50,6 @@ class SettingsRepository(private val context: Context) {
         private val KEY_PAD_X = floatPreferencesKey("pad_x_ratio")
         private val KEY_PAD_Y = floatPreferencesKey("pad_y_ratio")
         private val KEY_MIN_PAD = intPreferencesKey("min_pad")
-        private val KEY_LAST_DIR = stringPreferencesKey("last_opened_dir")
         private val KEY_CUSTOM_FONT = stringPreferencesKey("custom_font_path")
         private val KEY_USE_INPAINTING = booleanPreferencesKey("use_inpainting")
         private val KEY_USE_LOCAL_OCR = booleanPreferencesKey("use_local_ocr")
@@ -86,7 +85,6 @@ class SettingsRepository(private val context: Context) {
         val padXRatio: Float = 0.40f,
         val padYRatio: Float = 0.25f,
         val minPad: Int = 35,
-        val lastOpenedDir: String = "",
         val customFontPath: String = "",
         val useInpainting: Boolean = false,
         val useLocalOcr: Boolean = false,
@@ -137,7 +135,6 @@ class SettingsRepository(private val context: Context) {
             padXRatio = prefs[KEY_PAD_X] ?: Defaults.settings.padXRatio,
             padYRatio = prefs[KEY_PAD_Y] ?: Defaults.settings.padYRatio,
             minPad = prefs[KEY_MIN_PAD] ?: Defaults.settings.minPad,
-            lastOpenedDir = prefs[KEY_LAST_DIR] ?: Defaults.settings.lastOpenedDir,
             customFontPath = prefs[KEY_CUSTOM_FONT] ?: Defaults.settings.customFontPath,
             useInpainting = prefs[KEY_USE_INPAINTING] ?: Defaults.settings.useInpainting,
             useLocalOcr = prefs[KEY_USE_LOCAL_OCR] ?: Defaults.settings.useLocalOcr,
@@ -208,10 +205,6 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
-    suspend fun saveCustomBaseUrl(url: String) {
-        saveBaseUrl("custom", url)
-    }
- 
     suspend fun saveCustomFontPath(path: String) {
         context.dataStore.edit { it[KEY_CUSTOM_FONT] = path }
     }
@@ -243,7 +236,4 @@ class SettingsRepository(private val context: Context) {
         }
     }
  
-    suspend fun saveLastDir(dir: String) {
-        context.dataStore.edit { it[KEY_LAST_DIR] = dir }
-    }
 }

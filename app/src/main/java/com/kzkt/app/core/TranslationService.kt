@@ -39,11 +39,17 @@ class TranslationService : Service() {
         const val ACTION_START = "com.kzkt.app.action.START"
         const val ACTION_CANCEL = "com.kzkt.app.action.CANCEL"
         const val EXTRA_FILES = "com.kzkt.app.extra.FILES"
+        const val EXTRA_RETRY = "com.kzkt.app.extra.RETRY"
 
-        fun startTranslation(context: Context, files: List<String>) {
+        /**
+         * @param retry when true, the last cached detection results are reused instead
+         * of clearing them (used by the fast-retry resume button).
+         */
+        fun startTranslation(context: Context, files: List<String>, retry: Boolean = false) {
             val intent = Intent(context, TranslationService::class.java).apply {
                 action = ACTION_START
                 putStringArrayListExtra(EXTRA_FILES, ArrayList(files))
+                putBooleanExtra(EXTRA_RETRY, retry)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -81,15 +87,16 @@ class TranslationService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
-            startTask(files)
+            startTask(files, intent.getBooleanExtra(EXTRA_RETRY, false))
         }
 
         return START_STICKY
     }
 
-    private fun startTask(files: List<String>) {
+    private fun startTask(files: List<String>, retry: Boolean = false) {
         TranslationProgressTracker.isCancelled = false
-        TranslationProgressTracker.clearCache()
+        // A fresh job must clear any stale retry cache; a retry job consumes it instead.
+        if (!retry) TranslationProgressTracker.clearCache()
         setupNotification()
 
         val oldJob = translationJob
@@ -167,6 +174,14 @@ class TranslationService : Service() {
                     acc + if (f.endsWith(".pdf", ignoreCase = true)) 3 else 1
                 }
 
+                // Fast retry: reuse the last cached detection results (skips YOLO for
+                // already-detected pages). The cache is shared read-only across groups and
+                // cleared once the whole job finishes.
+                val retryCache = if (retry) TranslationProgressTracker.cachedPageData else null
+                if (retryCache != null && retryCache.isNotEmpty()) {
+                    emitLog("[Retry] Resuming from cached detection (${retryCache.size} pages)...")
+                }
+
                 emitProgress(0, totalSteps)
 
                 for ((idx, path) in files.withIndex()) {
@@ -227,6 +242,7 @@ class TranslationService : Service() {
                             val groupResults = groupPipeline.processImageBatch(
                                 imagePaths = pageGroup,
                                 outputDir = outputDir,
+                                cachedPages = retryCache,
                                 pageOffset = groupIdx * pageGroupSize,
                                 totalBatchPages = pages.size
                             )
@@ -318,6 +334,9 @@ class TranslationService : Service() {
                     emitLog("[Cancelled] Translation stopped by user.")
                     showFinalNotification("Translation Cancelled", "The operation was stopped by the user.")
                 } else {
+                    // Job finished: the retry cache is no longer needed (all cached bitmaps
+                    // were either rendered or skipped).
+                    TranslationProgressTracker.clearCache()
                     emitLog("=== Done! All files processed. ===")
                     showFinalNotification("Translation Completed", "All files translated successfully!")
                     TranslationProgressTracker.progressFlow.emit(TranslationProgressTracker.ProgressEvent.Completed)

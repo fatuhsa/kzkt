@@ -34,8 +34,6 @@ class CustomProvider(
 
     private val gson = Gson()
 
-    override fun validateApiKey(): Boolean = true  // optional key
-
     private fun buildEndpoint(): String {
         if (baseUrl.isBlank()) return "https://api.openai.com/v1/chat/completions"
         var normalized = baseUrl.trimEnd('/')
@@ -184,6 +182,4 @@ class CustomProvider(
             }
         }
     }
-
-    class ValueError(message: String) : Exception(message)
 }

@@ -18,8 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,7 +44,6 @@ import java.io.File
 @Composable
 fun MangaReaderDialog(
     pagePaths: List<String>,
-    originalPaths: List<String> = emptyList(),
     initialIndex: Int = 0,
     pipelineResult: com.kzkt.app.core.TranslationPipeline.PipelineResult? = null,
     targetLanguage: String = "Indonesian",
@@ -59,7 +56,6 @@ fun MangaReaderDialog(
     val pagerState = rememberPagerState(initialPage = initialIndex.coerceIn(0, pagePaths.size - 1)) { pagePaths.size }
 
     var showControls by remember { mutableStateOf(true) }
-    var showOriginal by remember { mutableStateOf(false) }
     var showEditor by remember { mutableStateOf(false) }
     var isZoomed by remember { mutableStateOf(false) }
 
@@ -86,11 +82,7 @@ fun MangaReaderDialog(
                     userScrollEnabled = !isZoomed,
                     modifier = Modifier.fillMaxSize()
                 ) { pageIndex ->
-                    val path = if (showOriginal && pageIndex in originalPaths.indices) {
-                        originalPaths[pageIndex]
-                    } else {
-                        pagePaths[pageIndex]
-                    }
+                    val path = pagePaths[pageIndex]
 
                     val bitmap = remember(path) {
                         try {
@@ -156,22 +148,6 @@ fun MangaReaderDialog(
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Toggle Original vs Translated
-                            if (originalPaths.isNotEmpty()) {
-                                FilterChip(
-                                    selected = showOriginal,
-                                    onClick = { showOriginal = !showOriginal },
-                                    label = { Text(if (showOriginal) "Original" else "Translated") },
-                                    leadingIcon = {
-                                        Icon(
-                                            if (showOriginal) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                )
-                            }
-
                             // Edit Text Button (Always available for touch-up editing)
                             IconButton(onClick = {
                                 if (pipelineResult?.originalBitmap != null) {

@@ -110,7 +110,6 @@ object Config {
         var jarakAntarPotongan: Int = 10,
         var lebarMosaikMin: Int = 360,
         var filterSfxAktif: Boolean = true,
-        var simpanDebugFilterSfx: Boolean = true,
         var pakaiPatchUntukBoxGepeng: Boolean = true,
         var rasioBoxGepeng: Double = 2.4,
         var lebarBoxGepengRatio: Double = 0.45,
@@ -141,6 +140,4 @@ object Config {
         "opencodego" to listOf("mimo-v2.5", "claude-3-5-sonnet"),
     )
 
-    val SUPPORTED_IMAGE_EXTENSIONS: Set<String> = setOf(".png", ".jpg", ".jpeg", ".webp")
-    val REQUEST_TIMEOUT_MS: Long = 20_000L
 }

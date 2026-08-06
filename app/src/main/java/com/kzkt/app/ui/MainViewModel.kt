@@ -10,26 +10,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.kzkt.app.core.Config
-import com.kzkt.app.core.ImageProcessor
-import com.kzkt.app.core.RateLimiter
 import com.kzkt.app.core.TextRenderer
 import com.kzkt.app.core.TranslationPipeline
 import com.kzkt.app.core.YoloOnnx
-import com.kzkt.app.core.providers.*
 import com.kzkt.app.data.HistoryEntry
 import com.kzkt.app.data.HistoryRepository
 import com.kzkt.app.data.SettingsRepository
-import com.kzkt.app.util.PdfExporter
-import com.kzkt.app.util.PdfImporter
-import com.google.gson.Gson
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -64,9 +56,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val yoloReady = mutableStateOf(false)
     val yoloError = mutableStateOf<String?>(null)
 
-    // Custom / Provider model state
-    val customModels = mutableStateListOf<String>()
-    val customModelsLoading = mutableStateOf(false)
+    // Provider model state
     val providerModels = mutableStateMapOf<String, List<String>>()
     val modelsLoading = mutableStateOf(false)
 
@@ -163,53 +153,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun createProvider(): LlmProvider? {
-        val s = settings.value
-        val meta = Config.PROVIDER_REGISTRY[s.llmProvider] ?: return null
-
-        val apiKey = when (s.llmProvider) {
-            "gemini" -> s.geminiApiKey
-            "openai" -> s.openaiApiKey
-            "openrouter" -> s.openrouterApiKey
-            "zen" -> s.zenApiKey
-            "opencodego" -> s.opencodegoApiKey
-            "custom" -> s.customApiKey
-            else -> ""
-        }
-        val modelName = when (s.llmProvider) {
-            "gemini" -> s.modelGemini
-            "openai" -> s.modelOpenai
-            "openrouter" -> s.modelOpenrouter
-            "zen" -> s.modelZen
-            "opencodego" -> s.modelOpencodego
-            "custom" -> s.modelCustom
-            else -> meta.defaultModel
-        }
-
-        val baseUrl = s.getBaseUrl(s.llmProvider)
-
-        return when (s.llmProvider) {
-            "gemini" -> GeminiProvider(apiKey, modelName, baseUrl)
-            "openai" -> OpenAIProvider(apiKey, modelName, baseUrl)
-            "openrouter" -> OpenRouterProvider(apiKey, modelName, baseUrl)
-            "zen" -> ZenProvider(apiKey, modelName, baseUrl)
-            "opencodego" -> OpenCodeGoProvider(apiKey, modelName, baseUrl)
-            "custom" -> CustomProvider(apiKey, modelName, baseUrl, s.customTimeoutSec)
-            else -> null
-        }
-    }
-
-    fun createFallbackProviders(primaryKey: String): List<LlmProvider> {
-        val s = settings.value
-        val fallbacks = mutableListOf<LlmProvider>()
-        if (primaryKey != "gemini" && s.geminiApiKey.isNotBlank()) fallbacks.add(GeminiProvider(s.geminiApiKey, s.modelGemini, s.baseUrlGemini))
-        if (primaryKey != "openai" && s.openaiApiKey.isNotBlank()) fallbacks.add(OpenAIProvider(s.openaiApiKey, s.modelOpenai, s.baseUrlOpenai))
-        if (primaryKey != "openrouter" && s.openrouterApiKey.isNotBlank()) fallbacks.add(OpenRouterProvider(s.openrouterApiKey, s.modelOpenrouter, s.baseUrlOpenrouter))
-        if (primaryKey != "zen" && s.zenApiKey.isNotBlank()) fallbacks.add(ZenProvider(s.zenApiKey, s.modelZen, s.baseUrlZen))
-        if (primaryKey != "opencodego" && s.opencodegoApiKey.isNotBlank()) fallbacks.add(OpenCodeGoProvider(s.opencodegoApiKey, s.modelOpencodego, s.baseUrlOpencodego))
-        return fallbacks
-    }
-
     fun startTranslation() {
         if (translationActive.value || selectedFiles.isEmpty()) return
 
@@ -230,7 +173,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         translationActive.value = true
         translationLog.add("[System] Retrying from last cached step...")
-        com.kzkt.app.core.TranslationService.startTranslation(getApplication(), selectedFiles.toList())
+        com.kzkt.app.core.TranslationService.startTranslation(getApplication(), selectedFiles.toList(), retry = true)
     }
 
     fun cancelTranslation() {
@@ -244,10 +187,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         selectedFiles.addAll(paths)
         canRetry.value = false
         com.kzkt.app.core.TranslationProgressTracker.clearCache()
-    }
-
-    fun addLog(msg: String) {
-        translationLog.add(msg)
     }
 
     /** Remove one entry from the Riwayat tab. */
@@ -291,7 +230,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         modelsLoading.value = true
-        if (providerKey == "custom") customModelsLoading.value = true
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -331,28 +269,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (models.isNotEmpty()) {
                         val sorted = models.sorted()
                         providerModels[providerKey] = sorted
-                        if (providerKey == "custom") {
-                            customModels.clear()
-                            customModels.addAll(sorted)
-                        }
                         translationLog.add("Found ${models.size} models for ${meta?.displayName ?: providerKey}")
                     } else {
                         translationLog.add("[!] No models found at $endpoint")
                     }
                     modelsLoading.value = false
-                    customModelsLoading.value = false
                 }
             } catch (e: Exception) {
                 post {
                     translationLog.add("[!] Failed to fetch models for $providerKey: ${e.message}")
                     modelsLoading.value = false
-                    customModelsLoading.value = false
                 }
             }
         }
     }
 
-    fun fetchCustomModels(baseUrl: String, apiKey: String) {
-        fetchModelsForProvider("custom", baseUrl, apiKey)
-    }
 }

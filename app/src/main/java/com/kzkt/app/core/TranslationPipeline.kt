@@ -60,6 +60,7 @@ class TranslationPipeline(
         val bubbleColors: MutableMap<String, Int> = mutableMapOf(),
         val alreadyDone: Boolean = false,
         val failed: Boolean = false,
+        val borrowed: Boolean = false,
     )
 
     /**
@@ -376,8 +377,8 @@ class TranslationPipeline(
             if (params.useLocalOcr) {
                 onProgress("  [Local OCR Engine] Extracting text from ${cropsToTranslate.size} speech bubbles via Google ML Kit (${params.localOcrScript})...")
                 val maxPerBatch = minOf(params.maxBubblesPerRequest, 6)
-                val cropItems = cropsToTranslate.map { MosaicBuilder.CropItem(it.id, it.bitmap) }
-                val chunks = MosaicBuilder.chunkCrops(cropItems, maxPerBatch)
+                val ocrCropItems = cropsToTranslate.map { MosaicBuilder.CropItem(it.id, it.bitmap) }
+                val chunks = MosaicBuilder.chunkCrops(ocrCropItems, maxPerBatch)
 
                 for ((chunkIdx, chunk) in chunks.withIndex()) {
                     if (isCancelled()) break
@@ -419,6 +420,12 @@ class TranslationPipeline(
                                 val parsed = JsonUtils.parseTranslationMap(cleaned)
                                 if (parsed.isNotEmpty()) {
                                     allTranslations.putAll(parsed)
+                                    if (cacheRepo != null) {
+                                        for ((id, text) in parsed) {
+                                            val item = ocrCropItems.find { it.id == id }
+                                            if (item != null) cacheRepo.saveTranslation(item.bitmap, targetLanguage, text)
+                                        }
+                                    }
                                     break
                                 }
                             }
@@ -486,6 +493,7 @@ class TranslationPipeline(
 
         if (allTranslations.isEmpty()) {
             onProgress("  [!] Translation failed.")
+            cacheRepo?.flush()
             return PipelineResult(null, failed = true)
         }
 
@@ -534,6 +542,7 @@ class TranslationPipeline(
         saveBitmap(resultBitmap, outputPath)
         onProgress("  Done! ${translatedCount}/${cropItems.size} bubbles translated.")
 
+        cacheRepo?.flush()
         return PipelineResult(
             outputPath = outputPath,
             bubblesFound = cropItems.size,
@@ -557,143 +566,176 @@ class TranslationPipeline(
     ): List<PipelineResult> {
         if (imagePaths.isEmpty()) return emptyList()
 
-        val pageDataList = if (cachedPages != null) {
-            if (params.enableDevLogs) onProgress("[Multi-Page Batch] Reusing ${cachedPages.size} cached pages (Skipping YOLO/OCR detection).")
-            cachedPages
-        } else {
-            if (params.enableDevLogs) onProgress("[Multi-Page Batch] Processing ${imagePaths.size} pages...")
+        // Path-indexed map of previously detected pages (fast retry support).
+        // Pages whose bitmaps were recycled are filtered out — they cannot be reused.
+        val cacheByPath: Map<String, PageData> = cachedPages
+            ?.filter { !it.pil.isRecycled }
+            ?.associateBy { it.path } ?: emptyMap()
 
-            val semaphore = kotlinx.coroutines.sync.Semaphore(3)
-            val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
-
-            val list = coroutineScope {
-                imagePaths.mapIndexed { idx, imgPath ->
-                    async(Dispatchers.Default) {
-                        if (isCancelled()) {
-                            val doneCount = completedCount.incrementAndGet()
-                            return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
-                                mutableListOf(), mutableMapOf(), failed = true)
-                        }
-
-                        val actualPageNum = pageOffset + idx + 1
-                        val totalPages = if (totalBatchPages > 0) totalBatchPages else imagePaths.size
-
-                        val expectedOutput = MosaicBuilder.makeOutputPath(imgPath, targetLanguage, outputDir)
-                        if (File(expectedOutput).exists()) {
-                            val doneCount = completedCount.incrementAndGet()
-                            if (params.enableDevLogs) {
-                                onProgress("  [Page $actualPageNum/$totalPages] Skipping ${File(imgPath).name} (Already translated).")
-                            } else {
-                                onProgress("  [Page $actualPageNum/$totalPages] Skipping (Already translated).")
-                            }
-                            return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
-                                mutableListOf(), mutableMapOf(), alreadyDone = true)
-                        }
-
-                        val bitmap = ImageProcessor.loadBitmap(imgPath)
-                        if (bitmap == null) {
-                            val doneCount = completedCount.incrementAndGet()
-                            onProgress("  [Page $actualPageNum/$totalPages] Failed to load image.")
-                            return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
-                                mutableListOf(), mutableMapOf(), failed = true)
-                        }
-
-                        val imgHeight = bitmap.height
-                        val imgWidth = bitmap.width
-
-                        val result = semaphore.withPermit {
-                            if (isCancelled()) {
-                                PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
-                                    mutableListOf(), mutableMapOf(), failed = true)
-                            } else {
-                                // YOLO detection — 3-stage cascade (each stage: distinct conf/iou threshold)
-                                val rawBoxes = mutableListOf<IntArray>()
-                                for ((conf, iou) in Constants.YOLO_PREDICTION_STAGES) {
-                                    val detections = yolo?.predict(bitmap, confThreshold = conf, iouThreshold = iou) ?: continue
-                                    for (d in detections) rawBoxes.add(intArrayOf(d.x1, d.y1, d.x2, d.y2))
-                                }
-                                var filtered = ImageProcessor.removeFalseGiants(rawBoxes)
-                                filtered = ImageProcessor.mergeOverlapping(filtered)
-                                filtered = ImageProcessor.removeNonsense(filtered, imgWidth, imgHeight)
-                                val sfxMat = ImageProcessor.bitmapToMat(bitmap)
-                                try {
-                                    filtered = ImageProcessor.removeSfxAndImages(sfxMat, filtered, params)
-                                } finally {
-                                    sfxMat.release()
-                                }
-
-                                val resultBmp = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-                                val crops = mutableListOf<Pair<String, Bitmap>>()
-                                val coordMap = mutableMapOf<String, IntArray>()
-                                val bubbleColors = mutableMapOf<String, Int>()
-
-                                val cropMatFull = ImageProcessor.bitmapToMat(bitmap)
-                                try {
-                                    for ((order, box) in filtered.withIndex()) {
-                                        val (x1, y1, x2, y2) = box
-                                        val boxW = maxOf(1, x2 - x1)
-                                        val boxH = maxOf(1, y2 - y1)
-                                        val padX = maxOf(params.minPad, (boxW * params.padXRatio).toInt())
-                                        val padY = maxOf(params.minPad, (boxH * params.padYRatio).toInt())
-                                        val id = "${actualPageNum}_${order + 1}"
-
-                                        val bgColor = ImageProcessor.detectBubbleBackgroundColor(cropMatFull, box)
-                                        bubbleColors[id] = bgColor
-
-                                        val (cropX1, cropY1, cropX2, cropY2) = ImageProcessor.smartCropBounds(
-                                            box, filtered, imgWidth, imgHeight, padX, padY, params)
-                                        val cropMat = cropMatFull.submat(org.opencv.core.Rect(cropX1, cropY1, cropX2 - cropX1, cropY2 - cropY1))
-                                        val maskedMat = ImageProcessor.maskOutsideBubble(cropMat, cropX1, cropY1, x1, y1, x2, y2, params)
-                                        cropMat.release()
-
-                                        val scale = params.skalaPotonganMosaik
-                                        val cropBitmap = ImageProcessor.matToBitmap(maskedMat)
-                                        maskedMat.release()
-                                        val scaled = if (scale != 1.0) {
-                                            val s = Bitmap.createScaledBitmap(cropBitmap,
-                                                maxOf(1, (cropBitmap.width * scale).toInt()),
-                                                maxOf(1, (cropBitmap.height * scale).toInt()), true)
-                                            if (s != cropBitmap && !cropBitmap.isRecycled) cropBitmap.recycle()
-                                            s
-                                        } else cropBitmap
-
-                                        crops.add(id to scaled)
-                                        coordMap[id] = box
-                                    }
-                                } finally {
-                                    cropMatFull.release()
-                                }
-
-                                PageData(imgPath, resultBmp, Canvas(resultBmp), imgWidth, imgHeight,
-                                    crops.toMutableList(), coordMap, bubbleColors)
-                            }
-                        }
-
-                        val doneCount = completedCount.incrementAndGet()
-                        val phase1Percent = (25f * doneCount / imagePaths.size).toInt().coerceIn(1, 25)
-                        val msg = if (!result.failed) {
-                            if (params.enableDevLogs) {
-                                "  [Page $actualPageNum/$totalPages] Processed ${File(imgPath).name} (Found ${result.crops.size} bubbles)"
-                            } else {
-                                "  [Page $actualPageNum/$totalPages] Processed (${result.crops.size} bubbles)"
-                            }
-                        } else {
-                            "  [Page $actualPageNum/$totalPages] Failed ${File(imgPath).name}"
-                        }
-                        onProgress(msg)
-                        onStepProgress(phase1Percent, msg)
-                        result
-                    }
-                }.awaitAll()
-            }
-            // Save page data cache for fast retry support
-            TranslationProgressTracker.cachedPageData = list
-            list
+        if (params.enableDevLogs) {
+            onProgress(
+                if (cacheByPath.isNotEmpty()) {
+                    "[Multi-Page Batch] Reusing ${cacheByPath.size} cached pages where available (skipping YOLO)."
+                } else {
+                    "[Multi-Page Batch] Processing ${imagePaths.size} pages..."
+                }
+            )
         }
 
-        // Phase 2: Collect all crops across pages and batch
+        val semaphore = kotlinx.coroutines.sync.Semaphore(3)
+        val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
+
+        val pageDataList = coroutineScope {
+            imagePaths.mapIndexed { idx, imgPath ->
+                async(Dispatchers.Default) {
+                    if (isCancelled()) {
+                        val doneCount = completedCount.incrementAndGet()
+                        return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
+                            mutableListOf(), mutableMapOf(), failed = true)
+                    }
+
+                    val actualPageNum = pageOffset + idx + 1
+                    val totalPages = if (totalBatchPages > 0) totalBatchPages else imagePaths.size
+
+                    // Fast retry: reuse a previously detected page, skipping YOLO entirely.
+                    // The reused page is marked borrowed so this run never recycles its
+                    // bitmaps — they are still owned by the retry cache.
+                    cacheByPath[imgPath]?.let { cached ->
+                        val doneCount = completedCount.incrementAndGet()
+                        val msg = if (params.enableDevLogs) {
+                            "  [Page $actualPageNum/$totalPages] Reusing cached ${File(imgPath).name} (${cached.crops.size} bubbles)"
+                        } else {
+                            "  [Page $actualPageNum/$totalPages] Reusing cached page"
+                        }
+                        onProgress(msg)
+                        onStepProgress((25f * doneCount / imagePaths.size).toInt().coerceIn(1, 25), msg)
+                        return@async cached.copy(borrowed = true)
+                    }
+
+                    val expectedOutput = MosaicBuilder.makeOutputPath(imgPath, targetLanguage, outputDir)
+                    if (File(expectedOutput).exists()) {
+                        val doneCount = completedCount.incrementAndGet()
+                        if (params.enableDevLogs) {
+                            onProgress("  [Page $actualPageNum/$totalPages] Skipping ${File(imgPath).name} (Already translated).")
+                        } else {
+                            onProgress("  [Page $actualPageNum/$totalPages] Skipping (Already translated).")
+                        }
+                        return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
+                            mutableListOf(), mutableMapOf(), alreadyDone = true)
+                    }
+
+                    val bitmap = ImageProcessor.loadBitmap(imgPath)
+                    if (bitmap == null) {
+                        val doneCount = completedCount.incrementAndGet()
+                        onProgress("  [Page $actualPageNum/$totalPages] Failed to load image.")
+                        return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
+                            mutableListOf(), mutableMapOf(), failed = true)
+                    }
+
+                    val imgHeight = bitmap.height
+                    val imgWidth = bitmap.width
+
+                    val result = semaphore.withPermit {
+                        if (isCancelled()) {
+                            PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
+                                mutableListOf(), mutableMapOf(), failed = true)
+                        } else {
+                            // YOLO detection — 3-stage cascade (each stage: distinct conf/iou threshold)
+                            val rawBoxes = mutableListOf<IntArray>()
+                            for ((conf, iou) in Constants.YOLO_PREDICTION_STAGES) {
+                                val detections = yolo?.predict(bitmap, confThreshold = conf, iouThreshold = iou) ?: continue
+                                for (d in detections) rawBoxes.add(intArrayOf(d.x1, d.y1, d.x2, d.y2))
+                            }
+                            var filtered = ImageProcessor.removeFalseGiants(rawBoxes)
+                            filtered = ImageProcessor.mergeOverlapping(filtered)
+                            filtered = ImageProcessor.removeNonsense(filtered, imgWidth, imgHeight)
+                            val sfxMat = ImageProcessor.bitmapToMat(bitmap)
+                            try {
+                                filtered = ImageProcessor.removeSfxAndImages(sfxMat, filtered, params)
+                            } finally {
+                                sfxMat.release()
+                            }
+
+                            val resultBmp = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                            val crops = mutableListOf<Pair<String, Bitmap>>()
+                            val coordMap = mutableMapOf<String, IntArray>()
+                            val bubbleColors = mutableMapOf<String, Int>()
+
+                            val cropMatFull = ImageProcessor.bitmapToMat(bitmap)
+                            try {
+                                for ((order, box) in filtered.withIndex()) {
+                                    val (x1, y1, x2, y2) = box
+                                    val boxW = maxOf(1, x2 - x1)
+                                    val boxH = maxOf(1, y2 - y1)
+                                    val padX = maxOf(params.minPad, (boxW * params.padXRatio).toInt())
+                                    val padY = maxOf(params.minPad, (boxH * params.padYRatio).toInt())
+                                    val id = "${actualPageNum}_${order + 1}"
+
+                                    val bgColor = ImageProcessor.detectBubbleBackgroundColor(cropMatFull, box)
+                                    bubbleColors[id] = bgColor
+
+                                    val (cropX1, cropY1, cropX2, cropY2) = ImageProcessor.smartCropBounds(
+                                        box, filtered, imgWidth, imgHeight, padX, padY, params)
+                                    val cropMat = cropMatFull.submat(org.opencv.core.Rect(cropX1, cropY1, cropX2 - cropX1, cropY2 - cropY1))
+                                    val maskedMat = ImageProcessor.maskOutsideBubble(cropMat, cropX1, cropY1, x1, y1, x2, y2, params)
+                                    cropMat.release()
+
+                                    val scale = params.skalaPotonganMosaik
+                                    val cropBitmap = ImageProcessor.matToBitmap(maskedMat)
+                                    maskedMat.release()
+                                    val scaled = if (scale != 1.0) {
+                                        val s = Bitmap.createScaledBitmap(cropBitmap,
+                                            maxOf(1, (cropBitmap.width * scale).toInt()),
+                                            maxOf(1, (cropBitmap.height * scale).toInt()), true)
+                                        if (s != cropBitmap && !cropBitmap.isRecycled) cropBitmap.recycle()
+                                        s
+                                    } else cropBitmap
+
+                                    crops.add(id to scaled)
+                                    coordMap[id] = box
+                                }
+                            } finally {
+                                cropMatFull.release()
+                            }
+
+                            PageData(imgPath, resultBmp, Canvas(resultBmp), imgWidth, imgHeight,
+                                crops.toMutableList(), coordMap, bubbleColors)
+                        }
+                    }
+
+                    val doneCount = completedCount.incrementAndGet()
+                    val phase1Percent = (25f * doneCount / imagePaths.size).toInt().coerceIn(1, 25)
+                    val msg = if (!result.failed) {
+                        if (params.enableDevLogs) {
+                            "  [Page $actualPageNum/$totalPages] Processed ${File(imgPath).name} (Found ${result.crops.size} bubbles)"
+                        } else {
+                            "  [Page $actualPageNum/$totalPages] Processed (${result.crops.size} bubbles)"
+                        }
+                    } else {
+                        "  [Page $actualPageNum/$totalPages] Failed ${File(imgPath).name}"
+                    }
+                    onProgress(msg)
+                    onStepProgress(phase1Percent, msg)
+                    result
+                }
+            }.awaitAll()
+        }
+        // Save detected pages for fast retry support — only when this run started from
+        // scratch; retry runs consume the cache instead of replacing it.
+        if (cachedPages == null) {
+            TranslationProgressTracker.cachedPageData = pageDataList
+        }
+
+        // Phase 2: Collect all crops across pages and batch. Borrowed (retry-cache) pages
+        // are INCLUDED so their bubbles get re-translated on retry; only their bitmaps must
+        // never be recycled here because the retry cache still owns them.
         val allCrops = pageDataList.filter { !it.alreadyDone && !it.failed }
             .flatMap { it.crops }
+        val borrowedBitmaps: Set<Bitmap> = pageDataList
+            .filter { it.borrowed }
+            .flatMap { it.crops }
+            .map { it.second }
+            .toHashSet()
 
         if (allCrops.isEmpty()) {
             return pageDataList.map { PipelineResult(MosaicBuilder.makeOutputPath(it.path, targetLanguage, outputDir),
@@ -768,6 +810,12 @@ class TranslationPipeline(
                             val parsed = JsonUtils.parseTranslationMap(cleaned)
                             if (parsed.isNotEmpty()) {
                                 allTranslations.putAll(parsed)
+                                if (cacheRepo != null) {
+                                    for ((id, text) in parsed) {
+                                        val item = cropItems.find { it.id == id }
+                                        if (item != null) cacheRepo.saveTranslation(item.bitmap, targetLanguage, text)
+                                    }
+                                }
                                 batchSucceeded = true
                                 break
                             }
@@ -849,8 +897,10 @@ class TranslationPipeline(
         if (allTranslations.isEmpty()) {
             onProgress("  [!] All translation attempts failed for this group. Skipping rendering.")
             for ((_, bmp) in allCrops) {
+                if (bmp in borrowedBitmaps) continue
                 if (!bmp.isRecycled) bmp.recycle()
             }
+            cacheRepo?.flush()
             return pageDataList.map { PipelineResult(null, failed = true) }
         }
 
@@ -863,14 +913,12 @@ class TranslationPipeline(
 
             if (page.alreadyDone) {
                 results.add(PipelineResult(MosaicBuilder.makeOutputPath(page.path, targetLanguage, outputDir), alreadyDone = true))
-                for ((_, cropBmp) in page.crops) { if (!cropBmp.isRecycled) cropBmp.recycle() }
-                if (!page.pil.isRecycled) page.pil.recycle()
+                recyclePage(page)
                 continue
             }
             if (page.failed) {
                 results.add(PipelineResult(null, failed = true))
-                for ((_, cropBmp) in page.crops) { if (!cropBmp.isRecycled) cropBmp.recycle() }
-                if (!page.pil.isRecycled) page.pil.recycle()
+                recyclePage(page)
                 continue
             }
 
@@ -878,8 +926,7 @@ class TranslationPipeline(
             val pageOutputPath = MosaicBuilder.makeOutputPath(page.path, targetLanguage, outputDir)
             if (File(pageOutputPath).exists()) {
                 results.add(PipelineResult(pageOutputPath, alreadyDone = true))
-                for ((_, cropBmp) in page.crops) { if (!cropBmp.isRecycled) cropBmp.recycle() }
-                if (!page.pil.isRecycled) page.pil.recycle()
+                recyclePage(page)
                 continue
             }
 
@@ -923,23 +970,30 @@ class TranslationPipeline(
 
             // Immediately recycle page full-res bitmap, render bitmap, and crop bitmaps for this page
             if (renderBitmap != page.pil && !renderBitmap.isRecycled) renderBitmap.recycle()
-            if (!page.pil.isRecycled) page.pil.recycle()
-            for ((_, cropBmp) in page.crops) {
-                if (!cropBmp.isRecycled) cropBmp.recycle()
-            }
+            recyclePage(page)
         }
 
         // Final safety cleanup for any remaining crop bitmaps across allCrops
+        // (borrowed retry-cache bitmaps are skipped — the tracker still owns them)
         for ((_, bmp) in allCrops) {
+            if (bmp in borrowedBitmaps) continue
             if (!bmp.isRecycled) bmp.recycle()
         }
 
-        val hasFailure = results.any { it.failed }
-        if (!hasFailure) {
-            TranslationProgressTracker.clearCache()
-        }
-
+        cacheRepo?.flush()
         return results
+    }
+
+    /**
+     * Recycle a page's bitmaps unless it was borrowed from the retry cache
+     * (whose bitmaps are still owned by [TranslationProgressTracker]).
+     */
+    private fun recyclePage(page: PageData) {
+        if (page.borrowed) return
+        for ((_, cropBmp) in page.crops) {
+            if (!cropBmp.isRecycled) cropBmp.recycle()
+        }
+        if (!page.pil.isRecycled) page.pil.recycle()
     }
 
     private fun saveBitmap(bitmap: Bitmap, path: String) {

@@ -9,26 +9,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import com.kzkt.app.data.HistoryEntry
-import com.kzkt.app.ui.component.BottomSheet
-import com.kzkt.app.ui.component.rememberBottomSheetState
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -43,7 +36,6 @@ fun HistoryScreen(
     val scope = rememberCoroutineScope()
     val entries by viewModel.historyEntries.collectAsStateWithLifecycle()
     var confirmDelete by remember { mutableStateOf<HistoryEntry?>(null) }
-    var preview by remember { mutableStateOf<HistoryEntry?>(null) }
     var readerPages by remember { mutableStateOf<List<String>?>(null) }
     var readerInitialIndex by remember { mutableIntStateOf(0) }
     var isExtractingPdf by remember { mutableStateOf(false) }
@@ -148,123 +140,6 @@ fun HistoryScreen(
                 TextButton(onClick = { confirmDelete = null }) { Text("Cancel") }
             },
         )
-    }
-}
-
-@Composable
-private fun PreviewSheetContent(
-    entry: HistoryEntry,
-    isExtractingPdf: Boolean = false,
-    onClose: () -> Unit,
-    onReadManga: (HistoryEntry) -> Unit = {},
-) {
-    val context = LocalContext.current
-    val isPdf = entry.outputPath.endsWith(".pdf", ignoreCase = true)
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
-    ) {
-        // Drag handle
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .padding(top = 10.dp)
-                .size(width = 40.dp, height = 4.dp)
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(2.dp)),
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    entry.fileName,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    "${entry.pageCount} pages · ${entry.provider} · ${entry.targetLanguage}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, contentDescription = "Close")
-            }
-        }
-
-        // Preview image or PDF placeholder
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(horizontal = 16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (isPdf || !File(entry.outputPath).exists()) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Filled.PictureAsPdf,
-                        contentDescription = "PDF",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(64.dp),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        if (isPdf) "PDF document (${entry.pageCount} pages)" else "File not found",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else {
-                AsyncImage(
-                    model = File(entry.outputPath),
-                    contentDescription = entry.fileName,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-        }
-
-        // Actions
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Button(
-                onClick = { onReadManga(entry) },
-                modifier = Modifier.weight(1f),
-                enabled = !isExtractingPdf
-            ) {
-                if (isExtractingPdf) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Loading PDF...")
-                } else {
-                    Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Read Manga")
-                }
-            }
-            OutlinedButton(
-                onClick = { FileUtils.openFileInSystemViewer(context, entry.outputPath) },
-            ) {
-                Icon(Icons.Filled.OpenInNew, contentDescription = "System Open", modifier = Modifier.size(16.dp))
-            }
-            OutlinedButton(
-                onClick = { FileUtils.shareFile(context, entry.outputPath) },
-            ) {
-                Icon(Icons.Filled.Share, contentDescription = "Share", modifier = Modifier.size(16.dp))
-            }
-        }
     }
 }
 
