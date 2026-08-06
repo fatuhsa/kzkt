@@ -32,6 +32,7 @@ class TranslationPipeline(
     private val rateLimiter: RateLimiter = RateLimiter((params.minRequestDelay * 1000).toLong()),
     private val targetLanguage: String = "Indonesian",
     private val cacheRepo: com.kzkt.app.data.TranslationCacheRepository? = null,
+    private val glossary: Map<String, String> = emptyMap(),
     private val fallbackProviders: List<LlmProvider> = emptyList(),
     private val context: Context? = null,
     private val onProgress: (String) -> Unit = {},
@@ -47,6 +48,8 @@ class TranslationPipeline(
         val originalBitmap: Bitmap? = null,
         val translations: Map<String, String> = emptyMap(),
         val coordinateMap: Map<String, IntArray> = emptyMap(),
+        val rawTexts: Map<String, String>? = null,
+        val styles: Map<String, BubbleMeta>? = null,
     )
 
     data class PageData(
@@ -373,6 +376,7 @@ class TranslationPipeline(
             cropsToTranslate.addAll(cropItems)
         }
 
+        val allRawTexts = mutableMapOf<String, String>()
         if (cropsToTranslate.isNotEmpty()) {
             if (params.useLocalOcr) {
                 onProgress("  [Local OCR Engine] Extracting text from ${cropsToTranslate.size} speech bubbles via Google ML Kit (${params.localOcrScript})...")
@@ -399,6 +403,7 @@ class TranslationPipeline(
                         onProgress("  [Local OCR] No text recognized in chunk ${chunkIdx + 1}. Continuing...")
                         continue
                     }
+                    allRawTexts.putAll(ocrMap)
 
                     val textJson = com.google.gson.Gson().toJson(ocrMap)
                     val textPrompt = "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage. Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
@@ -449,7 +454,7 @@ class TranslationPipeline(
                     val shrunk = MosaicBuilder.shrinkCropsIfTooTall(chunk, params.maxTinggiMosaik, params.jarakAntarPotongan)
                     val mosaic = MosaicBuilder.buildMosaic(shrunk, params)
 
-                    val prompt = Constants.buildPrompt(targetLanguage)
+                    val prompt = Constants.buildPrompt(targetLanguage, glossary)
                     val providersChain = listOf(provider) + fallbackProviders
 
                     for (prov in providersChain) {
@@ -544,7 +549,9 @@ class TranslationPipeline(
 
         // Persist bubble data + original page so the touch-up editor works later
         // (e.g. when the reader is reopened from History).
-        saveEditMetadata(outputPath, bitmap, normalizedTranslations, coordinateMap)
+        // Since we only have rawTexts if useLocalOcr is true, we pass allRawTexts if it's not empty
+        val finalRawTexts = if (params.useLocalOcr) allRawTexts else emptyMap()
+        saveEditMetadata(outputPath, bitmap, normalizedTranslations, coordinateMap, finalRawTexts)
 
         cacheRepo?.flush()
         return PipelineResult(
@@ -554,6 +561,7 @@ class TranslationPipeline(
             originalBitmap = bitmap,
             translations = normalizedTranslations,
             coordinateMap = coordinateMap,
+            rawTexts = finalRawTexts,
         )
     }
 
@@ -751,6 +759,7 @@ class TranslationPipeline(
         // Phase 3: Chunk → Mosaic → LLM
         val cropItems = allCrops.map { MosaicBuilder.CropItem(it.first, it.second) }
         val allTranslations = mutableMapOf<String, String>()
+        val batchRawTexts = mutableMapOf<String, String>()
 
         if (params.useLocalOcr) {
             if (params.enableDevLogs) {
@@ -781,6 +790,7 @@ class TranslationPipeline(
                     if (params.enableDevLogs) onProgress("  [Local OCR] No text recognized in batch ${chunkIdx + 1}. Continuing...")
                     continue
                 }
+                batchRawTexts.putAll(ocrMap)
 
                 val textJson = com.google.gson.Gson().toJson(ocrMap)
                 val textPrompt = """
@@ -848,7 +858,7 @@ class TranslationPipeline(
 
                 val shrunk = MosaicBuilder.shrinkCropsIfTooTall(chunk, params.maxTinggiMosaik, params.jarakAntarPotongan)
                 val mosaic = MosaicBuilder.buildMosaic(shrunk, params)
-                val prompt = Constants.buildPrompt(targetLanguage)
+                val prompt = Constants.buildPrompt(targetLanguage, glossary)
                 val providersChain = listOf(provider) + fallbackProviders
                 var batchSucceeded = false
 
@@ -970,7 +980,7 @@ class TranslationPipeline(
             )
 
             saveBitmap(renderBitmap, pageOutputPath)
-            results.add(PipelineResult(pageOutputPath, bubblesFound = page.crops.size, bubblesTranslated = translatedCount))
+            results.add(PipelineResult(pageOutputPath, bubblesFound = page.crops.size, bubblesTranslated = translatedCount, rawTexts = if (params.useLocalOcr) batchRawTexts else emptyMap()))
 
             // Immediately recycle page full-res bitmap, render bitmap, and crop bitmaps for this page
             if (renderBitmap != page.pil && !renderBitmap.isRecycled) renderBitmap.recycle()
@@ -1010,12 +1020,13 @@ class TranslationPipeline(
         original: Bitmap,
         translations: Map<String, String>,
         coordinates: Map<String, IntArray>,
+        rawTexts: Map<String, String> = emptyMap()
     ) {
         val ctx = context ?: return
         if (translations.isEmpty() || coordinates.isEmpty()) return
         try {
             com.kzkt.app.data.EditMetadataRepository(ctx)
-                .saveForOutput(outputPath, original, translations, coordinates, targetLanguage)
+                .saveForOutput(outputPath, original, translations, coordinates, targetLanguage, rawTexts.ifEmpty { null })
         } catch (_: Exception) {
             // Best-effort — never fail a translation because metadata couldn't be saved.
         }

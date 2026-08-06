@@ -28,6 +28,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val settingsRepo = SettingsRepository(application)
     val historyRepo = HistoryRepository(application)
+    val glossaryRepo = com.kzkt.app.data.GlossaryRepository(application)
 
     // Observable state — all writes happen on the Main thread (see [post]).
     val settings = mutableStateOf(SettingsRepository.Settings())

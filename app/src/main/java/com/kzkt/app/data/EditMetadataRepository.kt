@@ -26,6 +26,8 @@ class EditMetadataRepository(private val context: Context) {
         val translations: Map<String, String>,
         val coordinateMap: Map<String, IntArray>,
         val targetLanguage: String,
+        val rawTexts: Map<String, String>? = null,
+        val styles: Map<String, com.kzkt.app.core.BubbleMeta>? = null,
     )
 
     private val metaDir: File
@@ -37,6 +39,8 @@ class EditMetadataRepository(private val context: Context) {
         translations: Map<String, String>,
         coordinateMap: Map<String, IntArray>,
         targetLanguage: String,
+        rawTexts: Map<String, String>? = null,
+        styles: Map<String, com.kzkt.app.core.BubbleMeta>? = null,
     ) {
         if (translations.isEmpty() || coordinateMap.isEmpty()) return
         try {
@@ -59,6 +63,17 @@ class EditMetadataRepository(private val context: Context) {
                 addProperty("targetLanguage", targetLanguage)
                 add("translations", translationsJson)
                 add("coordinateMap", coordsJson)
+                if (rawTexts != null) {
+                    val rawJson = JsonObject()
+                    rawTexts.forEach { (k, v) -> rawJson.addProperty(k, v) }
+                    add("rawTexts", rawJson)
+                }
+                if (styles != null) {
+                    val stylesJson = JsonObject()
+                    val gson = com.google.gson.Gson()
+                    styles.forEach { (k, v) -> stylesJson.add(k, gson.toJsonTree(v)) }
+                    add("styles", stylesJson)
+                }
             }
             File(metaDir, "$key.json").writeText(root.toString())
         } catch (_: Exception) {
@@ -123,13 +138,29 @@ class EditMetadataRepository(private val context: Context) {
             root.getAsJsonObject("coordinateMap").entrySet().forEach { (k, v) ->
                 coords[k] = v.asJsonArray.map { it.asInt }.toIntArray()
             }
-            EditMeta(
-                originalBitmap = bitmap,
-                translations = translations,
-                coordinateMap = coords,
-                targetLanguage = root.get("targetLanguage")?.asString ?: "Indonesian",
-            )
-        } catch (_: Exception) {
+            val targetLang = root.get("targetLanguage")?.asString ?: "Indonesian"
+            val rawTexts = mutableMapOf<String, String>()
+            if (root.has("rawTexts")) {
+                root.getAsJsonObject("rawTexts").entrySet().forEach { entry ->
+                    rawTexts[entry.key] = entry.value.asString
+                }
+            }
+            
+            val styles = mutableMapOf<String, com.kzkt.app.core.BubbleMeta>()
+            if (root.has("styles")) {
+                val gson = com.google.gson.Gson()
+                root.getAsJsonObject("styles").entrySet().forEach { entry ->
+                    try {
+                        val meta = gson.fromJson(entry.value, com.kzkt.app.core.BubbleMeta::class.java)
+                        styles[entry.key] = meta
+                    } catch (e: Exception) {
+                        android.util.Log.e("KZKT", "Failed to load style for bubble ${entry.key}: ${e.message}")
+                    }
+                }
+            }
+
+            EditMeta(bitmap, translations, coords, targetLang, rawTexts.takeIf { it.isNotEmpty() }, styles.takeIf { it.isNotEmpty() })
+        } catch (e: Exception) {
             null
         }
     }

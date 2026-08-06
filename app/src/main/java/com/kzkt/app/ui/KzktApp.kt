@@ -116,7 +116,11 @@ fun KzktApp() {
                         onPureBlackChange = { pureBlack = it },
                         themeColor = themeColor,
                         onThemeColorChange = { themeColor = it },
+                        onNavigateToGlossary = { navController.navigate("glossary") }
                     )
+                }
+                composable("glossary") {
+                    GlossaryScreen(repository = viewModel.glossaryRepo)
                 }
             }
         }

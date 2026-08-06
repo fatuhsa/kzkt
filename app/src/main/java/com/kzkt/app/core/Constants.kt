@@ -37,7 +37,7 @@ object Constants {
     )
 
     // ── Prompt template (populated at runtime) ─────────────────────
-    fun buildPrompt(targetLanguage: String): String {
+    fun buildPrompt(targetLanguage: String, glossary: Map<String, String> = emptyMap()): String {
         val langKey = targetLanguage.lowercase().trim()
         val examples = TRANSLATION_EXAMPLES[langKey]
             ?: TRANSLATION_EXAMPLES["english"]!!
@@ -68,6 +68,14 @@ object Constants {
             appendLine("8. If unsure about some text, use [?] for that part.")
             appendLine("9. If the bubble only contains SFX, scribbles, is empty, or is background art and not a meaningful dialogue, reply with 'SKIP'.")
             appendLine()
+            if (glossary.isNotEmpty()) {
+                appendLine("GLOSSARY RULES (CRITICAL):")
+                appendLine("You MUST translate the following specific terms exactly as defined:")
+                for ((original, translation) in glossary) {
+                    appendLine("- \"$original\" -> \"$translation\"")
+                }
+                appendLine()
+            }
             appendLine("HONORIFICS RULE:")
             appendLine("1. If the original text contains Japanese honorifics (san, kun, chan, sama, senpai, sensei, etc.), keep them as-is in the translation. Do NOT translate honorifics.")
             appendLine("2. Examples: -san stays as -san, -kun stays as -kun, -chan stays as -chan.")

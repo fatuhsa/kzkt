@@ -142,6 +142,8 @@ class TranslationService : Service() {
                 )
 
                 val cacheRepo = TranslationCacheRepository(applicationContext)
+                val glossaryRepo = com.kzkt.app.data.GlossaryRepository(applicationContext)
+                val glossary = glossaryRepo.glossary.value
                 val fallbackProviders = createFallbackProviders(s, s.llmProvider)
 
                 val pipeline = TranslationPipeline(
@@ -151,6 +153,7 @@ class TranslationService : Service() {
                     params = params,
                     targetLanguage = s.targetLanguage,
                     cacheRepo = cacheRepo,
+                    glossary = glossary,
                     fallbackProviders = fallbackProviders,
                     context = applicationContext,
                     onProgress = { msg ->

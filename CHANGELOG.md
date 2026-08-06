@@ -4,6 +4,24 @@ All notable changes to KZKT are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.25.1.14] - 2026-08-07
+
+### Added
+
+- **Custom Font Importer**: Integrated a custom font selection dialog supporting `.ttf` and `.otf` font imports with persistent state across translations.
+- **EPUB Support**: Added support for selecting `.epub` comic/manga archives alongside CBZ and ZIP files directly from the UI.
+- **CBZ Filename Retention**: The Manga Reader CBZ exporter now perfectly retains the original directory structures and CJK filenames instead of flattening into sequential numbers.
+
+### Changed
+
+- **Refined Reset Settings**: Relocated the "Reset Advanced Settings" action into the Advanced card with a proper confirmation dialog, explicitly excluding sensitive API credentials.
+- **Long Filename UI**: Implemented text truncation (ellipsis) for selected filenames in the MainScreen to prevent UI push-down on lengthy manga titles.
+
+### Fixed
+
+- **Android Archive Extraction Bug**: Swapped `ZipInputStream` for `ZipFile` to bypass a core Android extraction bug affecting Data Descriptors, permanently fixing 0-byte extracted images.
+- **CJK Filename Destruction**: Removed aggressive regex sanitization that was corrupting Japanese, Chinese, and Korean filenames during extraction and causing page overwrites.
+
 ## [v1.25.1.13] - 2026-08-05
 
 ### Added

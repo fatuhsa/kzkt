@@ -236,4 +236,20 @@ class SettingsRepository(private val context: Context) {
         }
     }
  
+    suspend fun resetToDefault() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(KEY_MAX_BUBBLES)
+            prefs.remove(KEY_REQUEST_DELAY)
+            prefs.remove(KEY_SFX_MODE)
+            prefs.remove(KEY_PAD_X)
+            prefs.remove(KEY_PAD_Y)
+            prefs.remove(KEY_MIN_PAD)
+            prefs.remove(KEY_USE_INPAINTING)
+            prefs.remove(KEY_CUSTOM_TIMEOUT)
+            prefs.remove(KEY_DEV_LOGS)
+            prefs.remove(KEY_CUSTOM_FONT)
+            prefs.remove(KEY_USE_LOCAL_OCR)
+            prefs.remove(KEY_LOCAL_OCR_SCRIPT)
+        }
+    }
 }

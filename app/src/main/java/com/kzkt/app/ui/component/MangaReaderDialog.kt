@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -85,6 +86,8 @@ fun MangaReaderDialog(
     var activeEditorBmp by remember { mutableStateOf<Bitmap?>(null) }
     var activeTranslations by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var activeCoords by remember { mutableStateOf<Map<String, IntArray>>(emptyMap()) }
+    var activeRawTexts by remember { mutableStateOf<Map<String, String>?>(null) }
+    var activeStyles by remember { mutableStateOf<Map<String, com.kzkt.app.core.BubbleMeta>?>(null) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -191,11 +194,15 @@ fun MangaReaderDialog(
                                         activeEditorBmp = meta.originalBitmap
                                         activeTranslations = meta.translations
                                         activeCoords = meta.coordinateMap
+                                        activeRawTexts = meta.rawTexts
+                                        activeStyles = meta.styles
                                         showEditor = true
                                     } else if (pipelineResult?.originalBitmap != null) {
                                         activeEditorBmp = pipelineResult.originalBitmap
                                         activeTranslations = pipelineResult.translations
                                         activeCoords = pipelineResult.coordinateMap
+                                        activeRawTexts = pipelineResult.rawTexts
+                                        activeStyles = pipelineResult.styles
                                         showEditor = true
                                     } else {
                                         val pageBmp = withContext(Dispatchers.IO) {
@@ -205,6 +212,8 @@ fun MangaReaderDialog(
                                             activeEditorBmp = pageBmp
                                             activeTranslations = emptyMap()
                                             activeCoords = emptyMap()
+                                            activeRawTexts = null
+                                            activeStyles = null
                                             showEditor = true
                                         }
                                     }
@@ -230,6 +239,31 @@ fun MangaReaderDialog(
                                     tint = MaterialTheme.colorScheme.onSurface
                                 )
                             }
+                            
+                            // Export CBZ Button
+                            if (pagePaths.size > 1) {
+                                IconButton(
+                                    onClick = {
+                                        scope.launch(Dispatchers.IO) {
+                                            val fileName = "KZKT_Export_${System.currentTimeMillis()}.cbz"
+                                            val cbzFile = com.kzkt.app.util.ArchiveExtractor.createCbz(context, pagePaths, fileName)
+                                            withContext(Dispatchers.Main) {
+                                                if (cbzFile != null) {
+                                                    android.widget.Toast.makeText(context, "Exported to Downloads: ${cbzFile.name}", android.widget.Toast.LENGTH_LONG).show()
+                                                } else {
+                                                    android.widget.Toast.makeText(context, "Export failed", android.widget.Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = "Export CBZ",
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -243,8 +277,10 @@ fun MangaReaderDialog(
                         textRenderer = com.kzkt.app.core.TextRenderer(context),
                         targetLanguage = targetLanguage,
                         customFontPath = customFontPath,
+                        rawTexts = activeRawTexts,
+                        styles = activeStyles,
                         onDismiss = { showEditor = false },
-                        onSave = { updatedBmp, _ ->
+                        onSave = { updatedBmp, updatedTranslations, updatedCoords, updatedStyles ->
                             val currentPath = pagePaths[pagerState.currentPage]
                             try {
                                 val file = File(currentPath)

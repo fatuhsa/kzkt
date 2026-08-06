@@ -8,13 +8,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.BrightnessLow
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CloudDownload
@@ -67,20 +72,35 @@ fun SettingsScreen(
     onPureBlackChange: (Boolean) -> Unit,
     themeColor: Color,
     onThemeColorChange: (Color) -> Unit,
+    onNavigateToGlossary: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    var showFontDialog by remember { mutableStateOf(false) }
 
     val fontPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
             try {
-                val destFile = java.io.File(context.filesDir, "custom_font_${System.currentTimeMillis()}.ttf")
+                var originalName = "custom_font_${System.currentTimeMillis()}.ttf"
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (idx != -1) originalName = cursor.getString(idx)
+                    }
+                }
+                
+                val fontsDir = java.io.File(context.filesDir, "custom_fonts")
+                fontsDir.mkdirs()
+                val destFile = java.io.File(fontsDir, originalName)
+                
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     destFile.outputStream().use { output -> input.copyTo(output) }
                 }
                 scope.launch { viewModel.settingsRepo.saveCustomFontPath(destFile.absolutePath) }
+                showFontDialog = false
             } catch (e: Exception) {
                 android.util.Log.e("KZKT", "Font import error: ${e.message}")
             }
@@ -147,11 +167,20 @@ fun SettingsScreen(
                         description = {
                             Text(if (customFontPath.isNotBlank()) java.io.File(customFontPath).name else "Tap to import custom font file")
                         },
-                        onClick = { fontPickerLauncher.launch("*/*") },
+                        trailingContent = if (customFontPath.isNotBlank()) {
+                            {
+                                IconButton(onClick = { scope.launch { viewModel.settingsRepo.saveCustomFontPath("") } }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear Custom Font")
+                                }
+                            }
+                        } else null,
+                        onClick = { showFontDialog = true },
                     ),
                 ),
             )
         }
+
+
 
         // ── Provider & Configuration ──
         item(key = "provider") {
@@ -229,6 +258,21 @@ fun SettingsScreen(
                             },
                             onClick = {
                                 scope.launch { viewModel.settingsRepo.saveUseLocalOcr(!useLocalOcr) }
+                            }
+                        ),
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(androidx.compose.material.icons.Icons.Outlined.TextFields) },
+                            title = { Text("Custom Dictionary / Glossary") },
+                            description = { Text("Define how specific names or terms should be translated") },
+                            onClick = onNavigateToGlossary
+                        ),
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(androidx.compose.material.icons.Icons.Outlined.DeleteOutline) },
+                            title = { Text("Clear Translation Cache") },
+                            description = { Text("Forces re-translation of identical speech bubbles instead of using memory") },
+                            onClick = {
+                                com.kzkt.app.data.TranslationCacheRepository(context).clear()
+                                android.widget.Toast.makeText(context, "Translation cache cleared", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         )
                     )
@@ -376,11 +420,95 @@ fun SettingsScreen(
                     SfxFilterSection(viewModel)
                 }
             }
+            
+            item(key = "reset_settings") {
+                var showResetConfirm by remember { mutableStateOf(false) }
+                
+                Button(
+                    onClick = { showResetConfirm = true },
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Reset Advanced Settings")
+                }
+                
+                if (showResetConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showResetConfirm = false },
+                        title = { Text("Reset Settings") },
+                        text = { Text("Are you sure you want to reset all advanced settings to their default values? This will not affect your API keys or models.") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                scope.launch { 
+                                    viewModel.settingsRepo.resetToDefault() 
+                                    android.widget.Toast.makeText(context, "Settings reset", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                                showResetConfirm = false
+                            }) {
+                                Text("Reset", color = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showResetConfirm = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
+            }
         }
 
         item(key = "bottom_spacer") {
             Spacer(Modifier.height(32.dp))
         }
+    }
+
+    if (showFontDialog) {
+        AlertDialog(
+            onDismissRequest = { showFontDialog = false },
+            title = { Text("Select Custom Font") },
+            text = {
+                val fontsDir = java.io.File(context.filesDir, "custom_fonts")
+                val fonts = fontsDir.listFiles()?.filter { it.isFile && (it.name.endsWith(".ttf") || it.name.endsWith(".otf")) } ?: emptyList()
+                
+                LazyColumn {
+                    item {
+                        TextButton(
+                            onClick = {
+                                scope.launch { viewModel.settingsRepo.saveCustomFontPath("") }
+                                showFontDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Default Font", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
+                        }
+                    }
+                    items(fonts) { font ->
+                        TextButton(
+                            onClick = {
+                                scope.launch { viewModel.settingsRepo.saveCustomFontPath(font.absolutePath) }
+                                showFontDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(font.name, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { fontPickerLauncher.launch("*/*") }) {
+                    Text("Import New Font")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFontDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 }
 

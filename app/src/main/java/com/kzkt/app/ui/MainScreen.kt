@@ -63,18 +63,33 @@ fun MainScreen(
         }
     }
 
-    // File picker
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
-            val paths = uris.mapNotNull { FileUtils.getPathFromUri(context, it) }
-            if (paths.isNotEmpty()) {
-                viewModel.addFiles(paths)
-            } else {
-                // Fallback: copy to cache
-                val copied = uris.mapNotNull { FileUtils.copyUriToCache(context, it) }
-                viewModel.addFiles(copied)
+            val allPaths = mutableListOf<String>()
+            
+            for (uri in uris) {
+                val mimeType = context.contentResolver.getType(uri)
+                val path = com.kzkt.app.ui.FileUtils.getPathFromUri(context, uri)
+                val isZip = mimeType?.contains("zip") == true || mimeType?.contains("cbz") == true || mimeType?.contains("epub") == true || 
+                           path?.lowercase()?.endsWith(".zip") == true || 
+                           path?.lowercase()?.endsWith(".cbz") == true ||
+                           path?.lowercase()?.endsWith(".epub") == true
+                           
+                if (isZip) {
+                    val extracted = com.kzkt.app.util.ArchiveExtractor.extractCbz(context, uri)
+                    allPaths.addAll(extracted)
+                } else if (path != null) {
+                    allPaths.add(path)
+                } else {
+                    val copied = com.kzkt.app.ui.FileUtils.copyUriToCache(context, uri)
+                    if (copied != null) allPaths.add(copied)
+                }
+            }
+            
+            if (allPaths.isNotEmpty()) {
+                viewModel.addFiles(allPaths)
             }
         }
     }
@@ -242,6 +257,8 @@ private fun QuickSettingsCard(viewModel: MainViewModel) {
                         path.substringAfterLast('/'),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
                 val hidden = files.size - shown.size
@@ -271,13 +288,13 @@ private fun ActionButtons(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         OutlinedButton(
-            onClick = { filePickerLauncher.launch(arrayOf("image/*", "application/pdf")) },
+            onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
             enabled = !active,
             modifier = Modifier.weight(1f),
         ) {
             Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(4.dp))
-            Text("Pick Image")
+            Text("Pick File/Image")
         }
 
         if (active) {
@@ -552,14 +569,24 @@ private fun ResultPreview(
                 textRenderer = com.kzkt.app.core.TextRenderer(context),
                 targetLanguage = viewModel.settings.value.targetLanguage,
                 customFontPath = viewModel.settings.value.customFontPath,
+                rawTexts = lastResult.rawTexts,
+                styles = lastResult.styles,
                 onDismiss = { viewModel.showInteractiveEditor.value = false },
-                onSave = { updatedBitmap, _ ->
+                onSave = { updatedBitmap, updatedTranslations, updatedCoords, updatedStyles ->
                     if (lastResult.outputPath != null) {
                         val file = File(lastResult.outputPath)
                         java.io.FileOutputStream(file).use { stream ->
                             updatedBitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
                         }
                     }
+                    
+                    // Update state so if the user opens the editor again, they see their new edits
+                    viewModel.lastResultForEditing.value = lastResult.copy(
+                        translations = updatedTranslations,
+                        coordinateMap = updatedCoords,
+                        styles = updatedStyles
+                    )
+                    
                     viewModel.showInteractiveEditor.value = false
                 }
             )

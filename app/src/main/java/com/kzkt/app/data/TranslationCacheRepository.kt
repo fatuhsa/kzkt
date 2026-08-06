@@ -124,4 +124,15 @@ class TranslationCacheRepository(private val context: Context) {
     fun flush() {
         saveCache()
     }
+
+    /** Clear all cached translations from memory and disk. */
+    @Synchronized
+    fun clear() {
+        memoryCache.clear()
+        if (cacheFile.exists()) {
+            cacheFile.delete()
+        }
+        dirty = false
+        pendingWrites = 0
+    }
 }
