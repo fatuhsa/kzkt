@@ -3,6 +3,7 @@ package com.kzkt.app.core.providers
 import android.graphics.Bitmap
 import com.google.gson.Gson
 import com.google.gson.JsonParser
+import com.kzkt.app.core.ImageProcessor
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -57,7 +58,7 @@ abstract class OpenAICompatProvider(
 
     override suspend fun translateImage(image: Bitmap, prompt: String): String? {
         val dataUri = ImageProcessor.bitmapToBase64DataUri(image)
-        val imagePart = if (imageDetail != null) {
+        val imagePart: Map<String, Any> = if (imageDetail != null) {
             mapOf("type" to "image_url", "image_url" to mapOf("url" to dataUri, "detail" to imageDetail))
         } else {
             mapOf("type" to "image_url", "image_url" to mapOf("url" to dataUri))

@@ -49,7 +49,7 @@ class TranslationService : Service() {
             val intent = Intent(context, TranslationService::class.java).apply {
                 action = ACTION_START
                 putStringArrayListExtra(EXTRA_FILES, ArrayList(files))
-                putBooleanExtra(EXTRA_RETRY, retry)
+                putExtra(EXTRA_RETRY, retry)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)

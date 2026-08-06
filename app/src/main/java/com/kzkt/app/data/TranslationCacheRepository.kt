@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
 import org.json.JSONObject
+import java.io.File
 import java.security.MessageDigest
 
 /**
@@ -45,7 +46,9 @@ class TranslationCacheRepository(private val context: Context) {
         try {
             val jsonStr = cacheFile.readText()
             val json = JSONObject(jsonStr)
-            for (key in json.keys()) {
+            val keys = json.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
                 memoryCache[key] = json.getString(key)
             }
         } catch (e: Exception) {
