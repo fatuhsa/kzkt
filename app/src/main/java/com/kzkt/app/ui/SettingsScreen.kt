@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.BrightnessLow
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.GppGood
 import androidx.compose.material.icons.outlined.Link
@@ -198,11 +199,11 @@ fun SettingsScreen(
             }
         }
 
-        // ── OCR & Engine Mode (Experimental) ──
-        item(key = "ocr_engine") {
+        // ── Translation Engine ──
+        item(key = "engine") {
             Column {
                 Text(
-                    "OCR & Engine Mode (Experimental)",
+                    "Translation Engine",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
@@ -212,13 +213,12 @@ fun SettingsScreen(
                 // group — not the whole Settings screen (recomposition storm).
                 val useLocalOcr by remember { derivedStateOf { viewModel.settings.value.useLocalOcr } }
                 val localOcrScript by remember { derivedStateOf { viewModel.settings.value.localOcrScript } }
-                val enableDevLogs by remember { derivedStateOf { viewModel.settings.value.enableDevLogs } }
                 Material3SettingsGroup(
                     items = listOf(
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.Science) },
                             title = { Text("Use On-Device Local OCR") },
-                            description = { Text(if (useLocalOcr) "Google ML Kit extracts text locally before LLM. Supports ANY text-only LLM." else "Default: Sends mosaic image to Vision LLM.") },
+                            description = { Text(if (useLocalOcr) "Google ML Kit extracts text locally before the LLM — works with any text-only model." else "Default: sends the bubble mosaic to a vision LLM.") },
                             trailingContent = {
                                 Switch(
                                     checked = useLocalOcr,
@@ -233,34 +233,56 @@ fun SettingsScreen(
                         )
                     )
                 )
+                // OCR script language belongs inside the engine group — a nested
+                // card with the same visual language instead of a peer heading.
                 if (useLocalOcr) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Local OCR Script Language",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 12.dp, bottom = 4.dp)
-                    )
-                    val ocrScriptChips = listOf(
-                        "Japanese (ML Kit)" to "Japanese (ML Kit)",
-                        "Latin / English (ML Kit)" to "Latin / English (ML Kit)"
-                    )
-                    ChipsRow(
-                        chips = ocrScriptChips,
-                        currentValue = localOcrScript,
-                        onValueUpdate = { script ->
-                            scope.launch { viewModel.settingsRepo.saveLocalOcrScript(script) }
+                    Spacer(Modifier.height(4.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            Text(
+                                "Local OCR Script Language",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            val ocrScriptChips = listOf(
+                                "Japanese (ML Kit)" to "Japanese (ML Kit)",
+                                "Latin / English (ML Kit)" to "Latin / English (ML Kit)"
+                            )
+                            ChipsRow(
+                                chips = ocrScriptChips,
+                                currentValue = localOcrScript,
+                                onValueUpdate = { script ->
+                                    scope.launch { viewModel.settingsRepo.saveLocalOcrScript(script) }
+                                }
+                            )
                         }
-                    )
+                    }
                 }
+            }
+        }
 
-                Spacer(Modifier.height(12.dp))
+        // ── Developer ──
+        item(key = "developer") {
+            Column {
                 Text(
-                    "Developer & Telemetry",
+                    "Developer",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp),
+                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
                 )
+                val enableDevLogs by remember { derivedStateOf { viewModel.settings.value.enableDevLogs } }
                 Material3SettingsGroup(
                     items = listOf(
                         Material3SettingsItem(
@@ -312,7 +334,7 @@ fun SettingsScreen(
                         Column {
                             Text("Advanced settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             Text(
-                                if (showAdvanced) "Hide sliders and custom configurations" else "Show OCR padding and API latency tweaks",
+                                if (showAdvanced) "Hide sliders and custom configurations" else "Show bubble count, OCR padding, and API timeout tweaks",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -334,9 +356,9 @@ fun SettingsScreen(
                 Column {
                     Text(
                         "Tweak Parameters",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp, top = 8.dp),
                     )
                     TweakParamsSection(viewModel)
                 }
@@ -347,9 +369,9 @@ fun SettingsScreen(
                 Column {
                     Text(
                         "SFX Filter Mode",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp, top = 8.dp),
                     )
                     SfxFilterSection(viewModel)
                 }
@@ -510,20 +532,36 @@ private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
                     )
                 },
             ),
-            Material3SettingsItem(
-                leadingContent = { SettingsIcon(Icons.Outlined.Science) },
-                title = { Text("Detect Models from API") },
-                description = { Text("Fetch available models dynamically from Base URL") },
-                enabled = !isLoading,
-                trailingContent = {
-                    if (isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    }
-                },
-                onClick = { viewModel.fetchModelsForProvider(providerKey, baseUrl, apiKey) },
-            )
         )
     )
+
+    // Model auto-detection performs a network call, so it is a real button — not
+    // a plain settings row that looks like a passive toggle.
+    Spacer(Modifier.height(8.dp))
+    OutlinedButton(
+        onClick = { viewModel.fetchModelsForProvider(providerKey, baseUrl, apiKey) },
+        enabled = !isLoading,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("Fetching models…")
+        } else {
+            Icon(
+                imageVector = Icons.Outlined.CloudDownload,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("Detect Models from API")
+        }
+    }
 }
 
 @Composable
