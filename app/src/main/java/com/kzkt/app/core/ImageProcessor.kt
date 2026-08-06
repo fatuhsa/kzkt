@@ -56,6 +56,28 @@ object ImageProcessor {
         return BitmapFactory.decodeFile(path)
     }
 
+    /**
+     * Smart Image Upscaler using OpenCV
+     * Doubles the resolution using Bicubic interpolation and applies Unsharp Masking
+     * to enhance text edges for better OCR detection on low-res scans.
+     */
+    fun enhanceImage(src: Mat): Mat {
+        val dest = Mat()
+        // 1. Upscale 2x using bicubic interpolation
+        Imgproc.resize(src, dest, Size(), 2.0, 2.0, Imgproc.INTER_CUBIC)
+        
+        // 2. Unsharp Masking for crisp edges
+        val blurred = Mat()
+        Imgproc.GaussianBlur(dest, blurred, Size(0.0, 0.0), 3.0)
+        
+        val sharpened = Mat()
+        // sharpened = dest * 1.5 - blurred * 0.5
+        Core.addWeighted(dest, 1.5, blurred, -0.5, 0.0, sharpened)
+        
+        blurred.release()
+        return sharpened
+    }
+
     // ── Box Geometry ───────────────────────────────────────────────
 
     private fun areaBox(box: IntArray): Int {

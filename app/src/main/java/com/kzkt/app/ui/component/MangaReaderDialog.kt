@@ -10,7 +10,11 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -82,6 +88,7 @@ fun MangaReaderDialog(
     var showControls by remember { mutableStateOf(true) }
     var showEditor by remember { mutableStateOf(false) }
     var isZoomed by remember { mutableStateOf(false) }
+    var isWebtoonMode by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
 
     var activeEditorBmp by remember { mutableStateOf<Bitmap?>(null) }
     var activeTranslations by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -102,30 +109,52 @@ fun MangaReaderDialog(
             color = Color.Black
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                // ── Horizontal Pager Page Viewer ──
-                HorizontalPager(
-                    state = pagerState,
-                    userScrollEnabled = !isZoomed,
-                    modifier = Modifier.fillMaxSize()
-                ) { pageIndex ->
-                    val path = pagePaths[pageIndex]
-
-                    // Decode off the main thread and downsample to at most ~2048px
-                    // on the long edge. Manga pages are shown with ContentScale.Fit,
-                    // so decoding the full-resolution file (often 3000–5000px, tens
-                    // of MB) on the UI thread is what caused page-flip jank and high
-                    // memory pressure in the reader.
-                    val bitmap by produceState<Bitmap?>(initialValue = null, key1 = path) {
-                        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            decodeSampledBitmap(path)
+                if (isWebtoonMode) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { showControls = !showControls }
+                    ) {
+                        items(pagePaths.size) { pageIndex ->
+                            val path = pagePaths[pageIndex]
+                            val bitmap by produceState<Bitmap?>(initialValue = null, key1 = path) {
+                                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    decodeSampledBitmap(path)
+                                }
+                            }
+                            bitmap?.let { bmp ->
+                                Image(
+                                    bitmap = bmp.asImageBitmap(),
+                                    contentDescription = "Page ${pageIndex + 1}",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentScale = ContentScale.FillWidth
+                                )
+                            }
                         }
                     }
+                } else {
+                    // ── Horizontal Pager Page Viewer ──
+                    HorizontalPager(
+                        state = pagerState,
+                        userScrollEnabled = !isZoomed,
+                        modifier = Modifier.fillMaxSize()
+                    ) { pageIndex ->
+                        val path = pagePaths[pageIndex]
 
-                    ZoomablePageViewer(
-                        bitmap = bitmap,
-                        onTap = { showControls = !showControls },
-                        onZoomStateChanged = { zoomed -> isZoomed = zoomed }
-                    )
+                        val bitmap by produceState<Bitmap?>(initialValue = null, key1 = path) {
+                            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                decodeSampledBitmap(path)
+                            }
+                        }
+
+                        ZoomablePageViewer(
+                            bitmap = bitmap,
+                            onTap = { showControls = !showControls },
+                            onZoomStateChanged = { zoomed -> isZoomed = zoomed }
+                        )
+                    }
                 }
 
                 // ── Top App Bar (Controls) ──
@@ -148,6 +177,15 @@ fun MangaReaderDialog(
                                 Icon(
                                     Icons.AutoMirrored.Filled.ArrowBack,
                                     contentDescription = "Close Reader",
+                                    tint = Color.White
+                                )
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = { isWebtoonMode = !isWebtoonMode }) {
+                                Icon(
+                                    if (isWebtoonMode) Icons.Default.ViewAgenda else Icons.Default.ViewCarousel,
+                                    contentDescription = "Toggle Webtoon Mode",
                                     tint = Color.White
                                 )
                             }

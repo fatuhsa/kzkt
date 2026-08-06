@@ -139,6 +139,7 @@ class TranslationService : Service() {
                     useLocalOcr = s.useLocalOcr,
                     localOcrScript = s.localOcrScript,
                     enableDevLogs = s.enableDevLogs,
+                    useImageUpscaler = s.useImageUpscaler,
                 )
 
                 val cacheRepo = TranslationCacheRepository(applicationContext)

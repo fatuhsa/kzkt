@@ -11,6 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Custom Font Importer**: Integrated a custom font selection dialog supporting `.ttf` and `.otf` font imports with persistent state across translations.
 - **EPUB Support**: Added support for selecting `.epub` comic/manga archives alongside CBZ and ZIP files directly from the UI.
 - **CBZ Filename Retention**: The Manga Reader CBZ exporter now perfectly retains the original directory structures and CJK filenames instead of flattening into sequential numbers.
+- **Webtoon Reader Mode**: Added vertical scrolling mode toggle (`LazyColumn`) in `MangaReaderDialog` for seamless Webtoon and Manhwa reading.
+- **Smart Image Upscaler**: OpenCV Bicubic interpolation + Unsharp Masking enhancement filter to double resolution and sharpen low-res scan text before OCR/LLM detection.
+- **Redesigned KZKT Monogram Icon**: Updated launcher icons across all densities (`mdpi` to `xxxhdpi`) featuring a prominent large 'K' with vertically stacked 'z' and 't' in vibrant neon gradients.
 
 ### Changed
 

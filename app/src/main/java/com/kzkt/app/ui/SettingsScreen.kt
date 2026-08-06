@@ -395,6 +395,25 @@ fun SettingsScreen(
         if (showAdvanced) {
 
 
+            item(key = "image_upscaler") {
+                val useImageUpscaler by remember { derivedStateOf { viewModel.settings.value.useImageUpscaler } }
+                Material3SettingsGroup(
+                    items = listOf(
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.Science) },
+                            title = { Text("Smart Image Upscaler") },
+                            description = { Text("Enhance low-resolution images for better AI text detection. May increase RAM usage.") },
+                            trailingContent = {
+                                Switch(
+                                    checked = useImageUpscaler,
+                                    onCheckedChange = { scope.launch { viewModel.settingsRepo.saveUseImageUpscaler(it) } }
+                                )
+                            }
+                        )
+                    )
+                )
+            }
+
             // ── Tweak Parameters ──
             item(key = "tweak_params") {
                 Column {

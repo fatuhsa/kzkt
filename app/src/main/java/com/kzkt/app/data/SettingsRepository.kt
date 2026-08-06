@@ -56,6 +56,7 @@ class SettingsRepository(private val context: Context) {
         private val KEY_LOCAL_OCR_SCRIPT = stringPreferencesKey("local_ocr_script")
         private val KEY_CUSTOM_TIMEOUT = intPreferencesKey("custom_timeout_sec")
         private val KEY_DEV_LOGS = booleanPreferencesKey("enable_dev_logs")
+        private val KEY_USE_IMAGE_UPSCALER = booleanPreferencesKey("use_image_upscaler")
     }
  
     data class Settings(
@@ -91,6 +92,7 @@ class SettingsRepository(private val context: Context) {
         val localOcrScript: String = "Japanese (ML Kit)",
         val customTimeoutSec: Int = 30,
         val enableDevLogs: Boolean = false,
+        val useImageUpscaler: Boolean = false,
     ) {
         fun getBaseUrl(provider: String): String = when (provider) {
             "gemini" -> baseUrlGemini
@@ -141,6 +143,7 @@ class SettingsRepository(private val context: Context) {
             localOcrScript = prefs[KEY_LOCAL_OCR_SCRIPT] ?: Defaults.settings.localOcrScript,
             customTimeoutSec = prefs[KEY_CUSTOM_TIMEOUT] ?: Defaults.settings.customTimeoutSec,
             enableDevLogs = prefs[KEY_DEV_LOGS] ?: Defaults.settings.enableDevLogs,
+            useImageUpscaler = prefs[KEY_USE_IMAGE_UPSCALER] ?: Defaults.settings.useImageUpscaler,
         )
     }
 
@@ -219,6 +222,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun saveEnableDevLogs(enabled: Boolean) {
         context.dataStore.edit { it[KEY_DEV_LOGS] = enabled }
+    }
+
+    suspend fun saveUseImageUpscaler(use: Boolean) {
+        context.dataStore.edit { it[KEY_USE_IMAGE_UPSCALER] = use }
     }
  
     suspend fun saveTweakParam(keyField: String, value: Any) {

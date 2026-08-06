@@ -75,7 +75,17 @@ class TranslationPipeline(
         val imgFile = File(inputPath)
         if (!imgFile.exists()) return PipelineResult(null, failed = true)
 
-        val bitmap = ImageProcessor.loadBitmap(inputPath) ?: return PipelineResult(null, failed = true)
+        var bitmap = ImageProcessor.loadBitmap(inputPath) ?: return PipelineResult(null, failed = true)
+        
+        if (params.useImageUpscaler) {
+            val mat = ImageProcessor.bitmapToMat(bitmap)
+            val enhanced = ImageProcessor.enhanceImage(mat)
+            bitmap.recycle()
+            bitmap = ImageProcessor.matToBitmap(enhanced)
+            mat.release()
+            enhanced.release()
+            if (params.enableDevLogs) onProgress("  Image upscaled (resolution doubled).")
+        }
 
         // Auto-split landscape
         val splitCount = ImageProcessor.shouldAutoSplit(bitmap)
@@ -636,7 +646,16 @@ class TranslationPipeline(
                             mutableListOf(), mutableMapOf(), alreadyDone = true)
                     }
 
-                    val bitmap = ImageProcessor.loadBitmap(imgPath)
+                    var bitmap = ImageProcessor.loadBitmap(imgPath)
+                    
+                    if (bitmap != null && params.useImageUpscaler) {
+                        val mat = ImageProcessor.bitmapToMat(bitmap)
+                        val enhanced = ImageProcessor.enhanceImage(mat)
+                        bitmap.recycle()
+                        bitmap = ImageProcessor.matToBitmap(enhanced)
+                        mat.release()
+                        enhanced.release()
+                    }
                     if (bitmap == null) {
                         val doneCount = completedCount.incrementAndGet()
                         onProgress("  [Page $actualPageNum/$totalPages] Failed to load image.")
