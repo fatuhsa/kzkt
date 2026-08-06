@@ -35,6 +35,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.kzkt.app.ui.FileUtils
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Decode a page bitmap downsampled so its longest edge is at most [maxDim] px.
@@ -72,6 +75,7 @@ fun MangaReaderDialog(
     if (pagePaths.isEmpty()) return
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = initialIndex.coerceIn(0, pagePaths.size - 1)) { pagePaths.size }
 
     var showControls by remember { mutableStateOf(true) }
@@ -172,21 +176,37 @@ fun MangaReaderDialog(
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Edit Text Button (Always available for touch-up editing)
+                            // Edit Text Button — resolves the page's bubble data from the
+                            // persisted edit metadata first (works from History too), then
+                            // falls back to the in-memory pipeline result, then to a plain
+                            // page load (no editable bubbles). All disk I/O happens off the
+                            // main thread.
                             IconButton(onClick = {
-                                if (pipelineResult?.originalBitmap != null) {
-                                    activeEditorBmp = pipelineResult.originalBitmap
-                                    activeTranslations = pipelineResult.translations
-                                    activeCoords = pipelineResult.coordinateMap
-                                    showEditor = true
-                                } else {
-                                    val currentPath = pagePaths[pagerState.currentPage]
-                                    val pageBmp = com.kzkt.app.core.ImageProcessor.loadBitmap(currentPath)
-                                    if (pageBmp != null) {
-                                        activeEditorBmp = pageBmp
-                                        activeTranslations = emptyMap()
-                                        activeCoords = emptyMap()
+                                val currentPath = pagePaths[pagerState.currentPage]
+                                scope.launch {
+                                    val meta = withContext(Dispatchers.IO) {
+                                        com.kzkt.app.data.EditMetadataRepository(context).loadForOutput(currentPath)
+                                    }
+                                    if (meta != null) {
+                                        activeEditorBmp = meta.originalBitmap
+                                        activeTranslations = meta.translations
+                                        activeCoords = meta.coordinateMap
                                         showEditor = true
+                                    } else if (pipelineResult?.originalBitmap != null) {
+                                        activeEditorBmp = pipelineResult.originalBitmap
+                                        activeTranslations = pipelineResult.translations
+                                        activeCoords = pipelineResult.coordinateMap
+                                        showEditor = true
+                                    } else {
+                                        val pageBmp = withContext(Dispatchers.IO) {
+                                            com.kzkt.app.core.ImageProcessor.loadBitmap(currentPath)
+                                        }
+                                        if (pageBmp != null) {
+                                            activeEditorBmp = pageBmp
+                                            activeTranslations = emptyMap()
+                                            activeCoords = emptyMap()
+                                            showEditor = true
+                                        }
                                     }
                                 }
                             }) {

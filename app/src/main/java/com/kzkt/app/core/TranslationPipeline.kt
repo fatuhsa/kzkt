@@ -542,6 +542,10 @@ class TranslationPipeline(
         saveBitmap(resultBitmap, outputPath)
         onProgress("  Done! ${translatedCount}/${cropItems.size} bubbles translated.")
 
+        // Persist bubble data + original page so the touch-up editor works later
+        // (e.g. when the reader is reopened from History).
+        saveEditMetadata(outputPath, bitmap, normalizedTranslations, coordinateMap)
+
         cacheRepo?.flush()
         return PipelineResult(
             outputPath = outputPath,
@@ -994,6 +998,27 @@ class TranslationPipeline(
             if (!cropBmp.isRecycled) cropBmp.recycle()
         }
         if (!page.pil.isRecycled) page.pil.recycle()
+    }
+
+    /**
+     * Persist bubble coordinates + translations + the original page bitmap so the
+     * in-app touch-up editor can restore edit data later (e.g. from History).
+     * Keyed by output file name, which is preserved when publishing to MediaStore.
+     */
+    private fun saveEditMetadata(
+        outputPath: String,
+        original: Bitmap,
+        translations: Map<String, String>,
+        coordinates: Map<String, IntArray>,
+    ) {
+        val ctx = context ?: return
+        if (translations.isEmpty() || coordinates.isEmpty()) return
+        try {
+            com.kzkt.app.data.EditMetadataRepository(ctx)
+                .saveForOutput(outputPath, original, translations, coordinates, targetLanguage)
+        } catch (_: Exception) {
+            // Best-effort — never fail a translation because metadata couldn't be saved.
+        }
     }
 
     private fun saveBitmap(bitmap: Bitmap, path: String) {

@@ -84,6 +84,17 @@ class HistoryRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Replace the whole list in a single write — used by the clear-all Undo so we
+     * don't queue N sequential DataStore edits to restore a large history.
+     */
+    suspend fun restoreAll(entries: List<HistoryEntry>) {
+        context.historyDataStore.edit { prefs ->
+            prefs[KEY_ENTRIES] = gson.toJson(entries.sortedByDescending { it.timestamp })
+            prefs[KEY_REV] = (System.currentTimeMillis()).toString()
+        }
+    }
+
     suspend fun clear() {
         context.historyDataStore.edit { prefs ->
             prefs[KEY_ENTRIES] = "[]"

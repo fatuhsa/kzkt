@@ -2,32 +2,47 @@ package com.kzkt.app.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.SubcomposeAsyncImage
+import com.kzkt.app.core.Config
 import com.kzkt.app.data.HistoryEntry
 import java.io.File
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
     viewModel: MainViewModel,
@@ -35,19 +50,53 @@ fun HistoryScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val entries by viewModel.historyEntries.collectAsStateWithLifecycle()
+
+    // Search + provider filter state
+    var query by rememberSaveable { mutableStateOf("") }
+    var providerFilter by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // Tombstones for entries pending permanent deletion — hides the item
+    // immediately after a swipe while the DataStore write settles (supports Undo).
+    var removedIds by remember { mutableStateOf(setOf<Long>()) }
+    var clearedSnapshot by remember { mutableStateOf<List<HistoryEntry>?>(null) }
+
     var confirmDelete by remember { mutableStateOf<HistoryEntry?>(null) }
+    var confirmClearAll by remember { mutableStateOf(false) }
     var readerPages by remember { mutableStateOf<List<String>?>(null) }
     var readerInitialIndex by remember { mutableIntStateOf(0) }
     var isExtractingPdf by remember { mutableStateOf(false) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val filteredEntries = remember(entries, query, providerFilter, removedIds) {
+        entries.asSequence()
+            .filterNot { it.timestamp in removedIds }
+            .filter { providerFilter == null || it.provider == providerFilter }
+            .filter {
+                query.isBlank() ||
+                    it.fileName.contains(query, ignoreCase = true) ||
+                    providerDisplayName(it.provider).contains(query, ignoreCase = true) ||
+                    it.targetLanguage.contains(query, ignoreCase = true)
+            }
+            .toList()
+    }
+
+    val groupedEntries = remember(filteredEntries) { groupByDay(filteredEntries) }
+
+    val providerOptions = remember(entries) {
+        entries.map { it.provider }
+            .distinct()
+            .sortedBy { providerDisplayName(it) }
+    }
 
     fun openReaderForEntry(entry: HistoryEntry) {
         val file = File(entry.outputPath)
         if (file.name.endsWith(".pdf", ignoreCase = true)) {
             isExtractingPdf = true
-            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            scope.launch(Dispatchers.IO) {
                 val cacheDir = File(context.cacheDir, "pdf_reader_cache")
                 val pages = com.kzkt.app.util.PdfImporter.extractPdfToImages(file, cacheDir, context = context)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
                     isExtractingPdf = false
                     if (pages.isNotEmpty()) {
                         readerPages = pages
@@ -56,19 +105,61 @@ fun HistoryScreen(
                 }
             }
         } else if (file.exists()) {
-            // Resolve sibling pages off the main thread — File.exists() is
-            // synchronous disk I/O that stutters the UI when history is large.
-            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                val allHistoryImages = entries.mapNotNull { e ->
-                    val path = e.outputPath
-                    if (!path.endsWith(".pdf", ignoreCase = true) && File(path).exists()) path else null
-                }
-                val idx = allHistoryImages.indexOf(file.absolutePath).coerceAtLeast(0)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    readerPages = if (allHistoryImages.isNotEmpty()) allHistoryImages else listOf(file.absolutePath)
+            // Group pages by "book" so the reader only shows sibling pages of the
+            // same chapter instead of every image in history. Sibling detection +
+            // File.exists() run off the main thread (synchronous disk I/O).
+            scope.launch(Dispatchers.IO) {
+                val bookKey = bookGroupKey(file.absolutePath)
+                val siblingPages = entries.mapNotNull { e ->
+                    val p = e.outputPath
+                    if (!p.endsWith(".pdf", ignoreCase = true) &&
+                        File(p).exists() &&
+                        bookGroupKey(p) == bookKey
+                    ) p else null
+                }.sortedWith(Comparator { a, b -> compareNatural(a, b) })
+
+                val pages = siblingPages.ifEmpty { listOf(file.absolutePath) }
+                val idx = pages.indexOf(file.absolutePath).coerceAtLeast(0)
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    readerPages = pages
                     readerInitialIndex = idx
                 }
             }
+        }
+    }
+
+    fun deleteEntry(entry: HistoryEntry) {
+        removedIds = removedIds + entry.timestamp
+        viewModel.deleteHistoryEntry(entry.timestamp)
+        scope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = "Deleted \"${entry.fileName}\"",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                removedIds = removedIds - entry.timestamp
+                viewModel.restoreHistoryEntry(entry)
+            }
+        }
+    }
+
+    fun clearAll() {
+        // Snapshot ALL entries (not just the filtered subset) so Undo can restore
+        // everything even when a search/filter is active.
+        val snapshot = entries
+        clearedSnapshot = snapshot
+        viewModel.clearHistory()
+        scope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = "History cleared",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                clearedSnapshot?.let { viewModel.restoreHistoryEntries(it) }
+            }
+            clearedSnapshot = null
         }
     }
 
@@ -78,33 +169,125 @@ fun HistoryScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                item {
-                    Text(
-                        "History",
-                        style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier.padding(vertical = 8.dp),
-                    )
+                item(key = "header") {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "History",
+                                style = MaterialTheme.typography.headlineMedium,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(vertical = 8.dp),
+                            )
+                            IconButton(onClick = { confirmClearAll = true }) {
+                                Icon(
+                                    Icons.Filled.DeleteSweep,
+                                    contentDescription = "Clear all history",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+
+                        // Search field
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Search history...") },
+                            leadingIcon = {
+                                Icon(Icons.Filled.Search, contentDescription = null)
+                            },
+                            trailingIcon = {
+                                if (query.isNotEmpty()) {
+                                    IconButton(onClick = { query = "" }) {
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            contentDescription = "Clear search",
+                                        )
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                        )
+
+                        // Provider filter chips
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            FilterChip(
+                                selected = providerFilter == null,
+                                onClick = { providerFilter = null },
+                                label = { Text("All") },
+                                leadingIcon = if (providerFilter == null) {
+                                    { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                                } else null,
+                            )
+                            providerOptions.forEach { key ->
+                                FilterChip(
+                                    selected = providerFilter == key,
+                                    onClick = { providerFilter = key },
+                                    label = { Text(providerDisplayName(key)) },
+                                    leadingIcon = if (providerFilter == key) {
+                                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                                    } else null,
+                                )
+                            }
+                        }
+                    }
                 }
-                // Stable key: timestamp alone can collide when a multi-file batch is
-                // recorded in the same millisecond, which made LazyColumn throw
-                // "key already used" and stall the list. contentType lets LazyColumn
-                // reuse item composition while scrolling.
-                items(
-                    entries,
-                    key = { "${it.timestamp}_${it.fileName}_${it.pageCount}" },
-                    contentType = { "history_entry" },
-                ) { entry ->
-                    HistoryItem(
-                        entry = entry,
-                        onClick = { openReaderForEntry(entry) },
-                        onLongClick = { confirmDelete = entry },
-                    )
+
+                if (filteredEntries.isEmpty()) {
+                    // Keep the search bar + chips visible so the query stays clearable.
+                    item(key = "no_results") {
+                        NoResultsItem()
+                    }
+                } else {
+                    // Date-grouped entries ("Today", "Yesterday", then formatted date)
+                    groupedEntries.forEach { (label, groupEntries) ->
+                        item(key = "day_${groupEntries.first().timestamp}") {
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                            )
+                        }
+                        // Stable key: timestamp alone can collide when a multi-file batch is
+                        // recorded in the same millisecond, which made LazyColumn throw
+                        // "key already used" and stall the list. contentType lets LazyColumn
+                        // reuse item composition while scrolling.
+                        items(
+                            groupEntries,
+                            key = { "${it.timestamp}_${it.fileName}_${it.pageCount}" },
+                            contentType = { "history_entry" },
+                        ) { entry ->
+                            SwipeToDismissHistoryItem(
+                                entry = entry,
+                                onClick = { openReaderForEntry(entry) },
+                                onLongClick = { confirmDelete = entry },
+                                onDelete = { deleteEntry(entry) },
+                            )
+                        }
+                    }
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
 
         if (isExtractingPdf) {
             androidx.compose.ui.window.Dialog(onDismissRequest = {}) {
@@ -143,7 +326,7 @@ fun HistoryScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.deleteHistoryEntry(entry.timestamp)
+                        deleteEntry(entry)
                         confirmDelete = null
                     }
                 ) {
@@ -152,6 +335,27 @@ fun HistoryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { confirmDelete = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (confirmClearAll) {
+        AlertDialog(
+            onDismissRequest = { confirmClearAll = false },
+            title = { Text("Clear all history?") },
+            text = { Text("Remove all ${entries.size} entries from history?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmClearAll = false
+                        clearAll()
+                    }
+                ) {
+                    Text("Clear", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearAll = false }) { Text("Cancel") }
             },
         )
     }
@@ -184,6 +388,85 @@ private fun EmptyHistoryPlaceholder() {
     }
 }
 
+/** In-list empty state shown below the (still visible) search bar. */
+@Composable
+private fun NoResultsItem() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 48.dp),
+    ) {
+        Icon(
+            Icons.Filled.Search,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            modifier = Modifier.size(56.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "No results found",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Try a different search or filter",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+        )
+    }
+}
+
+/** Swipe left (End→Start) to delete, with a red background + trash affordance. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeToDismissHistoryItem(
+    entry: HistoryEntry,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) {
+                onDelete()
+                true
+            } else {
+                false
+            }
+        },
+        positionalThreshold = { distance -> distance * 0.35f },
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.errorContainer),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(end = 24.dp),
+                )
+            }
+        },
+    ) {
+        HistoryItem(
+            entry = entry,
+            onClick = onClick,
+            onLongClick = onLongClick,
+        )
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HistoryItem(
@@ -191,6 +474,7 @@ private fun HistoryItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
+    val isPdf = entry.outputPath.endsWith(".pdf", ignoreCase = true)
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -204,24 +488,7 @@ private fun HistoryItem(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Type badge: PDF vs image
-            val isPdf = entry.outputPath.endsWith(".pdf", ignoreCase = true)
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-                        RoundedCornerShape(12.dp),
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = if (isPdf) Icons.Filled.PictureAsPdf else Icons.Filled.Image,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
+            HistoryThumbnail(entry = entry, isPdf = isPdf)
 
             Spacer(Modifier.width(12.dp))
 
@@ -234,13 +501,13 @@ private fun HistoryItem(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "${entry.pageCount} pages · ${entry.provider} · ${entry.targetLanguage}",
+                    "${entry.pageCount} pages · ${providerDisplayName(entry.provider)} · ${entry.targetLanguage}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    formatTimestamp(entry.timestamp),
+                    TIME_FORMATTER.format(Date(entry.timestamp)),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 )
@@ -248,20 +515,125 @@ private fun HistoryItem(
 
             Spacer(Modifier.width(8.dp))
 
-            Icon(
-                Icons.Filled.Delete,
-                contentDescription = "Delete",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier
-                    .size(20.dp)
-                    .clickable { onLongClick() },
-            )
+            // IconButton gives a proper 48dp minimum touch target.
+            IconButton(onClick = onLongClick) {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }
 
-private val DATE_FORMATTER by lazy { SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()) }
+/**
+ * Translated-page thumbnail via Coil. Falls back to the PDF/image type icon when
+ * the entry is a PDF or the underlying file no longer exists on disk.
+ */
+@Composable
+private fun HistoryThumbnail(
+    entry: HistoryEntry,
+    isPdf: Boolean,
+) {
+    val file = remember(entry.outputPath) { File(entry.outputPath) }
+    Box(
+        modifier = Modifier
+            .size(width = 54.dp, height = 76.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (!isPdf && file.exists()) {
+            SubcomposeAsyncImage(
+                model = file,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                loading = {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    )
+                },
+                error = { TypeBadgeIcon(isPdf) },
+            )
+        } else {
+            TypeBadgeIcon(isPdf)
+        }
+    }
+}
 
-private fun formatTimestamp(ts: Long): String {
-    return DATE_FORMATTER.format(Date(ts))
+@Composable
+private fun TypeBadgeIcon(isPdf: Boolean) {
+    Icon(
+        imageVector = if (isPdf) Icons.Filled.PictureAsPdf else Icons.Filled.Image,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.size(22.dp),
+    )
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
+
+private fun providerDisplayName(key: String): String =
+    Config.PROVIDER_REGISTRY[key]?.displayName ?: key
+
+private val DAY_HEADER_FORMATTER by lazy { SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault()) }
+private val TIME_FORMATTER by lazy { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+
+private fun dayOf(ts: Long): LocalDate =
+    Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault()).toLocalDate()
+
+/** Group entries into day buckets with friendly headers, newest day first. */
+private fun groupByDay(entries: List<HistoryEntry>): List<Pair<String, List<HistoryEntry>>> {
+    if (entries.isEmpty()) return emptyList()
+    val today = LocalDate.now()
+    val yesterday = today.minusDays(1)
+    return entries
+        .groupBy { dayOf(it.timestamp) }
+        .toSortedMap(compareByDescending { it })
+        .map { (day, list) ->
+            val label = when (day) {
+                today -> "Today"
+                yesterday -> "Yesterday"
+                else -> DAY_HEADER_FORMATTER.format(Date(day.toEpochDay() * 86_400_000L))
+            }
+            label to list
+        }
+}
+
+/**
+ * Heuristic "book" key: parent directory + file base name with any trailing
+ * digits/separators stripped ("…/KZKT/chapter1_p01.png" → "…/KZKT|chapter1_p").
+ * Used to group sibling pages of the same chapter in the reader; the directory
+ * is included to avoid merging unrelated books that share page naming schemes.
+ */
+private fun bookGroupKey(path: String): String {
+    val f = File(path)
+    val base = f.name.substringBeforeLast('.').trim()
+    val stripped = base.trimEnd { it.isDigit() || it == '_' || it == '-' || it == ' ' }
+    return "${f.parent ?: ""}|${stripped.ifEmpty { base }}"
+}
+
+/** Natural (numeric-aware) string comparison for page ordering. */
+private fun compareNatural(a: String, b: String): Int {
+    val regex = Regex("(\\d+)|(\\D+)")
+    val ca = regex.findAll(a).map { it.value }.toList()
+    val cb = regex.findAll(b).map { it.value }.toList()
+    var i = 0
+    while (i < ca.size && i < cb.size) {
+        val x = ca[i]
+        val y = cb[i]
+        val cmp = if (x.all(Char::isDigit) && y.all(Char::isDigit)) {
+            x.toLong().compareTo(y.toLong())
+        } else {
+            x.compareTo(y)
+        }
+        if (cmp != 0) return cmp
+        i++
+    }
+    return ca.size - cb.size
 }

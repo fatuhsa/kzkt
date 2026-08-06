@@ -175,6 +175,27 @@ fun InteractiveEditorDialog(
                     }
                 }
 
+                // Explain why no bubble can be tapped when coordinate data is missing
+                // (e.g. PDF reader pages, or outputs without persisted edit metadata).
+                if (coordinateMap.isEmpty()) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("No editable bubbles found on this page.", style = MaterialTheme.typography.labelLarge)
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                "Bubble data is unavailable for this page (e.g. PDF pages). Touch-up editing works on translated image results.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
                 // Action buttons
                 Row(
                     modifier = Modifier
@@ -184,7 +205,10 @@ fun InteractiveEditorDialog(
                 ) {
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(Modifier.width(8.dp))
-                    Button(onClick = { onSave(editedBitmap, currentTranslations) }) { Text("Save & Apply") }
+                    Button(
+                        onClick = { onSave(editedBitmap, currentTranslations) },
+                        enabled = coordinateMap.isNotEmpty(),
+                    ) { Text("Save & Apply") }
                 }
             }
         }

@@ -302,6 +302,12 @@ class TranslationService : Service() {
                             if (publicPath != null) {
                                 emitLog("[+] Image translated and saved to public folder: $publicPath")
                                 emitResultPath(publicPath)
+                                // Follow the file into the public folder so the touch-up
+                                // editor can resolve this page's bubbles from History/Main.
+                                try {
+                                    com.kzkt.app.data.EditMetadataRepository(applicationContext)
+                                        .rekeyForOutput(result.outputPath, publicPath)
+                                } catch (_: Exception) {}
                                 try {
                                     val historyRepo = com.kzkt.app.data.HistoryRepository(applicationContext)
                                     historyRepo.record(

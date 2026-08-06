@@ -119,6 +119,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     pendingResults.clear()
                     pendingCompleted = false
                     pendingError = null
+                    // Restore the touch-up editor data (bubbles + translations) for the
+                    // latest finished file — decoded off the main thread, then handed to
+                    // the UI so the reader's pencil button works for fresh results too.
+                    val latestResult = results.lastOrNull()
+                    val editMeta = latestResult?.let { r ->
+                        kotlinx.coroutines.withContext(Dispatchers.IO) {
+                            com.kzkt.app.data.EditMetadataRepository(getApplication()).loadForOutput(r.path)
+                        }
+                    }
                     post {
                         if (logs.isNotEmpty()) translationLog.addAll(logs)
                         if (progress != null) {
@@ -132,6 +141,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 resultPaths.add(result.path)
                             }
                             currentPreviewPath.value = result.path
+                        }
+                        if (editMeta != null && latestResult != null) {
+                            lastResultForEditing.value = TranslationPipeline.PipelineResult(
+                                outputPath = latestResult.path,
+                                originalBitmap = editMeta.originalBitmap,
+                                translations = editMeta.translations,
+                                coordinateMap = editMeta.coordinateMap,
+                            )
                         }
                         if (completed) {
                             translationActive.value = false
@@ -224,9 +241,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         com.kzkt.app.core.TranslationProgressTracker.clearCache()
     }
 
-    /** Remove one entry from the Riwayat tab. */
+    /** Remove one entry from the Riwayat tab (and its persisted edit metadata). */
     fun deleteHistoryEntry(timestamp: Long) {
-        viewModelScope.launch(Dispatchers.IO) { historyRepo.delete(timestamp) }
+        viewModelScope.launch(Dispatchers.IO) {
+            historyEntries.value.find { it.timestamp == timestamp }?.let { entry ->
+                com.kzkt.app.data.EditMetadataRepository(getApplication()).deleteForOutput(entry.outputPath)
+            }
+            historyRepo.delete(timestamp)
+        }
+    }
+
+    /** Re-add a previously deleted entry (Snackbar Undo). */
+    fun restoreHistoryEntry(entry: HistoryEntry) {
+        viewModelScope.launch(Dispatchers.IO) { historyRepo.record(entry) }
+    }
+
+    /** Clear the entire Riwayat tab (and its persisted edit metadata). */
+    fun clearHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            historyEntries.value.forEach { entry ->
+                com.kzkt.app.data.EditMetadataRepository(getApplication()).deleteForOutput(entry.outputPath)
+            }
+            historyRepo.clear()
+        }
+    }
+
+    /** Re-add a batch of entries (Clear-all Undo) in a single write. */
+    fun restoreHistoryEntries(entries: List<HistoryEntry>) {
+        viewModelScope.launch(Dispatchers.IO) { historyRepo.restoreAll(entries) }
     }
 
     /** Persist one finished file (image or assembled PDF) into the Riwayat tab. */
