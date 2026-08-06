@@ -29,7 +29,7 @@ class YoloOnnx(
             Log.d("KZKT/YOLO", "=== INIT START ===")
             Log.d("KZKT/YOLO", "confThreshold=$confThreshold iouThreshold=$iouThreshold")
 
-            val onnxFile = decryptModel()
+            var onnxFile = decryptModel()
             if (onnxFile == null || !onnxFile.exists()) {
                 Log.e("KZKT/YOLO", "decryptModel returned null or file not found")
                 return false
@@ -45,7 +45,22 @@ class YoloOnnx(
             opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
 
             Log.d("KZKT/YOLO", "Creating session from ${onnxFile.absolutePath}...")
-            ortSession = ortEnv!!.createSession(onnxFile.absolutePath, opts)
+            try {
+                ortSession = ortEnv!!.createSession(onnxFile.absolutePath, opts)
+            } catch (e: Exception) {
+                // The cached file can pass the cheap 0x08 header check yet still be
+                // truncated/corrupt (e.g. an interrupted copy), and ONNX Runtime may
+                // surface that as any exception type. Nuke the cache and re-decrypt
+                // from assets once, then retry session creation.
+                Log.w("KZKT/YOLO", "Session creation failed (${e.message}) — deleting cache & re-decrypting once")
+                File(context.cacheDir, "kzkt.onnx").delete()
+                onnxFile = decryptModel()
+                if (onnxFile == null || !onnxFile.exists()) {
+                    Log.e("KZKT/YOLO", "Re-decrypt after cache failure returned no usable file")
+                    return false
+                }
+                ortSession = ortEnv!!.createSession(onnxFile.absolutePath, opts)
+            }
             Log.d("KZKT/YOLO", "Session created OK")
 
             // Log input/output info
@@ -74,15 +89,14 @@ class YoloOnnx(
     private fun decryptModel(): File? {
         val onnxDirect = File(context.cacheDir, "kzkt.onnx")
 
-        // Check cached file validity — delete if corrupt (wrong key = wrong header).
-        // Only the 4-byte header is read here instead of the whole ~100 MB file.
+        // Check cached file validity — delete if corrupt. Only the first byte is
+        // read here instead of the whole ~100 MB file.
         if (onnxDirect.exists()) {
-            val header = readHeader(onnxDirect)
-            if (header == "ONNX") {
+            if (looksLikeOnnx(onnxDirect)) {
                 Log.d("KZKT/YOLO", "Using cached ONNX: ${onnxDirect.length()} bytes (header OK)")
                 return onnxDirect
             } else {
-                Log.w("KZKT/YOLO", "Cached file header is \"$header\", expected ONNX — deleting corrupt cache")
+                Log.w("KZKT/YOLO", "Cached file is not a valid ONNX protobuf — deleting corrupt cache")
                 onnxDirect.delete()
             }
         }
@@ -115,13 +129,13 @@ class YoloOnnx(
                 inputStream.close()
             }
 
-            // Verify it looks like an ONNX file (starts with "ONNX")
-            val header = readHeader(modelFile)
-            Log.d("KZKT/YOLO", "File header: \"$header\" (expected \"ONNX\")")
-            if (header != "ONNX") {
-                Log.w("KZKT/YOLO", "Header mismatch after XOR — key may be wrong")
+            // Verify it looks like an ONNX protobuf (first byte 0x08 = field 1
+            // ir_version). Standard ONNX models never start with the string "ONNX".
+            if (!looksLikeOnnx(modelFile)) {
+                Log.w("KZKT/YOLO", "Decrypted file is not a valid ONNX protobuf — key may be wrong")
                 return null
             }
+            Log.d("KZKT/YOLO", "Decrypted file passes ONNX protobuf check")
 
             modelFile.copyTo(onnxDirect, overwrite = true)
             Log.d("KZKT/YOLO", "Written to ${modelFile.absolutePath}")
@@ -143,20 +157,20 @@ class YoloOnnx(
         }
     }
 
-    private fun readHeader(file: File): String {
-        val bytes = ByteArray(4)
+    /**
+     * True if the file starts with byte 0x08 — the protobuf wire marker for
+     * ONNX ModelProto field 1 (ir_version, varint). Standard ONNX models begin
+     * with this byte; they never begin with the literal string "ONNX".
+     */
+    private fun looksLikeOnnx(file: File): Boolean {
+        val bytes = ByteArray(1)
         return try {
             file.inputStream().use { ins ->
-                var off = 0
-                while (off < 4) {
-                    val r = ins.read(bytes, off, 4 - off)
-                    if (r <= 0) break
-                    off += r
-                }
+                ins.read(bytes) > 0
             }
-            bytes.map { it.toInt().toChar() }.joinToString("")
+            (bytes[0].toInt() and 0xFF) == 0x08
         } catch (_: Exception) {
-            ""
+            false
         }
     }
 
