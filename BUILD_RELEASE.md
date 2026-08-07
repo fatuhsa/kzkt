@@ -134,6 +134,39 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 ---
 
+## 5. Build with Docker (no local Android SDK required)
+
+The self-contained `Dockerfile` (JDK 17 + Android SDK) builds both variants inside
+a container — nothing but Docker is needed on the machine. First build downloads
+the image layers; later builds reuse them. The `kzkt-gradle` volume keeps the
+Gradle dependency cache across runs.
+
+```bash
+# 1) Build the image (once, ~5–10 min first time)
+docker build -t kzkt-builder .
+
+# 2) Build debug + release and extract the APKs
+CID=$(docker run -d -v kzkt-gradle:/root/.gradle \
+      -v "$HOME/.android:/root/.android" \
+      kzkt-builder ./gradlew assembleDebug assembleRelease)
+docker wait "$CID"
+docker cp "$CID:/app/app/build/outputs/apk/debug/app-debug.apk" .
+docker cp "$CID:/app/app/build/outputs/apk/release/app-release.apk" .
+docker rm "$CID"
+```
+
+- The `-v "$HOME/.android:/root/.android"` mount lets the release build fall back to
+  your local **debug keystore** (quick installs). For Play Store publishing, instead
+  mount your keystore read-only:
+  `-v "$PWD/keystore.properties:/app/keystore.properties:ro" -v "$PWD/kzkt-release.jks:/app/kzkt-release.jks:ro"`.
+- Skip the Gradle-cache volume if you want a completely clean build every time
+  (slower: dependencies are re-downloaded).
+
+> Verified: `assembleDebug` + `assembleRelease` both succeed in the container
+> (v2-signed release APK; YOLO model + OpenCV `.so` embedded correctly).
+
+---
+
 ## Notes
 
 | Topic | Details |

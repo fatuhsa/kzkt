@@ -1,0 +1,46 @@
+# ── VCS ─────────────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── Build outputs & local config ────────────────────────────────
+.gradle
+**/build
+local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+output-metadata.json
+.cxx
+.externalNativeBuild
+
+# ── Keystore & secrets — JANGAN PERNAH masuk image ───────────────
+keystore.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+*.mobileprovision
+
+# ── IDE / editor / lokal ─────────────────────────────────────────
+.idea
+*.iml
+.vscode
+.DS_Store
+Thumbs.db
+*.swp
+*~
+*.hprof
+venv
+.capture
+captures
+.kotlin
+.claude
+IDEAS.md
+
+# ── Bagian OpenCV yang tidak dipakai build ───────────────────────
+opencv/native/bin
+opencv/java/javadoc
