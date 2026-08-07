@@ -1,12 +1,17 @@
-# KZKT
+<div align="center">
+  <img src="docs/assets/logo.png" width="100" alt="KZKT Logo" />
+  <h1>KZKT</h1>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge&logo=open-source-initiative&logoColor=white)](LICENSE)
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.0+-7F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
-[![Android SDK](https://img.shields.io/badge/Android-API%2026%2B-3DDC84.svg?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com)
-[![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-v1.21-0078D4.svg?style=for-the-badge&logo=onnx&logoColor=white)](https://onnxruntime.ai/)
-[![OpenCV](https://img.shields.io/badge/OpenCV-v4.10.0-5C3EE8.svg?style=for-the-badge&logo=opencv&logoColor=white)](https://opencv.org/)
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge&logo=open-source-initiative&logoColor=white" alt="License: MIT"></a>
+    <a href="https://kotlinlang.org/"><img src="https://img.shields.io/badge/Kotlin-2.0+-7F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin"></a>
+    <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-API%2026%2B-3DDC84.svg?style=for-the-badge&logo=android&logoColor=white" alt="Android SDK"></a>
+    <a href="https://onnxruntime.ai/"><img src="https://img.shields.io/badge/ONNX_Runtime-v1.21-0078D4.svg?style=for-the-badge&logo=onnx&logoColor=white" alt="ONNX Runtime"></a>
+    <a href="https://opencv.org/"><img src="https://img.shields.io/badge/OpenCV-v4.10.0-5C3EE8.svg?style=for-the-badge&logo=opencv&logoColor=white" alt="OpenCV"></a>
+  </p>
 
-<p align="center"><a href="README.md">English</a> · <b>Bahasa Indonesia</b></p>
+  <p><a href="README.md">English</a> · <b>Bahasa Indonesia</b></p>
+</div>
 
 KZKT adalah aplikasi Android untuk menerjemahkan manga dan komik secara otomatis. Balon kata di tiap halaman dideteksi pakai AI langsung di perangkat (on-device), teksnya dikirim ke LLM pilihanmu, lalu hasil terjemahannya ditulis kembali ke halaman — semua dikerjakan lokal, tanpa butuh akses root.
 
