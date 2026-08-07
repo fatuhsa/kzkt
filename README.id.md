@@ -14,15 +14,12 @@ KZKT adalah aplikasi Android native untuk terjemahan manga dan komik secara otom
 
 ## Keunggulan
 
-- **Layanan terjemahan latar belakang** - menjalankan pipeline terjemahan di dalam Foreground Service dengan notifikasi progres dinamis di status bar, sehingga tugas tetap berjalan meski aplikasi ditutup.
-- **Cache halaman untuk retry cepat** - menyimpan koordinat YOLO dan bitmap crop balon kata setelah deteksi awal, sehingga pekerjaan yang terhenti/dibatalkan bisa dilanjutkan seketika tanpa harus deteksi ulang dari nol.
-- **Deteksi balon kata on-device** - YOLO via Microsoft ONNX Runtime Android, dengan kaskade 3 tahap untuk deteksi balon kata, SFX, dan kotak yang saling tumpang tindih secara akurat.
-- **Vision LLM multi-provider** - Google Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, plus endpoint kustom/lokal apa pun (Ollama, LM Studio, LocalAI, vLLM) dengan deteksi model otomatis.
-- **Mosaic batching hemat biaya** - balon kata dipotong dan dikemas menjadi mozaik RTL vertikal untuk memangkas permintaan API hingga 80%.
-- **PDF masuk, PDF keluar** - merender halaman PDF menjadi gambar dan menyusun ulang halaman hasil terjemahan kembali ke PDF hanya dengan `PdfRenderer` dan `PdfDocument` bawaan Android.
-- **Parsing JSON tangguh** - toleran terhadap key duplikat dan keluaran LLM yang tidak rapi, sehingga satu respons buruk tidak pernah membatalkan satu batch.
-- **Rendering teks adaptif** - masking balon otomatis dengan bentuk bulat/oval, auto-scaling font, dan word wrapping via `Canvas` dan `StaticLayout`.
-- **Kompatibilitas scoped storage** - menulis bitmap sementara dan hasil ke cache privat aplikasi dulu sebelum dipublikasikan via MediaStore, mencegah error izin EACCES di Android 10+.
+- **Banyak format input** - gambar tunggal, folder utuh, multi-share gambar, arsip (ZIP / CBZ / EPUB), dan file PDF.
+- **Terjemahan ke 14 bahasa** - Inggris, Indonesia, Jepang, Korea, Mandarin, Spanyol, Prancis, Jerman, dan lainnya.
+- **LLM multi-provider** - Google Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, atau endpoint lokal apa pun yang kompatibel OpenAI (Ollama, LM Studio, LocalAI, vLLM).
+- **Deteksi on-device** - YOLO (ONNX Runtime) menemukan balon kata secara lokal, dengan OCR opsional via ML Kit untuk model non-vision.
+- **PDF masuk, PDF keluar** - render halaman PDF, terjemahkan, lalu susun ulang halaman hasil terjemahan kembali ke PDF.
+- **Terjemahan latar belakang** - tetap berjalan meski aplikasi ditutup, lalu hasil disimpan ke `/Download/KZKT/`.
 
 ---
 

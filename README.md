@@ -14,15 +14,12 @@ KZKT is a native Android application for automatic manga and comic translation. 
 
 ## Highlights
 
-- **Background translation service** - runs translation pipeline inside a Foreground Service with dynamic status bar progress notifications, letting tasks continue even when the app is closed.
-- **Fast retry page cache** - stashes YOLO coordinates and bubble crop bitmaps after initial detection to let user resume interrupted/cancelled jobs instantly without repeating detection from scratch.
-- **On-device bubble detection** - YOLO via Microsoft ONNX Runtime Android, with a 3-stage cascade for accurate detection of speech bubbles, SFX, and overlapping boxes.
-- **Multi-provider vision LLM** - Google Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, plus any custom or local endpoint (Ollama, LM Studio, LocalAI, vLLM) with automatic model detection.
-- **Cost-efficient mosaic batching** - speech bubbles are cropped and packed into vertical RTL mosaics to cut API requests by up to 80%.
-- **PDF in, PDF out** - render PDF pages to images and reassemble translated pages back into PDF using only the built-in Android `PdfRenderer` and `PdfDocument`.
-- **Resilient JSON parsing** - tolerates duplicate keys and malformed LLM output so a single bad response never aborts a batch.
-- **Adaptive text rendering** - automatic bubble masking with rounded or oval shapes, font auto-scaling, and word wrapping via `Canvas` and `StaticLayout`.
-- **Scoped storage compatibility** - writes intermediate bitmaps and outputs to private app cache first before publishing them via MediaStore, preventing EACCES permissions errors on Android 10+.
+- **Wide input support** - single images, whole folders, multi-image share, archives (ZIP / CBZ / EPUB), and PDF files.
+- **Translate to 14 languages** - English, Indonesian, Japanese, Korean, Mandarin, Spanish, French, German, and more.
+- **Multi-provider LLM** - Google Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, or any OpenAI-compatible local endpoint (Ollama, LM Studio, LocalAI, vLLM).
+- **On-device detection** - YOLO (ONNX Runtime) finds speech bubbles locally, with optional ML Kit OCR for non-vision models.
+- **PDF in, PDF out** - render PDF pages, translate, and reassemble the translated pages back into a PDF.
+- **Background translation** - keeps translating even when the app is closed, then saves results to `/Download/KZKT/`.
 
 ---
 
