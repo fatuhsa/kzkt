@@ -19,6 +19,9 @@ output-metadata.json
 .cxx/
 .externalNativeBuild/
 
+# OpenCV test binaries (tidak dipakai build — hanya opencv/native/libs/*.so yang dipakai)
+opencv/native/bin/
+
 # ── Keystore & kredensial signing — JANGAN PERNAH di-commit ──────
 keystore.properties
 *.jks
