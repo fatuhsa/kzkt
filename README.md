@@ -6,6 +6,8 @@
 [![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-v1.21-0078D4.svg?style=for-the-badge&logo=onnx&logoColor=white)](https://onnxruntime.ai/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-v4.10.0-5C3EE8.svg?style=for-the-badge&logo=opencv&logoColor=white)](https://opencv.org/)
 
+<p align="center"><b>English</b> · <a href="README.id.md">Bahasa Indonesia</a></p>
+
 KZKT is a native Android application for automatic manga and comic translation. It detects speech bubbles on-page with on-device AI, sends the text to the vision LLM of your choice, and renders the translated text back into the page — all locally, with no root access required.
 
 ---
@@ -88,9 +90,8 @@ KZKT is a native Android application for automatic manga and comic translation. 
 
 ## Build the APK
 
-> This project uses Git LFS for the YOLO model file (`kzkt.dat`, ~100 MB).
-> Make sure [Git LFS](https://git-lfs.github.com) is installed before cloning.
-> If you already cloned without it, run `git lfs pull` afterwards to fetch the model.
+> The YOLO model file (`kzkt.dat`, ~100 MB) is committed directly in this repository,
+> so cloning takes a bit longer to download the large file.
 
 1. Clone the repository:
    ```bash
