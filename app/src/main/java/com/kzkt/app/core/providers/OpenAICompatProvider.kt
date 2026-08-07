@@ -98,29 +98,31 @@ abstract class OpenAICompatProvider(
     protected open suspend fun executeRequest(request: Request): String? {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val response = sharedClient.newCall(request).execute()
-                val body = response.body?.string() ?: ""
+                // use{} closes the response so the pooled connection is released promptly.
+                sharedClient.newCall(request).execute().use { response ->
+                    val body = response.body?.string() ?: ""
 
-                if (response.code in listOf(401, 402)) throw ValueError("API_KEY_ERROR")
-                if (!response.isSuccessful) {
-                    val detail = try {
-                        JsonParser.parseString(body).asJsonObject
-                            .getAsJsonObject("error")
-                            .get("message")?.asString ?: body.take(200)
-                    } catch (_: Exception) {
-                        body.take(200)
+                    if (response.code in listOf(401, 402)) throw ValueError("API_KEY_ERROR")
+                    if (!response.isSuccessful) {
+                        val detail = try {
+                            JsonParser.parseString(body).asJsonObject
+                                .getAsJsonObject("error")
+                                .get("message")?.asString ?: body.take(200)
+                        } catch (_: Exception) {
+                            body.take(200)
+                        }
+                        throw RuntimeException("${providerName} API error ${response.code}: $detail")
                     }
-                    throw RuntimeException("${providerName} API error ${response.code}: $detail")
-                }
 
-                val json = JsonParser.parseString(body).asJsonObject
-                val choices = json.getAsJsonArray("choices")
-                if (choices != null && choices.size() > 0) {
-                    return@withContext choices[0].asJsonObject
-                        .getAsJsonObject("message")
-                        .get("content")?.asString
+                    val json = JsonParser.parseString(body).asJsonObject
+                    val choices = json.getAsJsonArray("choices")
+                    if (choices != null && choices.size() > 0) {
+                        return@withContext choices[0].asJsonObject
+                            .getAsJsonObject("message")
+                            .get("content")?.asString
+                    }
+                    body
                 }
-                body
             } catch (e: java.io.IOException) {
                 throw RuntimeException("${providerName} network error: ${e.message}")
             }

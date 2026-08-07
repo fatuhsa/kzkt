@@ -77,21 +77,22 @@ class CustomProvider(
 
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val response = client.newCall(request).execute()
-                val body = response.body?.string() ?: ""
+                // use{} closes the response so the pooled connection is released promptly.
+                client.newCall(request).execute().use { response ->
+                    val body = response.body?.string() ?: ""
 
-                if (response.code in listOf(401, 402)) throw ValueError("API_KEY_ERROR")
-                if (!response.isSuccessful) {
-                    throw RuntimeException("Custom API error ${response.code}: ${body.take(200)}")
-                }
+                    if (response.code in listOf(401, 402)) throw ValueError("API_KEY_ERROR")
+                    if (!response.isSuccessful) {
+                        throw RuntimeException("Custom API error ${response.code}: ${body.take(200)}")
+                    }
 
-                val lenientReader = JsonReader(StringReader(body)).apply { isLenient = true }
-                val json = JsonParser.parseReader(lenientReader)
+                    val lenientReader = JsonReader(StringReader(body)).apply { isLenient = true }
+                    val json = JsonParser.parseReader(lenientReader)
 
-                if (!json.isJsonObject) {
-                    return@withContext body
-                }
-                val jsonObj = json.asJsonObject
+                    if (!json.isJsonObject) {
+                        return@withContext body
+                    }
+                    val jsonObj = json.asJsonObject
 
                 // 1. Standard OpenAI format: choices[0].message.content
                 if (jsonObj.has("choices") && jsonObj.get("choices").isJsonArray) {
@@ -127,6 +128,7 @@ class CustomProvider(
                 }
 
                 body
+                }
             } catch (e: java.io.IOException) {
                 throw RuntimeException("Custom network error: ${e.message}")
             }
@@ -155,19 +157,20 @@ class CustomProvider(
 
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val response = client.newCall(request).execute()
-                val body = response.body?.string() ?: ""
+                // use{} closes the response so the pooled connection is released promptly.
+                client.newCall(request).execute().use { response ->
+                    val body = response.body?.string() ?: ""
 
-                if (response.code in listOf(401, 402)) throw ValueError("API_KEY_ERROR")
-                if (!response.isSuccessful) {
-                    throw RuntimeException("Custom API error ${response.code}: ${body.take(200)}")
-                }
+                    if (response.code in listOf(401, 402)) throw ValueError("API_KEY_ERROR")
+                    if (!response.isSuccessful) {
+                        throw RuntimeException("Custom API error ${response.code}: ${body.take(200)}")
+                    }
 
-                val lenientReader = JsonReader(StringReader(body)).apply { isLenient = true }
-                val json = JsonParser.parseReader(lenientReader)
+                    val lenientReader = JsonReader(StringReader(body)).apply { isLenient = true }
+                    val json = JsonParser.parseReader(lenientReader)
 
-                if (!json.isJsonObject) return@withContext body
-                val jsonObj = json.asJsonObject
+                    if (!json.isJsonObject) return@withContext body
+                    val jsonObj = json.asJsonObject
 
                 if (jsonObj.has("choices") && jsonObj.getAsJsonArray("choices").size() > 0) {
                     val choice = jsonObj.getAsJsonArray("choices")[0].asJsonObject
@@ -177,6 +180,7 @@ class CustomProvider(
                     }
                 }
                 body
+                }
             } catch (e: java.io.IOException) {
                 throw RuntimeException("Custom network error: ${e.message}")
             }

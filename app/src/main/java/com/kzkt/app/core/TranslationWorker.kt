@@ -3,15 +3,19 @@ package com.kzkt.app.core
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.Environment
-import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import androidx.core.app.ServiceCompat
+import androidx.work.CoroutineWorker
+import androidx.work.ForegroundInfo
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.ExistingWorkPolicy
 import com.kzkt.app.MainActivity
 import com.kzkt.app.KzktApplication
 import com.kzkt.app.core.providers.*
@@ -23,86 +27,64 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import java.io.File
 
-class TranslationService : Service() {
-
-    private val serviceJob = SupervisorJob()
-    private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
-    private var translationJob: Job? = null
+class TranslationWorker(
+    private val context: Context,
+    params: WorkerParameters
+) : CoroutineWorker(context, params) {
 
     private lateinit var notificationManager: NotificationManager
     private lateinit var builder: NotificationCompat.Builder
 
     companion object {
-        const val CHANNEL_ID = "translation_service_channel"
+        const val CHANNEL_ID = "translation_worker_channel"
         const val NOTIFICATION_ID = 1001
 
-        const val ACTION_START = "com.kzkt.app.action.START"
-        const val ACTION_CANCEL = "com.kzkt.app.action.CANCEL"
         const val EXTRA_FILES = "com.kzkt.app.extra.FILES"
         const val EXTRA_RETRY = "com.kzkt.app.extra.RETRY"
 
-        /**
-         * @param retry when true, the last cached detection results are reused instead
-         * of clearing them (used by the fast-retry resume button).
-         */
         fun startTranslation(context: Context, files: List<String>, retry: Boolean = false) {
-            val intent = Intent(context, TranslationService::class.java).apply {
-                action = ACTION_START
-                putStringArrayListExtra(EXTRA_FILES, ArrayList(files))
-                putExtra(EXTRA_RETRY, retry)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            val inputData = workDataOf(
+                EXTRA_FILES to files.toTypedArray(),
+                EXTRA_RETRY to retry
+            )
+            val workRequest = OneTimeWorkRequestBuilder<TranslationWorker>()
+                .setInputData(inputData)
+                .build()
+            
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                "TranslationWorker",
+                ExistingWorkPolicy.REPLACE,
+                workRequest
+            )
         }
 
         fun cancelTranslation(context: Context) {
-            val intent = Intent(context, TranslationService::class.java).apply {
-                action = ACTION_CANCEL
-            }
-            context.startService(intent)
+            WorkManager.getInstance(context).cancelUniqueWork("TranslationWorker")
+            TranslationProgressTracker.isCancelled = true
         }
     }
-
-    override fun onCreate() {
-        super.onCreate()
-        notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    override suspend fun doWork(): Result {
+        notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
+
+        val filesArray = inputData.getStringArray(EXTRA_FILES)
+        if (filesArray.isNullOrEmpty()) {
+            return Result.failure()
+        }
+        val files = filesArray.toList()
+        val retry = inputData.getBoolean(EXTRA_RETRY, false)
+
+        return startTask(files, retry)
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action
-        if (action == ACTION_CANCEL) {
-            cancelTask()
-            return START_NOT_STICKY
-        }
-
-        if (action == ACTION_START) {
-            val files = intent.getStringArrayListExtra(EXTRA_FILES)
-            if (files.isNullOrEmpty()) {
-                stopSelf()
-                return START_NOT_STICKY
-            }
-            startTask(files, intent.getBooleanExtra(EXTRA_RETRY, false))
-        }
-
-        return START_STICKY
-    }
-
-    private fun startTask(files: List<String>, retry: Boolean = false) {
+    private suspend fun startTask(files: List<String>, retry: Boolean = false): Result {
         TranslationProgressTracker.isCancelled = false
-        // A fresh job must clear any stale retry cache; a retry job consumes it instead.
         if (!retry) TranslationProgressTracker.clearCache()
-        setupNotification()
+        
+        val notification = setupNotification()
+        setForeground(ForegroundInfo(NOTIFICATION_ID, notification))
 
-        val oldJob = translationJob
-        translationJob = serviceScope.launch {
-            oldJob?.cancelAndJoin()
-            try {
+        return try {
                 // Initialize model if VM hasn't initialized it yet
                 val yoloInstance = KzktApplication.yolo ?: run {
                     emitLog("[System] Loading YOLO model...")
@@ -124,7 +106,7 @@ class TranslationService : Service() {
                 val primaryProvider = createProvider(s)
                 if (primaryProvider == null) {
                     emitError("LlmProvider meta not found or provider creation failed.")
-                    return@launch
+                    return Result.failure()
                 }
 
                 val params = Config.TweakParams(
@@ -158,10 +140,10 @@ class TranslationService : Service() {
                     fallbackProviders = fallbackProviders,
                     context = applicationContext,
                     onProgress = { msg ->
-                        serviceScope.launch { emitLog(msg) }
+                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch { emitLog(msg) }
                     },
                     onStepProgress = { percent, msg ->
-                        serviceScope.launch {
+                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
                             emitProgress(percent, 100)
                             updateNotificationProgress(msg, percent, 100)
                         }
@@ -169,7 +151,7 @@ class TranslationService : Service() {
                     isCancelled = { TranslationProgressTracker.isCancelled }
                 )
 
-                val cacheOutputFolder = File(cacheDir, "translated_outputs")
+                val cacheOutputFolder = java.io.File(applicationContext.cacheDir, "translated_outputs")
                 cacheOutputFolder.mkdirs()
                 val outputDir = cacheOutputFolder.absolutePath
 
@@ -198,7 +180,7 @@ class TranslationService : Service() {
                         emitLog("[${idx + 1}/${files.size}] Opening PDF $fileName...")
                         updateNotificationProgress("Processing $fileName...", completed, totalSteps)
 
-                        val tempDir = File(cacheDir, "pdf_input")
+                        val tempDir = java.io.File(applicationContext.cacheDir, "pdf_input")
                         val pages = PdfImporter.extractPdfToImages(file, tempDir)
                         if (pages.isEmpty()) {
                             emitLog("[!] Could not read PDF: $fileName")
@@ -232,10 +214,10 @@ class TranslationService : Service() {
                                 cacheRepo = cacheRepo,
                                 fallbackProviders = fallbackProviders,
                                 context = applicationContext,
-                                onProgress = { msg -> serviceScope.launch { emitLog(msg) } },
+                                onProgress = { msg -> kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch { emitLog(msg) } },
                                 onStepProgress = { groupPercent, msg ->
                                     val overallPercent = ((groupIdx * 100f + groupPercent) / pageGroups.size).toInt().coerceIn(0, 100)
-                                    serviceScope.launch {
+                                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
                                         emitProgress(completed, totalSteps)
                                         updateNotificationProgress("[$fileName - Group ${groupIdx + 1}/${pageGroups.size}] $msg", completed, totalSteps)
                                     }
@@ -260,7 +242,7 @@ class TranslationService : Service() {
                         emitProgress(completed, totalSteps)
                         updateNotificationProgress("Reassembling PDF $fileName...", completed, totalSteps)
 
-                        val outputPdf = File(outputDir, "translated_$fileName")
+                        val outputPdf = java.io.File(outputDir, "translated_$fileName")
                         try {
                             PdfExporter.createPdfFromImages(translatedList, outputPdf)
                             if (outputPdf.exists()) {
@@ -268,21 +250,6 @@ class TranslationService : Service() {
                                 if (publicPath != null) {
                                     emitLog("[+] PDF Reassembled and saved to public folder: $publicPath")
                                     emitResultPath(publicPath)
-                                    try {
-                                        val historyRepo = com.kzkt.app.data.HistoryRepository(applicationContext)
-                                        historyRepo.record(
-                                            com.kzkt.app.data.HistoryEntry(
-                                                timestamp = System.currentTimeMillis(),
-                                                fileName = fileName,
-                                                outputPath = publicPath,
-                                                pageCount = pages.size,
-                                                provider = s.llmProvider,
-                                                targetLanguage = s.targetLanguage
-                                            )
-                                        )
-                                    } catch (e: Exception) {
-                                        emitLog("[!] Failed to record PDF history: ${e.message}")
-                                    }
                                 } else {
                                     emitLog("[!] Failed to save PDF to public downloads folder.")
                                 }
@@ -330,7 +297,7 @@ class TranslationService : Service() {
                             } else {
                                 emitLog("[!] Failed to save image to public folder.")
                             }
-                            File(result.outputPath).delete()
+                            java.io.File(result.outputPath).delete()
                         } else {
                             emitLog("[!] Failed translation for $fileName")
                         }
@@ -343,6 +310,7 @@ class TranslationService : Service() {
                 if (TranslationProgressTracker.isCancelled) {
                     emitLog("[Cancelled] Translation stopped by user.")
                     showFinalNotification("Translation Cancelled", "The operation was stopped by the user.")
+                    Result.failure()
                 } else {
                     // Job finished: the retry cache is no longer needed (all cached bitmaps
                     // were either rendered or skipped).
@@ -350,32 +318,21 @@ class TranslationService : Service() {
                     emitLog("=== Done! All files processed. ===")
                     showFinalNotification("Translation Completed", "All files translated successfully!")
                     TranslationProgressTracker.progressFlow.emit(TranslationProgressTracker.ProgressEvent.Completed)
+                    Result.success()
                 }
 
             } catch (e: Throwable) {
-                if (e is CancellationException || TranslationProgressTracker.isCancelled) {
+                if (e is kotlinx.coroutines.CancellationException || TranslationProgressTracker.isCancelled) {
                     emitLog("[Cancelled] Translation stopped by user.")
                     showFinalNotification("Translation Cancelled", "The operation was stopped by the user.")
+                    Result.failure()
                 } else {
                     val msg = e.message ?: "Unknown error"
                     emitError("Execution error: $msg")
                     showFinalNotification("Translation Failed", "An error occurred: $msg")
+                    Result.failure()
                 }
-            } finally {
-                ServiceCompat.stopForeground(this@TranslationService, ServiceCompat.STOP_FOREGROUND_REMOVE)
-                stopSelf()
             }
-        }
-    }
-
-    private fun cancelTask() {
-        TranslationProgressTracker.isCancelled = true
-        translationJob?.cancel()
-        serviceScope.launch {
-            emitLog("[System] Cancelling active background task...")
-        }
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        stopSelf()
     }
 
     private suspend fun emitLog(msg: String) {
@@ -407,28 +364,20 @@ class TranslationService : Service() {
         }
     }
 
-    private fun setupNotification() {
-        val openIntent = Intent(this, MainActivity::class.java).apply {
+    private fun setupNotification(): android.app.Notification {
+        val openIntent = Intent(applicationContext, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val openPendingIntent = PendingIntent.getActivity(
-            this,
+            applicationContext,
             0,
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val cancelIntent = Intent(this, TranslationService::class.java).apply {
-            action = ACTION_CANCEL
-        }
-        val cancelPendingIntent = PendingIntent.getService(
-            this,
-            0,
-            cancelIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val cancelPendingIntent = WorkManager.getInstance(applicationContext).createCancelPendingIntent(id)
 
-        builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("Translating komik...")
             .setContentText("Initializing...")
@@ -437,16 +386,7 @@ class TranslationService : Service() {
             .setContentIntent(openPendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPendingIntent)
 
-        val notification = builder.build()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
+        return builder.build()
     }
 
     private fun updateNotificationProgress(msg: String, done: Int, total: Int) {
@@ -460,17 +400,17 @@ class TranslationService : Service() {
     }
 
     private fun showFinalNotification(title: String, text: String) {
-        val openIntent = Intent(this, MainActivity::class.java).apply {
+        val openIntent = Intent(applicationContext, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val openPendingIntent = PendingIntent.getActivity(
-            this,
+            applicationContext,
             0,
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val doneNotification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val doneNotification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle(title)
             .setContentText(text)
@@ -526,8 +466,4 @@ class TranslationService : Service() {
         return fallbacks
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        serviceJob.cancel()
-    }
 }

@@ -257,6 +257,7 @@ class SettingsRepository(private val context: Context) {
             prefs.remove(KEY_CUSTOM_FONT)
             prefs.remove(KEY_USE_LOCAL_OCR)
             prefs.remove(KEY_LOCAL_OCR_SCRIPT)
+            prefs.remove(KEY_USE_IMAGE_UPSCALER)
         }
     }
 }

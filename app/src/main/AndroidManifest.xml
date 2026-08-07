@@ -53,9 +53,5 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".core.TranslationService"
-            android:foregroundServiceType="dataSync"
-            android:exported="false" />
     </application>
 </manifest>

@@ -28,7 +28,7 @@ class TextRenderer(private val context: Context) {
         return NON_LATIN_PATTERN.matcher(text).find()
     }
 
-    private fun getTypeface(text: String, size: Int, language: String? = null, customFontPath: String = "", fontPreset: String = "Default"): Typeface {
+    private fun getTypeface(text: String, customFontPath: String = "", fontPreset: String = "Default"): Typeface {
         if (fontPreset == "Serif") return Typeface.SERIF
         if (fontPreset == "Monospace") return Typeface.MONOSPACE
         if (fontPreset == "Sans-Serif") return Typeface.SANS_SERIF
@@ -201,7 +201,7 @@ class TextRenderer(private val context: Context) {
         while (low <= high) {
             val fSize = (low + high) / 2
             val paint = Paint().apply {
-                val baseTypeface = getTypeface(displayText, fSize, targetLanguage, customFontPath, fontPreset)
+                val baseTypeface = getTypeface(displayText, customFontPath, fontPreset)
                 val style = if (isBold && isItalic) Typeface.BOLD_ITALIC else if (isBold) Typeface.BOLD else if (isItalic) Typeface.ITALIC else Typeface.NORMAL
                 typeface = Typeface.create(baseTypeface, style)
                 textSize = fSize.toFloat()
@@ -232,7 +232,7 @@ class TextRenderer(private val context: Context) {
         // Final render calculation
         bestFontSize = maxOf(minFontSize, (bestFontSize * settings.fontScale * fontScale).toInt())
         val finalPaint = Paint().apply {
-            val baseTypeface = getTypeface(displayText, bestFontSize, targetLanguage, customFontPath, fontPreset)
+            val baseTypeface = getTypeface(displayText, customFontPath, fontPreset)
             val style = if (isBold && isItalic) Typeface.BOLD_ITALIC else if (isBold) Typeface.BOLD else if (isItalic) Typeface.ITALIC else Typeface.NORMAL
             typeface = Typeface.create(baseTypeface, style)
             textSize = bestFontSize.toFloat()
@@ -369,7 +369,7 @@ class TextRenderer(private val context: Context) {
 
         bestFontSize = maxOf(minFontSize, (bestFontSize * settings.fontScale * fontScale).toInt())
         val paint = Paint().apply {
-            val baseTypeface = getTypeface(cleanText, bestFontSize, customFontPath = customFontPath, fontPreset = fontPreset)
+            val baseTypeface = getTypeface(cleanText, customFontPath = customFontPath, fontPreset = fontPreset)
             val style = if (isBold && isItalic) Typeface.BOLD_ITALIC else if (isBold) Typeface.BOLD else if (isItalic) Typeface.ITALIC else Typeface.NORMAL
             typeface = Typeface.create(baseTypeface, style)
             textSize = bestFontSize.toFloat()

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Gradle wrapper for cypy (Android)
+# Gradle wrapper for KZKT (Android)
 APP_NAME="Gradle"
 APP_BASE_NAME=$(basename "$0")
 

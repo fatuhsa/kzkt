@@ -101,19 +101,19 @@ class TranslationCacheRepository(private val context: Context) {
     }
 
     @Synchronized
-    fun getTranslation(cropBitmap: Bitmap, targetLanguage: String): String? {
+    fun getTranslation(cropBitmap: Bitmap, targetLanguage: String, providerName: String, modelName: String): String? {
         val hash = computeHash(cropBitmap)
         if (hash.isBlank()) return null
-        val key = "${hash}_${targetLanguage.lowercase()}"
+        val key = "${hash}_${targetLanguage.lowercase()}_${providerName}_${modelName}"
         return memoryCache[key]
     }
 
     @Synchronized
-    fun saveTranslation(cropBitmap: Bitmap, targetLanguage: String, translatedText: String) {
+    fun saveTranslation(cropBitmap: Bitmap, targetLanguage: String, translatedText: String, providerName: String, modelName: String) {
         if (translatedText.isBlank() || translatedText.uppercase() == "SKIP") return
         val hash = computeHash(cropBitmap)
         if (hash.isBlank()) return
-        val key = "${hash}_${targetLanguage.lowercase()}"
+        val key = "${hash}_${targetLanguage.lowercase()}_${providerName}_${modelName}"
         memoryCache[key] = translatedText
         dirty = true
         if (++pendingWrites >= AUTO_FLUSH_EVERY) saveCache()

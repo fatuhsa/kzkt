@@ -218,7 +218,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         translationTotal.value = selectedFiles.size
         translationDone.value = 0
 
-        com.kzkt.app.core.TranslationService.startTranslation(getApplication(), selectedFiles.toList())
+        com.kzkt.app.core.TranslationWorker.startTranslation(getApplication(), selectedFiles.toList())
     }
 
     fun retryTranslation() {
@@ -226,11 +226,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         translationActive.value = true
         translationLog.add("[System] Retrying from last cached step...")
-        com.kzkt.app.core.TranslationService.startTranslation(getApplication(), selectedFiles.toList(), retry = true)
+        com.kzkt.app.core.TranslationWorker.startTranslation(getApplication(), selectedFiles.toList(), retry = true)
     }
 
     fun cancelTranslation() {
-        com.kzkt.app.core.TranslationService.cancelTranslation(getApplication())
+        com.kzkt.app.core.TranslationWorker.cancelTranslation(getApplication())
         translationActive.value = false
         canRetry.value = com.kzkt.app.core.TranslationProgressTracker.cachedPageData != null
     }
@@ -270,20 +270,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Re-add a batch of entries (Clear-all Undo) in a single write. */
     fun restoreHistoryEntries(entries: List<HistoryEntry>) {
         viewModelScope.launch(Dispatchers.IO) { historyRepo.restoreAll(entries) }
-    }
-
-    /** Persist one finished file (image or assembled PDF) into the Riwayat tab. */
-    private fun recordHistory(fileName: String, outputPath: String, pageCount: Int) {
-        val s = settings.value
-        val entry = HistoryEntry(
-            timestamp = System.currentTimeMillis(),
-            fileName = fileName,
-            outputPath = outputPath,
-            pageCount = pageCount,
-            provider = s.llmProvider,
-            targetLanguage = s.targetLanguage,
-        )
-        viewModelScope.launch(Dispatchers.IO) { historyRepo.record(entry) }
     }
 
     override fun onCleared() {
@@ -329,17 +315,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         requestBuilder.header("Authorization", "Bearer $apiKey")
                     }
                 }
-                val response = httpClient.newCall(requestBuilder.build()).execute()
-                val body = response.body?.string() ?: ""
-
-                val json = JsonParser.parseString(body).asJsonObject
                 val models = mutableListOf<String>()
-                val data = json.getAsJsonArray("data") ?: json.getAsJsonArray("models")
-                if (data != null) {
-                    for (elem in data) {
-                        val obj = elem.asJsonObject
-                        val id = obj.get("id")?.asString ?: obj.get("name")?.asString?.removePrefix("models/")
-                        if (id != null) models.add(id)
+                // use{} closes the response so the pooled connection is released promptly.
+                httpClient.newCall(requestBuilder.build()).execute().use { response ->
+                    val body = response.body?.string() ?: ""
+
+                    val json = JsonParser.parseString(body).asJsonObject
+                    val data = json.getAsJsonArray("data") ?: json.getAsJsonArray("models")
+                    if (data != null) {
+                        for (elem in data) {
+                            val obj = elem.asJsonObject
+                            val id = obj.get("id")?.asString ?: obj.get("name")?.asString?.removePrefix("models/")
+                            if (id != null) models.add(id)
+                        }
                     }
                 }
 

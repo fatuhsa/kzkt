@@ -113,6 +113,13 @@ android {
         buildConfig = true
     }
 
+    // The OpenCV 4.x Java sources trip Android's BidirectionalTextDetector lint
+    // (NoSuchMethodError during lint analysis), which otherwise breaks `lint` for
+    // the whole project. This module is vendored upstream code — skip that check.
+    lint {
+        disable += "BidiSpoofing"
+    }
+
     sourceSets {
         main {
             jniLibs.srcDirs = ['native/libs']

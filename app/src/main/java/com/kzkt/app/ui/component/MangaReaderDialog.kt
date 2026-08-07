@@ -7,7 +7,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.Image
@@ -15,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,7 +34,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -65,6 +65,27 @@ private fun decodeSampledBitmap(path: String, maxDim: Int = 2048): Bitmap? {
     }
 }
 
+private fun loadReaderBitmap(context: android.content.Context, path: String, isSideBySide: Boolean): Bitmap? {
+    val translated = decodeSampledBitmap(path) ?: return null
+    if (!isSideBySide) return translated
+
+    val metaDir = java.io.File(context.filesDir, "edit_meta")
+    val digest = java.security.MessageDigest.getInstance("SHA-256").digest(java.io.File(path).name.toByteArray())
+    val key = digest.joinToString("") { "%02x".format(it.toInt() and 0xff) }.take(16)
+    val origFile = java.io.File(metaDir, "$key.png")
+    
+    val original = if (origFile.exists()) decodeSampledBitmap(origFile.absolutePath) else null
+    if (original == null) return translated
+
+    val combined = Bitmap.createBitmap(original.width + translated.width, maxOf(original.height, translated.height), Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(combined)
+    canvas.drawBitmap(original, 0f, 0f, null)
+    canvas.drawBitmap(translated, original.width.toFloat(), 0f, null)
+    original.recycle()
+    translated.recycle()
+    return combined
+}
+
 /**
  * Fullscreen In-App Manga & PDF Reader Dialog with HorizontalPager,
  * Pinch-to-Zoom, Original vs. Translated toggle, and Live Touch-up Editing.
@@ -89,12 +110,25 @@ fun MangaReaderDialog(
     var showEditor by remember { mutableStateOf(false) }
     var isZoomed by remember { mutableStateOf(false) }
     var isWebtoonMode by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var isSideBySide by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
 
     var activeEditorBmp by remember { mutableStateOf<Bitmap?>(null) }
     var activeTranslations by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var activeCoords by remember { mutableStateOf<Map<String, IntArray>>(emptyMap()) }
     var activeRawTexts by remember { mutableStateOf<Map<String, String>?>(null) }
     var activeStyles by remember { mutableStateOf<Map<String, com.kzkt.app.core.BubbleMeta>?>(null) }
+
+    // Webtoon-mode scroll state plus the page the user is actually looking at. The
+    // bottom toolbar (edit/share/export) must act on THIS page — in webtoon mode the
+    // pager never scrolls, so pagerState.currentPage would target the wrong page.
+    val webtoonListState = rememberLazyListState()
+    val visibleWebtoonPage by remember { derivedStateOf { webtoonListState.firstVisibleItemIndex } }
+    val currentPageIndex = if (isWebtoonMode) visibleWebtoonPage.coerceIn(0, pagePaths.size - 1) else pagerState.currentPage
+
+    // Switching to webtoon mode continues from the page the pager was showing.
+    LaunchedEffect(isWebtoonMode) {
+        if (isWebtoonMode) webtoonListState.scrollToItem(pagerState.currentPage)
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -111,6 +145,7 @@ fun MangaReaderDialog(
             Box(modifier = Modifier.fillMaxSize()) {
                 if (isWebtoonMode) {
                     LazyColumn(
+                        state = webtoonListState,
                         modifier = Modifier.fillMaxSize()
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
@@ -119,9 +154,9 @@ fun MangaReaderDialog(
                     ) {
                         items(pagePaths.size) { pageIndex ->
                             val path = pagePaths[pageIndex]
-                            val bitmap by produceState<Bitmap?>(initialValue = null, key1 = path) {
+                            val bitmap by produceState<Bitmap?>(initialValue = null, key1 = path, key2 = isSideBySide) {
                                 value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                    decodeSampledBitmap(path)
+                                    loadReaderBitmap(context, path, isSideBySide)
                                 }
                             }
                             bitmap?.let { bmp ->
@@ -143,9 +178,9 @@ fun MangaReaderDialog(
                     ) { pageIndex ->
                         val path = pagePaths[pageIndex]
 
-                        val bitmap by produceState<Bitmap?>(initialValue = null, key1 = path) {
+                        val bitmap by produceState<Bitmap?>(initialValue = null, key1 = path, key2 = isSideBySide) {
                             value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                decodeSampledBitmap(path)
+                                loadReaderBitmap(context, path, isSideBySide)
                             }
                         }
 
@@ -167,7 +202,7 @@ fun MangaReaderDialog(
                     TopAppBar(
                         title = {
                             Text(
-                                text = "Page ${pagerState.currentPage + 1} / ${pagePaths.size}",
+                                text = "Page ${currentPageIndex + 1} / ${pagePaths.size}",
                                 style = MaterialTheme.typography.titleMedium.copy(color = Color.White),
                                 fontWeight = FontWeight.Bold
                             )
@@ -182,6 +217,13 @@ fun MangaReaderDialog(
                             }
                         },
                         actions = {
+                            IconButton(onClick = { isSideBySide = !isSideBySide }) {
+                                Icon(
+                                    Icons.Default.Compare,
+                                    contentDescription = "Side-by-side View",
+                                    tint = if (isSideBySide) MaterialTheme.colorScheme.primary else Color.White
+                                )
+                            }
                             IconButton(onClick = { isWebtoonMode = !isWebtoonMode }) {
                                 Icon(
                                     if (isWebtoonMode) Icons.Default.ViewAgenda else Icons.Default.ViewCarousel,
@@ -223,7 +265,7 @@ fun MangaReaderDialog(
                             // page load (no editable bubbles). All disk I/O happens off the
                             // main thread.
                             IconButton(onClick = {
-                                val currentPath = pagePaths[pagerState.currentPage]
+                                val currentPath = pagePaths[currentPageIndex]
                                 scope.launch {
                                     val meta = withContext(Dispatchers.IO) {
                                         com.kzkt.app.data.EditMetadataRepository(context).loadForOutput(currentPath)
@@ -267,7 +309,7 @@ fun MangaReaderDialog(
                             // Share Button
                             IconButton(
                                 onClick = {
-                                    val currentPath = pagePaths[pagerState.currentPage]
+                                    val currentPath = pagePaths[currentPageIndex]
                                     FileUtils.shareFile(context, currentPath)
                                 }
                             ) {
@@ -319,14 +361,27 @@ fun MangaReaderDialog(
                         styles = activeStyles,
                         onDismiss = { showEditor = false },
                         onSave = { updatedBmp, updatedTranslations, updatedCoords, updatedStyles ->
-                            val currentPath = pagePaths[pagerState.currentPage]
-                            try {
-                                val file = File(currentPath)
-                                file.outputStream().use { out ->
-                                    updatedBmp.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                            val currentPath = pagePaths[currentPageIndex]
+                            // Pristine (pre-inpaint) original — re-persisted alongside the
+                            // edits so the editor keeps working from History with updated data.
+                            val pristineOriginal = activeEditorBmp
+                            scope.launch(Dispatchers.IO) {
+                                try {
+                                    File(currentPath).outputStream().use { out ->
+                                        updatedBmp.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("KZKT", "Failed to save edited page: ${e.message}")
                                 }
-                            } catch (e: Exception) {
-                                android.util.Log.e("KZKT", "Failed to save edited page: ${e.message}")
+                                if (pristineOriginal != null) {
+                                    try {
+                                        com.kzkt.app.data.EditMetadataRepository(context).saveForOutput(
+                                            currentPath, pristineOriginal, updatedTranslations,
+                                            updatedCoords, targetLanguage, activeRawTexts, updatedStyles)
+                                    } catch (e: Exception) {
+                                        android.util.Log.w("KZKT", "Failed to save edit metadata: ${e.message}")
+                                    }
+                                }
                             }
                             showEditor = false
                         }

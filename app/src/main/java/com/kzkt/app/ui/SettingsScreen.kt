@@ -938,6 +938,16 @@ private fun ModelDropdownInput(
     var textState by remember(value) { mutableStateOf(value) }
     var expanded by remember { mutableStateOf(false) }
 
+    // Debounce writes: typing a long model name would otherwise hit DataStore on
+    // every keystroke. Saving happens 350 ms after typing pauses (or immediately
+    // when picking from the dropdown).
+    LaunchedEffect(textState) {
+        if (textState != value) {
+            kotlinx.coroutines.delay(350)
+            onValue(textState)
+        }
+    }
+
     val options = remember(presets, value) {
         val list = presets.toMutableList()
         if (value.isNotBlank() && value !in list) list.add(0, value)
@@ -949,7 +959,6 @@ private fun ModelDropdownInput(
             value = textState,
             onValueChange = { newText ->
                 textState = newText
-                onValue(newText)
             },
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },

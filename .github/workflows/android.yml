@@ -12,6 +12,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The YOLO model (assets/models/kzkt.dat) is tracked with Git LFS — without
+          # this the built APK would embed a 130-byte LFS pointer instead of the model.
+          lfs: true
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -22,6 +26,9 @@ jobs:
 
       - name: Grant execute permission
         run: chmod +x gradlew
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest
 
       - name: Build
         run: ./gradlew assembleDebug

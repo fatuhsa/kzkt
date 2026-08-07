@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -54,6 +55,9 @@ fun HistoryScreen(
     // Search + provider filter state
     var query by rememberSaveable { mutableStateOf("") }
     var providerFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    var languageFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    val dateRangeState = rememberDateRangePickerState()
+    var showDateRangePicker by remember { mutableStateOf(false) }
 
     // Tombstones for entries pending permanent deletion — hides the item
     // immediately after a swipe while the DataStore write settles (supports Undo).
@@ -68,10 +72,22 @@ fun HistoryScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val filteredEntries = remember(entries, query, providerFilter, removedIds) {
+    val filteredEntries = remember(entries, query, providerFilter, languageFilter, dateRangeState.selectedStartDateMillis, dateRangeState.selectedEndDateMillis, removedIds) {
+        val startMillis = dateRangeState.selectedStartDateMillis
+        val endMillis = dateRangeState.selectedEndDateMillis
         entries.asSequence()
             .filterNot { it.timestamp in removedIds }
             .filter { providerFilter == null || it.provider == providerFilter }
+            .filter { languageFilter == null || it.targetLanguage == languageFilter }
+            .filter {
+                if (startMillis != null && endMillis != null) {
+                    it.timestamp in startMillis..endMillis
+                } else if (startMillis != null) {
+                    it.timestamp >= startMillis
+                } else if (endMillis != null) {
+                    it.timestamp <= endMillis
+                } else true
+            }
             .filter {
                 query.isBlank() ||
                     it.fileName.contains(query, ignoreCase = true) ||
@@ -87,6 +103,9 @@ fun HistoryScreen(
         entries.map { it.provider }
             .distinct()
             .sortedBy { providerDisplayName(it) }
+    }
+    val languageOptions = remember(entries) {
+        entries.map { it.targetLanguage }.distinct().sorted()
     }
 
     fun openReaderForEntry(entry: HistoryEntry) {
@@ -239,6 +258,45 @@ fun HistoryScreen(
                                     onClick = { providerFilter = key },
                                     label = { Text(providerDisplayName(key)) },
                                     leadingIcon = if (providerFilter == key) {
+                                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                                    } else null,
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(onClick = { showDateRangePicker = true }) {
+                                Icon(Icons.Outlined.DateRange, contentDescription = null, modifier = Modifier.padding(end = 4.dp).size(18.dp))
+                                Text(if (dateRangeState.selectedStartDateMillis != null) "Custom Date" else "All Time")
+                            }
+                            if (dateRangeState.selectedStartDateMillis != null) {
+                                IconButton(onClick = { dateRangeState.setSelection(null, null) }, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Filled.Close, "Clear Date", modifier = Modifier.size(16.dp))
+                                }
+                            }
+                            Divider(modifier = Modifier.height(24.dp).width(1.dp))
+                            
+                            FilterChip(
+                                selected = languageFilter == null,
+                                onClick = { languageFilter = null },
+                                label = { Text("All Langs") },
+                                leadingIcon = if (languageFilter == null) {
+                                    { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                                } else null,
+                            )
+                            languageOptions.forEach { lang ->
+                                FilterChip(
+                                    selected = languageFilter == lang,
+                                    onClick = { languageFilter = lang },
+                                    label = { Text(lang) },
+                                    leadingIcon = if (languageFilter == lang) {
                                         { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
                                     } else null,
                                 )

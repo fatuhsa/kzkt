@@ -13,10 +13,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **CBZ Filename Retention**: The Manga Reader CBZ exporter now perfectly retains the original directory structures and CJK filenames instead of flattening into sequential numbers.
 - **Webtoon Reader Mode**: Added vertical scrolling mode toggle (`LazyColumn`) in `MangaReaderDialog` for seamless Webtoon and Manhwa reading.
 - **Smart Image Upscaler**: OpenCV Bicubic interpolation + Unsharp Masking enhancement filter to double resolution and sharpen low-res scan text before OCR/LLM detection.
-- **Redesigned KZKT Monogram Icon**: Updated launcher icons across all densities (`mdpi` to `xxxhdpi`) featuring a prominent large 'K' with vertically stacked 'z' and 't' in vibrant neon gradients.
+- **Provider Cache Invalidation**: Automatic translation cache invalidation when switching LLM models or providers to prevent stale translations.
+- **Undo/Redo in Editor**: Added state history stack to the Interactive Touch-up Editor, allowing users to Undo and Redo bubble edits seamlessly.
+- **History Filters**: Added Language and Date Range filters to the History Screen for easier translation management.
+- **Side-by-side View**: Introduced a toggleable split-screen mode in MangaReaderDialog to compare the original comic and the translated version side-by-side.
 
 ### Changed
 
+- **Background Translation Resilience**: Migrated translation service from ForegroundService to WorkManager (`TranslationWorker`) to persist translation jobs and prevent OS from killing them prematurely.
+- **Redesigned KZKT Icon**: Cleaned up the app icon to feature a large 'K' on the left and stacked 'z' and 't' on the right, maintaining a minimalistic white-on-transparent design.
 - **Refined Reset Settings**: Relocated the "Reset Advanced Settings" action into the Advanced card with a proper confirmation dialog, explicitly excluding sensitive API credentials.
 - **Long Filename UI**: Implemented text truncation (ellipsis) for selected filenames in the MainScreen to prevent UI push-down on lengthy manga titles.
 

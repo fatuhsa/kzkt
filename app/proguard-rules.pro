@@ -19,4 +19,9 @@
 -keep class com.google.gson.** { *; }
 
 # Keep our model classes
--keep class com.cypy.app.core.** { *; }
+-keep class com.kzkt.app.core.** { *; }
+
+# HistoryEntry is serialized/deserialized with Gson by reflection (HistoryRepository).
+# Without this rule R8 renames its fields, which would corrupt saved history JSON
+# across builds (and empty the list on launch after an update).
+-keep class com.kzkt.app.data.HistoryEntry { *; }

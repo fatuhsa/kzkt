@@ -85,27 +85,29 @@ class GeminiProvider(
 
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val response = client.newCall(request).execute()
-                val body = response.body?.string() ?: ""
+                // use{} closes the response so the pooled connection is released promptly.
+                client.newCall(request).execute().use { response ->
+                    val body = response.body?.string() ?: ""
 
-                if (response.code == 403 || response.code == 401) {
-                    throw ValueError("API_KEY_ERROR")
-                }
-                if (!response.isSuccessful) {
-                    throw RuntimeException("Gemini API error ${response.code}: ${body.take(200)}")
-                }
-
-                // Parse response: candidates[0].content.parts[0].text
-                val json = JsonParser.parseString(body).asJsonObject
-                val candidates = json.getAsJsonArray("candidates")
-                if (candidates != null && candidates.size() > 0) {
-                    val content = candidates[0].asJsonObject.getAsJsonObject("content")
-                    val parts = content.getAsJsonArray("parts")
-                    if (parts != null && parts.size() > 0) {
-                        return@withContext parts[0].asJsonObject.get("text")?.asString
+                    if (response.code == 403 || response.code == 401) {
+                        throw ValueError("API_KEY_ERROR")
                     }
+                    if (!response.isSuccessful) {
+                        throw RuntimeException("Gemini API error ${response.code}: ${body.take(200)}")
+                    }
+
+                    // Parse response: candidates[0].content.parts[0].text
+                    val json = JsonParser.parseString(body).asJsonObject
+                    val candidates = json.getAsJsonArray("candidates")
+                    if (candidates != null && candidates.size() > 0) {
+                        val content = candidates[0].asJsonObject.getAsJsonObject("content")
+                        val parts = content.getAsJsonArray("parts")
+                        if (parts != null && parts.size() > 0) {
+                            return@withContext parts[0].asJsonObject.get("text")?.asString
+                        }
+                    }
+                    body
                 }
-                body
             } catch (e: IOException) {
                 throw RuntimeException("Gemini network error: ${e.message}")
             }

@@ -67,8 +67,4 @@ class GlossaryRepository(private val context: Context) {
             saveGlossary(current)
         }
     }
-
-    fun getTerm(original: String): String? {
-        return _glossary.value[original]
-    }
 }

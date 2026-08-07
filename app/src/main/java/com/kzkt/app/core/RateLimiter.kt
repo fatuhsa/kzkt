@@ -45,7 +45,6 @@ class RateLimiter(
             if (isCancelled()) return null
 
             try {
-                synchronized(lock) { lastCallTimeMs = System.currentTimeMillis() }
                 if (attempt > 0) {
                     onWait?.invoke("  [Connecting] Connecting to $providerName (Attempt ${attempt + 1}/$maxRetries)...")
                 }
@@ -59,6 +58,10 @@ class RateLimiter(
                     throw ex
                 }
                 val errStr = ex.message?.lowercase() ?: ""
+
+                // Non-retryable: bad API key — surface immediately instead of
+                // burning 3 retries with wait time on a request that can't succeed.
+                if (errStr.contains("api_key_error")) throw ex
 
                 // ── 1. Rate Limit (HTTP 429) ──
                 if (errStr.contains("429") ||

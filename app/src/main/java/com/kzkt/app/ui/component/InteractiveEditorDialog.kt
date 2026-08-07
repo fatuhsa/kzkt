@@ -22,7 +22,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.background
 
@@ -65,8 +64,43 @@ fun InteractiveEditorDialog(
     var currentDragAction by remember { mutableStateOf(DragAction.NONE) }
     var baseBitmap by remember { mutableStateOf(originalBitmap) }
 
+    val history = remember { mutableStateListOf<Map<String, BubbleMeta>>() }
+    var historyIndex by remember { mutableIntStateOf(-1) }
+    
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+        history.add(bubbles.toMap())
+        historyIndex = 0
+    }
+    
+    fun pushState() {
+        while (history.size > historyIndex + 1) {
+            history.removeAt(history.size - 1)
+        }
+        history.add(bubbles.toMap())
+        if (history.size > 20) history.removeAt(0)
+        historyIndex = history.size - 1
+    }
+    
+    fun undo() {
+        if (historyIndex > 0) {
+            historyIndex--
+            bubbles.clear()
+            bubbles.putAll(history[historyIndex])
+        }
+    }
+    
+    fun redo() {
+        if (historyIndex < history.size - 1) {
+            historyIndex++
+            bubbles.clear()
+            bubbles.putAll(history[historyIndex])
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        // Heavy inpainting runs off the main thread; the Compose snapshot write must
+        // happen back on the main thread (snapshot state is not thread-safe).
+        val inpainted = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             try {
                 val mat = com.kzkt.app.core.ImageProcessor.bitmapToMat(originalBitmap)
                 for (bubble in bubbles.values) {
@@ -74,15 +108,19 @@ fun InteractiveEditorDialog(
                 }
                 val newBmp = com.kzkt.app.core.ImageProcessor.matToBitmap(mat)
                 mat.release()
-                baseBitmap = newBmp
+                newBmp
             } catch (e: Exception) {
-                // Ignore inpainting error, fallback to original
+                null // Ignore inpainting error, fallback to original
             }
         }
+        if (inpainted != null) baseBitmap = inpainted
     }
 
-    // Re-render bitmap on translation edit
-    val editedBitmap by remember(bubbles.toMap(), baseBitmap) {
+    // Re-render bitmap on translation edit. Keyed only on the base bitmap: the
+    // derivedStateOf itself tracks reads of the `bubbles` snapshot map (and
+    // showRawText), so edits invalidate it without re-creating the derived state
+    // on every unrelated recomposition (e.g. toggling showOriginal).
+    val editedBitmap by remember(baseBitmap) {
         derivedStateOf {
             val resultBmp = baseBitmap.copy(Bitmap.Config.ARGB_8888, true)
             val canvas = Canvas(resultBmp)
@@ -303,10 +341,13 @@ fun InteractiveEditorDialog(
                                                 selectedBubbleId = newId
                                                 editingText = "New Text"
                                                 isDrawingMode = false
+                                                pushState()
                                             }
                                         }
                                         drawingStart = null
                                         drawingEnd = null
+                                    } else if (currentDragAction != DragAction.NONE) {
+                                        pushState()
                                     }
                                     currentDragAction = DragAction.NONE
                                 }
@@ -445,6 +486,22 @@ fun InteractiveEditorDialog(
                             .padding(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // Undo button
+                        androidx.compose.material3.IconButton(
+                            onClick = { undo() },
+                            enabled = historyIndex > 0,
+                            modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = if (historyIndex > 0) 0.7f else 0.3f), androidx.compose.foundation.shape.CircleShape)
+                        ) {
+                            Icon(Icons.Default.Undo, contentDescription = "Undo")
+                        }
+                        // Redo button
+                        androidx.compose.material3.IconButton(
+                            onClick = { redo() },
+                            enabled = historyIndex < history.size - 1,
+                            modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = if (historyIndex < history.size - 1) 0.7f else 0.3f), androidx.compose.foundation.shape.CircleShape)
+                        ) {
+                            Icon(Icons.Default.Redo, contentDescription = "Redo")
+                        }
                         // Peek Original button
                         androidx.compose.material3.IconButton(
                             onClick = { showOriginal = !showOriginal },
@@ -522,12 +579,12 @@ fun InteractiveEditorDialog(
                                     Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                         IconToggleButton(
                                             checked = bubble.isBold,
-                                            onCheckedChange = { bubbles[id] = bubble.copy(isBold = it) }
+                                            onCheckedChange = { bubbles[id] = bubble.copy(isBold = it); pushState() }
                                         ) { Icon(Icons.Default.FormatBold, "Bold") }
                                         
                                         IconToggleButton(
                                             checked = bubble.isItalic,
-                                            onCheckedChange = { bubbles[id] = bubble.copy(isItalic = it) }
+                                            onCheckedChange = { bubbles[id] = bubble.copy(isItalic = it); pushState() }
                                         ) { Icon(Icons.Default.FormatItalic, "Italic") }
 
                                         IconButton(
@@ -537,7 +594,8 @@ fun InteractiveEditorDialog(
                                                     android.graphics.Paint.Align.CENTER -> android.graphics.Paint.Align.RIGHT
                                                     else -> android.graphics.Paint.Align.LEFT
                                                 }
-                                                bubbles[id] = bubble.copy(align = nextAlign) 
+                                                bubbles[id] = bubble.copy(align = nextAlign)
+                                                pushState()
                                             }
                                         ) { 
                                             Icon(
@@ -566,6 +624,7 @@ fun InteractiveEditorDialog(
                                                         text = { Text(preset) },
                                                         onClick = {
                                                             bubbles[id] = bubble.copy(fontPreset = preset)
+                                                            pushState()
                                                             expanded = false
                                                         }
                                                     )
@@ -577,6 +636,7 @@ fun InteractiveEditorDialog(
                                     IconButton(
                                         onClick = {
                                             bubbles.remove(id)
+                                            pushState()
                                             selectedBubbleId = null
                                         }
                                     ) {
@@ -597,6 +657,7 @@ fun InteractiveEditorDialog(
                                         androidx.compose.material3.Slider(
                                             value = bubble.fontScale,
                                             onValueChange = { bubbles[id] = bubble.copy(fontScale = it) },
+                                            onValueChangeFinished = { pushState() },
                                             valueRange = 0.5f..2.5f,
                                             modifier = Modifier.padding(horizontal = 8.dp)
                                         )
@@ -636,6 +697,7 @@ fun InteractiveEditorDialog(
                                                     text = { Text(name) },
                                                     onClick = {
                                                         bubbles[id] = bubble.copy(strokeColor = hex)
+                                                        pushState()
                                                         strokeExpanded = false
                                                     }
                                                 )

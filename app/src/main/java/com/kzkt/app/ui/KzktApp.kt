@@ -17,6 +17,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -45,9 +46,19 @@ private enum class BottomTab(
 }
 
 @Composable
-fun KzktApp() {
+fun KzktApp(
+    // Files shared into the app via ACTION_SEND (see MainActivity) — loaded once
+    // on first composition into the Translate tab's file list.
+    initialSharedFiles: List<String> = emptyList(),
+) {
     val navController = rememberNavController()
     val viewModel: MainViewModel = viewModel()
+
+    LaunchedEffect(initialSharedFiles) {
+        if (initialSharedFiles.isNotEmpty()) {
+            viewModel.addFiles(initialSharedFiles)
+        }
+    }
 
     val initialDarkTheme = isSystemInDarkTheme()
     var darkTheme by rememberSaveable { mutableStateOf(initialDarkTheme) }

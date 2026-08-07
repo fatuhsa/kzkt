@@ -174,7 +174,19 @@ class YoloOnnx(
         }
     }
 
-    private fun prepareInput(bitmap: Bitmap): Triple<FloatBuffer, DoubleArray, DoubleArray> {
+    /**
+     * Preprocessed model input (resized + padded 640×640 tensor with letterbox
+     * ratios/paddings). Computed ONCE per page and reused across the 3-stage
+     * confidence cascade — the input tensor is identical for every stage, only
+     * the confidence/IOU thresholds change.
+     */
+    data class PreparedInput(
+        val buffer: FloatBuffer,
+        val ratios: DoubleArray,
+        val paddings: DoubleArray,
+    )
+
+    fun prepareInput(bitmap: Bitmap): PreparedInput {
         val h = bitmap.height.toDouble()
         val w = bitmap.width.toDouble()
         val targetSize = Constants.YOLO_INPUT_SIZE.toDouble()
@@ -209,14 +221,20 @@ class YoloOnnx(
             inputBuffer.put(2 * area + i, (pixel and 0xFF) / 255.0f)
         }
 
-        return Triple(inputBuffer, doubleArrayOf(scale, scale), doubleArrayOf(dw.toDouble(), dh.toDouble()))
+        return PreparedInput(inputBuffer, doubleArrayOf(scale, scale), doubleArrayOf(dw.toDouble(), dh.toDouble()))
     }
 
-    fun predict(bitmap: Bitmap, confThreshold: Double = this.confThreshold, iouThreshold: Double = this.iouThreshold): List<Detection> {
+    fun predict(
+        bitmap: Bitmap,
+        confThreshold: Double = this.confThreshold,
+        iouThreshold: Double = this.iouThreshold,
+        prepared: PreparedInput? = null,
+    ): List<Detection> {
         val env = ortEnv ?: throw IllegalStateException("ONNX Runtime not initialized")
         val session = ortSession ?: throw IllegalStateException("Model not loaded")
 
-        val (buffer, ratios, paddings) = prepareInput(bitmap)
+        val preparedInput = prepared ?: prepareInput(bitmap)
+        val (buffer, ratios, paddings) = preparedInput
         val (dw, dh) = paddings[0] to paddings[1]
         val (ratioW, ratioH) = ratios[0] to ratios[1]
 

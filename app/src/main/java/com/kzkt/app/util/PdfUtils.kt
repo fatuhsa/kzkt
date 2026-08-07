@@ -81,6 +81,9 @@ object PdfImporter {
         }
 
         if (context != null) {
+            // MediaStore.Downloads only exists on Android 10+ (API 29) — skip the
+            // fallback entirely on older devices (accessing the field would crash).
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             // 1. Try querying MediaStore Downloads by DATA path
             try {
                 val projection = arrayOf(android.provider.MediaStore.MediaColumns._ID)
@@ -112,6 +115,7 @@ object PdfImporter {
                     }
                 }
             } catch (_: Exception) {}
+            }
         }
 
         return null

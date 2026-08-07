@@ -283,10 +283,12 @@ class TranslationPipeline(
 
         // ── YOLO Detection (3-stage cascade) ──
         val rawBoxes = mutableListOf<IntArray>()
+        // The input tensor is identical across all 3 stages — preprocess once and reuse.
+        val prepared = yolo?.prepareInput(bitmap)
         try {
             for ((conf, iou) in Constants.YOLO_PREDICTION_STAGES) {
                 if (isCancelled()) return PipelineResult(null, failed = true)
-                val detections = yolo?.predict(bitmap, confThreshold = conf, iouThreshold = iou) ?: continue
+                val detections = yolo?.predict(bitmap, confThreshold = conf, iouThreshold = iou, prepared = prepared) ?: continue
                 for (d in detections) {
                     rawBoxes.add(intArrayOf(d.x1, d.y1, d.x2, d.y2))
                 }
@@ -372,7 +374,7 @@ class TranslationPipeline(
 
         if (cacheRepo != null) {
             for (crop in cropItems) {
-                val cached = cacheRepo.getTranslation(crop.bitmap, targetLanguage)
+                val cached = cacheRepo.getTranslation(crop.bitmap, targetLanguage, provider.providerName, provider.modelName)
                 if (cached != null) {
                     allTranslations[crop.id] = cached
                 } else {
@@ -438,7 +440,7 @@ class TranslationPipeline(
                                     if (cacheRepo != null) {
                                         for ((id, text) in parsed) {
                                             val item = ocrCropItems.find { it.id == id }
-                                            if (item != null) cacheRepo.saveTranslation(item.bitmap, targetLanguage, text)
+                                            if (item != null) cacheRepo.saveTranslation(item.bitmap, targetLanguage, text, prov.providerName, prov.modelName)
                                         }
                                     }
                                     break
@@ -486,7 +488,7 @@ class TranslationPipeline(
                                     if (cacheRepo != null) {
                                         for ((id, text) in parsed) {
                                             val item = cropItems.find { it.id == id }
-                                            if (item != null) cacheRepo.saveTranslation(item.bitmap, targetLanguage, text)
+                                            if (item != null) cacheRepo.saveTranslation(item.bitmap, targetLanguage, text, prov.providerName, prov.modelName)
                                         }
                                     }
                                     break
@@ -672,9 +674,11 @@ class TranslationPipeline(
                                 mutableListOf(), mutableMapOf(), failed = true)
                         } else {
                             // YOLO detection — 3-stage cascade (each stage: distinct conf/iou threshold)
+                            // The input tensor is identical across all 3 stages — preprocess once and reuse.
+                            val prepared = yolo?.prepareInput(bitmap)
                             val rawBoxes = mutableListOf<IntArray>()
                             for ((conf, iou) in Constants.YOLO_PREDICTION_STAGES) {
-                                val detections = yolo?.predict(bitmap, confThreshold = conf, iouThreshold = iou) ?: continue
+                                val detections = yolo?.predict(bitmap, confThreshold = conf, iouThreshold = iou, prepared = prepared) ?: continue
                                 for (d in detections) rawBoxes.add(intArrayOf(d.x1, d.y1, d.x2, d.y2))
                             }
                             var filtered = ImageProcessor.removeFalseGiants(rawBoxes)
@@ -753,6 +757,9 @@ class TranslationPipeline(
         }
         // Save detected pages for fast retry support — only when this run started from
         // scratch; retry runs consume the cache instead of replacing it.
+        // Completed pages are recycled (and their outputs exist on disk, so retry skips
+        // them); only the interrupted/failed group keeps live bitmaps here, which is
+        // exactly the group a retry needs to resume without re-running YOLO.
         if (cachedPages == null) {
             TranslationProgressTracker.cachedPageData = pageDataList
         }
@@ -846,7 +853,7 @@ class TranslationPipeline(
                                 if (cacheRepo != null) {
                                     for ((id, text) in parsed) {
                                         val item = cropItems.find { it.id == id }
-                                        if (item != null) cacheRepo.saveTranslation(item.bitmap, targetLanguage, text)
+                                        if (item != null) cacheRepo.saveTranslation(item.bitmap, targetLanguage, text, prov.providerName, prov.modelName)
                                     }
                                 }
                                 batchSucceeded = true

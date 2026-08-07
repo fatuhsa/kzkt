@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.io.File
+import kotlinx.coroutines.launch
 
 @Composable
 fun MainScreen(
@@ -40,7 +41,7 @@ fun MainScreen(
     val resultList = viewModel.resultPaths
 
     // Auto-scroll log — non-animated jump, triggered only when the log grows (F2).
-    val logSize by derivedStateOf { logList.size }
+    val logSize by remember { derivedStateOf { logList.size } }
     LaunchedEffect(logSize) {
         if (logSize > 0) logListState.scrollToItem(logSize - 1)
     }
@@ -160,8 +161,8 @@ private fun StatusChip(
 
 @Composable
 private fun YoloStatus(viewModel: MainViewModel) {
-    val yoloReady by derivedStateOf { viewModel.yoloReady.value }
-    val yoloError by derivedStateOf { viewModel.yoloError.value }
+    val yoloReady by remember { derivedStateOf { viewModel.yoloReady.value } }
+    val yoloError by remember { derivedStateOf { viewModel.yoloError.value } }
 
     if (yoloReady) {
         StatusChip(
@@ -215,8 +216,8 @@ private fun InfoChip(icon: ImageVector, label: String, modifier: Modifier = Modi
 
 @Composable
 private fun QuickSettingsCard(viewModel: MainViewModel) {
-    val provider by derivedStateOf { viewModel.settings.value.llmProvider }
-    val language by derivedStateOf { viewModel.settings.value.targetLanguage }
+    val provider by remember { derivedStateOf { viewModel.settings.value.llmProvider } }
+    val language by remember { derivedStateOf { viewModel.settings.value.targetLanguage } }
     val files = viewModel.selectedFiles
 
     Card(
@@ -279,9 +280,9 @@ private fun ActionButtons(
     viewModel: MainViewModel,
     filePickerLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Array<String>, List<Uri>>,
 ) {
-    val active by derivedStateOf { viewModel.translationActive.value }
-    val hasFiles by derivedStateOf { viewModel.selectedFiles.isNotEmpty() }
-    val yoloReady by derivedStateOf { viewModel.yoloReady.value }
+    val active by remember { derivedStateOf { viewModel.translationActive.value } }
+    val hasFiles by remember { derivedStateOf { viewModel.selectedFiles.isNotEmpty() } }
+    val yoloReady by remember { derivedStateOf { viewModel.yoloReady.value } }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -310,7 +311,7 @@ private fun ActionButtons(
                 Text("Cancel")
             }
         } else {
-            val canRetry by derivedStateOf { viewModel.canRetry.value }
+            val canRetry by remember { derivedStateOf { viewModel.canRetry.value } }
             if (canRetry) {
                 Button(
                     onClick = { viewModel.retryTranslation() },
@@ -341,9 +342,9 @@ private fun ActionButtons(
 
 @Composable
 private fun ProgressBar(viewModel: MainViewModel) {
-    val progress by derivedStateOf { viewModel.translationProgress.value }
-    val done by derivedStateOf { viewModel.translationDone.value }
-    val total by derivedStateOf { viewModel.translationTotal.value }
+    val progress by remember { derivedStateOf { viewModel.translationProgress.value } }
+    val done by remember { derivedStateOf { viewModel.translationDone.value } }
+    val total by remember { derivedStateOf { viewModel.translationTotal.value } }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         LinearProgressIndicator(
@@ -449,12 +450,13 @@ private fun ResultPreview(
     viewModel: MainViewModel,
     resultList: androidx.compose.runtime.snapshots.SnapshotStateList<String>,
 ) {
-    val previewPath by derivedStateOf { viewModel.currentPreviewPath.value }
+    val previewPath by remember { derivedStateOf { viewModel.currentPreviewPath.value } }
 
     if (previewPath != null || resultList.isNotEmpty()) {
         var showFullscreenViewer by remember { mutableStateOf(false) }
         val currentPath = previewPath ?: resultList.last()
         val context = LocalContext.current
+        val scope = rememberCoroutineScope()
 
         Spacer(Modifier.height(8.dp))
         Card(
@@ -573,20 +575,40 @@ private fun ResultPreview(
                 styles = lastResult.styles,
                 onDismiss = { viewModel.showInteractiveEditor.value = false },
                 onSave = { updatedBitmap, updatedTranslations, updatedCoords, updatedStyles ->
-                    if (lastResult.outputPath != null) {
-                        val file = File(lastResult.outputPath)
-                        java.io.FileOutputStream(file).use { stream ->
-                            updatedBitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
+                    val outputPath = lastResult.outputPath
+                    if (outputPath != null) {
+                        // Persist the edited image + bubble metadata off the main thread so
+                        // reopening from History/reader shows the updated edits.
+                        val pristineOriginal = lastResult.originalBitmap
+                        val rawTexts = lastResult.rawTexts
+                        val targetLang = viewModel.settings.value.targetLanguage
+                        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                java.io.FileOutputStream(File(outputPath)).use { stream ->
+                                    updatedBitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.w("KZKT", "Failed to save edited image: ${e.message}")
+                            }
+                            if (pristineOriginal != null) {
+                                try {
+                                    com.kzkt.app.data.EditMetadataRepository(context).saveForOutput(
+                                        outputPath, pristineOriginal, updatedTranslations,
+                                        updatedCoords, targetLang, rawTexts, updatedStyles)
+                                } catch (e: Exception) {
+                                    android.util.Log.w("KZKT", "Failed to save edit metadata: ${e.message}")
+                                }
+                            }
                         }
                     }
-                    
+
                     // Update state so if the user opens the editor again, they see their new edits
                     viewModel.lastResultForEditing.value = lastResult.copy(
                         translations = updatedTranslations,
                         coordinateMap = updatedCoords,
                         styles = updatedStyles
                     )
-                    
+
                     viewModel.showInteractiveEditor.value = false
                 }
             )

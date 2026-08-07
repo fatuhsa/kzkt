@@ -1,4 +1,4 @@
-package com.cypy.app.util
+package com.kzkt.app.util
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
