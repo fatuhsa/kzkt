@@ -8,24 +8,24 @@
 
 <p align="center"><a href="README.md">English</a> · <b>Bahasa Indonesia</b></p>
 
-KZKT adalah aplikasi Android native untuk terjemahan manga dan komik secara otomatis. Aplikasi ini mendeteksi balon kata (speech bubble) di halaman dengan AI on-device, mengirim teksnya ke vision LLM pilihan Anda, lalu merender teks terjemahan kembali ke halaman — semuanya lokal, tanpa perlu akses root.
+KZKT adalah aplikasi Android untuk menerjemahkan manga dan komik secara otomatis. Balon kata di tiap halaman dideteksi pakai AI langsung di perangkat (on-device), teksnya dikirim ke LLM pilihanmu, lalu hasil terjemahannya ditulis kembali ke halaman — semua dikerjakan lokal, tanpa butuh akses root.
 
 ---
 
 ## Keunggulan
 
-- **Banyak format input** - gambar tunggal, folder utuh, multi-share gambar, arsip (ZIP / CBZ / EPUB), dan file PDF.
-- **Terjemahan ke 14 bahasa** - Inggris, Indonesia, Jepang, Korea, Mandarin, Spanyol, Prancis, Jerman, dan lainnya.
-- **LLM multi-provider** - Google Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, atau endpoint lokal apa pun yang kompatibel OpenAI (Ollama, LM Studio, LocalAI, vLLM).
-- **Deteksi on-device** - YOLO (ONNX Runtime) menemukan balon kata secara lokal, dengan OCR opsional via ML Kit untuk model non-vision.
-- **PDF masuk, PDF keluar** - render halaman PDF, terjemahkan, lalu susun ulang halaman hasil terjemahan kembali ke PDF.
-- **Terjemahan latar belakang** - tetap berjalan meski aplikasi ditutup, lalu hasil disimpan ke `/Download/KZKT/`.
+- **Banyak format yang didukung** — bisa terima gambar, satu folder penuh, share beberapa gambar sekaligus, arsip (ZIP / CBZ / EPUB), sampai file PDF.
+- **Terjemahan ke 14 bahasa** — tinggal pilih bahasa targetnya: Inggris, Indonesia, Jepang, Korea, Mandarin, Spanyol, Prancis, Jerman, dan masih banyak lagi.
+- **Bebas pilih provider LLM** — Google Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, atau endpoint lokal apa pun yang kompatibel OpenAI (Ollama, LM Studio, LocalAI, vLLM).
+- **Deteksi balon kata on-device** — YOLO (ONNX Runtime) mendeteksi balon kata langsung di perangkat, plus OCR opsional via ML Kit untuk model non-vision.
+- **PDF masuk, PDF keluar** — halaman PDF dirender, diterjemahkan, lalu disusun kembali jadi PDF.
+- **Terjemahan tetap jalan di latar belakang** — meski aplikasi ditutup prosesnya lanjut terus, hasilnya disimpan ke `/Download/KZKT/`.
 
 ---
 
-## Teknologi
+## Teknologi yang Dipakai
 
-| Lapisan | Teknologi |
+| Bagian | Teknologi |
 | :--- | :--- |
 | Bahasa & Inti | Kotlin, Java 17 |
 | UI | Jetpack Compose, Material 3, Navigation Compose, Coil |
@@ -40,25 +40,25 @@ KZKT adalah aplikasi Android native untuk terjemahan manga dan komik secara otom
 ## Alur Pipeline
 
 ```text
-[ Gambar input / halaman manga ]
+[ Gambar / halaman manga ]
            |
            v
 [ 1. Deteksi balon kata YOLO ONNX ] --> kotak pembatas
            |
            v
-[ 2. Filter OpenCV & smart crop ] --> buang SFX, gabungkan yang tumpang tindih
+[ 2. Filter OpenCV & crop otomatis ] --> buang SFX, gabungkan yang bertumpuk
            |
            v
-[ 3. Pembuat mozaik ] --> kemas crop ke mozaik RTL vertikal + label ID merah
+[ 3. Susun mozaik ] --> crop dikemas jadi mozaik RTL vertikal + label ID merah
            |
            v
 [ 4. Provider vision LLM ] --> Gemini / OpenAI / OpenRouter / lokal kustom
            |
            v
-[ 5. Renderer teks & masking ] --> mask dalam balon + teks terbungkus auto-scale
+[ 5. Render teks & masking ] --> mask di dalam balon + teks menyesuaikan ukuran
            |
            v
-[ Output di /Download/KZKT/ ] --> langsung terlihat di galeri
+[ Hasil di /Download/KZKT/ ] --> langsung muncul di galeri
 ```
 
 ---
@@ -73,7 +73,7 @@ KZKT adalah aplikasi Android native untuk terjemahan manga dan komik secara otom
 │       │   ├── core/providers/ # provider Gemini, OpenAI, OpenRouter, kustom
 │       │   ├── data/           # pengaturan & riwayat (persistensi DataStore)
 │       │   ├── ui/             # layar Compose (Terjemah, Riwayat, Pengaturan)
-│       │   ├── ui/component/   # komponen Material 3 yang dapat dipakai ulang
+│       │   ├── ui/component/   # komponen Material 3 yang bisa dipakai ulang
 │       │   └── util/           # helper
 │       ├── assets/             # model YOLO terenkripsi (kzkt.dat) & font
 │       └── AndroidManifest.xml
@@ -85,23 +85,23 @@ KZKT adalah aplikasi Android native untuk terjemahan manga dan komik secara otom
 
 ---
 
-## Build APK
+## Cara Build APK
 
-> File model YOLO (`kzkt.dat`, ±100 MB) di-commit langsung di repositori ini,
-> jadi proses clone membutuhkan waktu lebih lama karena ukuran file-nya besar.
+> File model YOLO (`kzkt.dat`, ±100 MB) disimpan langsung di repositori ini,
+> jadi proses clone agak lebih lama karena filenya besar.
 
-1. Clone repositori:
+1. Clone repositorinya:
    ```bash
    git clone https://github.com/kouzen-neo/kzkt.git
    cd kzkt
    ```
 
-2. Buka di Android Studio, biarkan Gradle sync, lalu build:
+2. Buka di Android Studio, tunggu Gradle sync selesai, lalu build:
    ```bash
    ./gradlew assembleDebug
    ```
 
-3. Install APK:
+3. Install APK-nya:
    ```text
    app/build/outputs/apk/debug/app-debug.apk
    ```
@@ -116,7 +116,7 @@ Proyek ini dilisensikan di bawah [Lisensi MIT](LICENSE).
 
 ## Ucapan Terima Kasih Open Source
 
-KZKT dapat terwujud berkat karya banyak proyek dan komunitas open source:
+KZKT bisa terwujud berkat karya banyak proyek dan komunitas open source:
 
 - CYPY oleh [indravoyager](https://github.com/indravoyager) sebagai framework dasar.
 - OpenCV, ONNX Runtime, dan Google ML Kit untuk visi dan OCR on-device.
