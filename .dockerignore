@@ -4,6 +4,7 @@
 
 # ── Build outputs & local config ────────────────────────────────
 .gradle
+gradle-cache
 **/build
 local.properties
 *.apk
