@@ -10,6 +10,12 @@
 
 KZKT is a native Android application for automatic manga and comic translation. It detects speech bubbles on-page with on-device AI, sends the text to the vision LLM of your choice, and renders the translated text back into the page — all locally, with no root access required.
 
+<p align="center">
+  <img src="docs/screenshots/translate.png" width="30%" alt="Translate Screen" />
+  <img src="docs/screenshots/history.png" width="30%" alt="History Screen" />
+  <img src="docs/screenshots/settings.png" width="30%" alt="Settings Screen" />
+</p>
+
 ---
 
 ## Highlights

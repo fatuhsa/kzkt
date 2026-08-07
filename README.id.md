@@ -10,6 +10,12 @@
 
 KZKT adalah aplikasi Android untuk menerjemahkan manga dan komik secara otomatis. Balon kata di tiap halaman dideteksi pakai AI langsung di perangkat (on-device), teksnya dikirim ke LLM pilihanmu, lalu hasil terjemahannya ditulis kembali ke halaman — semua dikerjakan lokal, tanpa butuh akses root.
 
+<p align="center">
+  <img src="docs/screenshots/translate.png" width="30%" alt="Layar Terjemah" />
+  <img src="docs/screenshots/history.png" width="30%" alt="Layar Riwayat" />
+  <img src="docs/screenshots/settings.png" width="30%" alt="Layar Pengaturan" />
+</p>
+
 ---
 
 ## Keunggulan
