@@ -82,7 +82,18 @@ class TranslationWorker(
         if (!retry) TranslationProgressTracker.clearCache()
         
         val notification = setupNotification()
-        setForeground(ForegroundInfo(NOTIFICATION_ID, notification))
+        // Android 15+ (targetSdk 35+) requires an explicit foreground service type.
+        // WorkManager forwards the ForegroundInfo type straight to
+        // Service.startForeground(id, notification, type); the 2-arg constructor
+        // defaults to 0 (none), which throws InvalidForegroundServiceTypeException
+        // on Android 16. dataSync matches the manifest declaration + permission.
+        setForeground(
+            ForegroundInfo(
+                NOTIFICATION_ID,
+                notification,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        )
 
         return try {
                 // Initialize model if VM hasn't initialized it yet
@@ -122,6 +133,7 @@ class TranslationWorker(
                     localOcrScript = s.localOcrScript,
                     enableDevLogs = s.enableDevLogs,
                     useImageUpscaler = s.useImageUpscaler,
+                    translateSfx = s.translateSfx,
                 )
 
                 val cacheRepo = TranslationCacheRepository(applicationContext)
@@ -422,47 +434,63 @@ class TranslationWorker(
     }
 
     private fun createProvider(s: SettingsRepository.Settings): LlmProvider? {
-        val meta = Config.PROVIDER_REGISTRY[s.llmProvider] ?: return null
-
-        val apiKey = when (s.llmProvider) {
-            "gemini" -> s.geminiApiKey
-            "openai" -> s.openaiApiKey
-            "openrouter" -> s.openrouterApiKey
-            "zen" -> s.zenApiKey
-            "opencodego" -> s.opencodegoApiKey
-            "custom" -> s.customApiKey
-            else -> ""
-        }
-        val modelName = when (s.llmProvider) {
-            "gemini" -> s.modelGemini
-            "openai" -> s.modelOpenai
-            "openrouter" -> s.modelOpenrouter
-            "zen" -> s.modelZen
-            "opencodego" -> s.modelOpencodego
-            "custom" -> s.modelCustom
-            else -> meta.defaultModel
-        }
-
-        val baseUrl = s.getBaseUrl(s.llmProvider)
-
-        return when (s.llmProvider) {
-            "gemini" -> GeminiProvider(apiKey, modelName, baseUrl)
-            "openai" -> OpenAIProvider(apiKey, modelName, baseUrl)
-            "openrouter" -> OpenRouterProvider(apiKey, modelName, baseUrl)
-            "zen" -> ZenProvider(apiKey, modelName, baseUrl)
-            "opencodego" -> OpenCodeGoProvider(apiKey, modelName, baseUrl)
-            "custom" -> CustomProvider(apiKey, modelName, baseUrl, s.customTimeoutSec)
-            else -> null
-        }
+        if (Config.PROVIDER_REGISTRY[s.llmProvider] == null) return null
+        return ProviderFactory.create(
+            s.llmProvider, apiKeyFor(s, s.llmProvider), modelFor(s, s.llmProvider),
+            s.getBaseUrl(s.llmProvider), s.customTimeoutSec
+        )
     }
 
+    private fun apiKeyFor(s: SettingsRepository.Settings, key: String): String = when (key) {
+        "gemini" -> s.geminiApiKey
+        "openai" -> s.openaiApiKey
+        "openrouter" -> s.openrouterApiKey
+        "zen" -> s.zenApiKey
+        "opencodego" -> s.opencodegoApiKey
+        "custom" -> s.customApiKey
+        else -> ""
+    }
+
+    private fun modelFor(s: SettingsRepository.Settings, key: String): String = when (key) {
+        "gemini" -> s.modelGemini
+        "openai" -> s.modelOpenai
+        "openrouter" -> s.modelOpenrouter
+        "zen" -> s.modelZen
+        "opencodego" -> s.modelOpencodego
+        "custom" -> s.modelCustom
+        else -> Config.PROVIDER_REGISTRY[key]?.defaultModel ?: ""
+    }
+
+    /**
+     * Builds the fallback chain: same-provider alternate models first (in-provider
+     * failover when the primary model hits a rate limit or errors), then the other
+     * configured providers.
+     */
     private fun createFallbackProviders(s: SettingsRepository.Settings, primaryKey: String): List<LlmProvider> {
         val fallbacks = mutableListOf<LlmProvider>()
+
+        // In-provider failover: alternate models of the active provider, so a model
+        // outage/rate limit falls back to another model before jumping providers.
+        val primaryModel = modelFor(s, primaryKey)
+        val meta = Config.PROVIDER_REGISTRY[primaryKey]
+        val primaryKeyOk = meta?.requiresKey == false || apiKeyFor(s, primaryKey).isNotBlank()
+        if (primaryKeyOk) {
+            val altModels = (Config.PRESET_MODELS[primaryKey] ?: emptyList()).filter { it != primaryModel }
+            for (alt in altModels) {
+                ProviderFactory.create(primaryKey, apiKeyFor(s, primaryKey), alt, s.getBaseUrl(primaryKey), s.customTimeoutSec)
+                    ?.let { fallbacks.add(it) }
+            }
+        }
+
         if (primaryKey != "gemini" && s.geminiApiKey.isNotBlank()) fallbacks.add(GeminiProvider(s.geminiApiKey, s.modelGemini, s.baseUrlGemini))
         if (primaryKey != "openai" && s.openaiApiKey.isNotBlank()) fallbacks.add(OpenAIProvider(s.openaiApiKey, s.modelOpenai, s.baseUrlOpenai))
         if (primaryKey != "openrouter" && s.openrouterApiKey.isNotBlank()) fallbacks.add(OpenRouterProvider(s.openrouterApiKey, s.modelOpenrouter, s.baseUrlOpenrouter))
         if (primaryKey != "zen" && s.zenApiKey.isNotBlank()) fallbacks.add(ZenProvider(s.zenApiKey, s.modelZen, s.baseUrlZen))
         if (primaryKey != "opencodego" && s.opencodegoApiKey.isNotBlank()) fallbacks.add(OpenCodeGoProvider(s.opencodegoApiKey, s.modelOpencodego, s.baseUrlOpencodego))
+        // Custom only makes sense as a fallback when a base URL is actually configured.
+        if (primaryKey != "custom" && s.customBaseUrl.isNotBlank()) {
+            fallbacks.add(CustomProvider(s.customApiKey, s.modelCustom, s.customBaseUrl, s.customTimeoutSec))
+        }
         return fallbacks
     }
 

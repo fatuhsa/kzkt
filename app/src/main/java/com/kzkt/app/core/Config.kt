@@ -105,6 +105,7 @@ object Config {
         var localOcrScript: String = "Japanese (ML Kit)",
         var enableDevLogs: Boolean = false,
         var useImageUpscaler: Boolean = false,
+        var translateSfx: Boolean = false,
     )
 
     fun getLangCode(targetLanguage: String): String {

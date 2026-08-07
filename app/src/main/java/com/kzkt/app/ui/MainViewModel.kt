@@ -61,6 +61,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val providerModels = mutableStateMapOf<String, List<String>>()
     val modelsLoading = mutableStateOf(false)
 
+    // Provider health-check state ("Test API Key")
+    data class ProviderTestState(val loading: Boolean = false, val ok: Boolean? = null, val message: String = "")
+    val providerTestState = mutableStateOf<ProviderTestState?>(null)
+
     // Cancel flag
     private var _cancelled = false
 
@@ -284,6 +288,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .build()
+
+    /**
+     * Health check: send one tiny text request through the provider to validate the
+     * API key + model + base URL before a real batch. Reports the result in
+     * [providerTestState] (shown inline in Settings).
+     */
+    fun testProviderConnection(providerKey: String, baseUrl: String, apiKey: String, model: String) {
+        if (providerTestState.value?.loading == true) return
+        providerTestState.value = ProviderTestState(loading = true)
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val provider = com.kzkt.app.core.providers.ProviderFactory.create(
+                providerKey, apiKey, model, baseUrl, settings.value.customTimeoutSec
+            )
+            if (provider == null) {
+                post {
+                    providerTestState.value = ProviderTestState(ok = false, message = "Unknown provider: $providerKey")
+                }
+                return@launch
+            }
+            try {
+                val started = System.currentTimeMillis()
+                val reply = provider.translateText("{}", "Reply with exactly: OK")
+                val elapsed = System.currentTimeMillis() - started
+                val ok = reply != null && reply.contains("OK", ignoreCase = true)
+                post {
+                    providerTestState.value = ProviderTestState(
+                        ok = ok,
+                        message = if (ok) "Connection OK (${elapsed}ms)" else "Provider answered, but unexpected reply."
+                    )
+                }
+            } catch (e: Exception) {
+                val msg = e.message ?: "Unknown error"
+                post {
+                    providerTestState.value = ProviderTestState(ok = false, message = "Failed: $msg")
+                }
+            }
+        }
+    }
 
     fun fetchModelsForProvider(providerKey: String, baseUrl: String, apiKey: String) {
         val meta = Config.PROVIDER_REGISTRY[providerKey]

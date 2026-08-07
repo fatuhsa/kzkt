@@ -72,14 +72,22 @@ object ArchiveExtractor {
         val cbzFile = File(outputDir, outputFileName)
         
         try {
+            // Use paths relative to the deepest common ancestor directory so a
+            // chapter/folder structure is preserved inside the archive (matching
+            // how extractCbz stores entries). When all files share one directory
+            // the entry names stay identical to the old flat behaviour.
+            val commonRoot = commonParentDir(imagePaths)
             FileOutputStream(cbzFile).use { fos ->
                 ZipOutputStream(fos).use { zos ->
-                    imagePaths.forEachIndexed { index, path ->
+                    imagePaths.forEach { path ->
                         val file = File(path)
                         if (file.exists()) {
-                            // Keep original filename to preserve chapter/folder context
-                            val entryName = file.name
-                            
+                            val entryName = if (commonRoot != null && file.absolutePath.startsWith(commonRoot)) {
+                                file.absolutePath.removePrefix(commonRoot).trimStart('/', '\\')
+                            } else {
+                                file.name
+                            }
+
                             val zipEntry = ZipEntry(entryName)
                             zos.putNextEntry(zipEntry)
                             file.inputStream().use { fis ->
@@ -95,6 +103,25 @@ object ArchiveExtractor {
             android.util.Log.e("KZKT", "Failed to create CBZ: ${e.message}")
             return null
         }
+    }
+
+    /**
+     * Deepest common ancestor directory of all input paths (absolute, no trailing
+     * separator), or null when the inputs have no shared ancestor (e.g. one file).
+     */
+    private fun commonParentDir(paths: List<String>): String? {
+        if (paths.size < 2) return null
+        val abs = paths.map { File(it).absoluteFile }
+        var common = abs[0].parentFile?.absolutePath ?: return null
+        for (i in 1 until abs.size) {
+            var parent = abs[i].parentFile ?: return null
+            while (parent != null && !common.startsWith(parent.absolutePath + File.separator) && common != parent.absolutePath) {
+                parent = parent.parentFile
+            }
+            if (parent == null) return null
+            common = parent.absolutePath
+        }
+        return common
     }
 
     private fun isImageFile(fileName: String): Boolean {

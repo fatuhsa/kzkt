@@ -19,49 +19,60 @@ Skala nilai: **1** (rendah) – **5** (tinggi).
 
 ## 🟢 Tier 1 — Quick Wins
 
-### 1. Invalidasi cache saat ganti provider/model ⬜ *(nilai 5, effort kecil)*
+### 1. Invalidasi cache saat ganti provider/model ✅ *(nilai 5, effort kecil)*
+- **Status:** Sudah terimplementasi di kode (key cache = `hash_crop + bahasa + provider + model`).
 - **Masalah:** `TranslationCacheRepository` meng-key cache hanya dari `hash_crop + bahasa` (`getTranslation`/`saveTranslation`). Ganti provider atau model → hasil terjemahan lama masih dipakai, sehingga output "basi".
 - **Solusi:** tambahkan `provider + model` ke key cache. Opsional: tombol "Clear cache" sudah ada di Settings.
 - **File:** `app/src/main/java/com/kzkt/app/data/TranslationCacheRepository.kt`, `TranslationPipeline.kt`.
 
-### 2. Undo/Redo di touch-up editor ⬜ *(nilai 5, effort kecil)*
+### 2. Undo/Redo di touch-up editor ✅ *(nilai 5, effort kecil)*
+- **Status:** Sudah terimplementasi (stack history + tombol Undo/Redo di `InteractiveEditorDialog`).
 - **Masalah:** setiap edit (teks/posisi/ukuran) langsung diterapkan tanpa bisa dibatalkan.
 - **Solusi:** simpan snapshot `bubbles` (SnapshotStateMap) tiap perubahan; tombol Undo/Redo di `InteractiveEditorDialog`.
 - **File:** `app/src/main/java/com/kzkt/app/ui/component/InteractiveEditorDialog.kt`.
 
-### 3. Find & Replace / batch styling di editor ⬜ *(nilai 4, effort kecil)*
+### 3. Find & Replace / batch styling di editor ✅ *(nilai 4, effort kecil)*
+- **Status:** Dialog "Batch Edit" di editor: Find & Replace semua bubble + apply bold/italic/align/size ke semua bubble.
 - Terapkan bold/italic/alignment/ukuran ke banyak bubble sekaligus, dan ganti teks massal (mis. perbaiki nama karakter yang salah konsisten).
 - Data style per bubble sudah ada di `BubbleMeta`.
 
-### 4. Retry otomatis antar-model (failover dalam provider) ⬜ *(nilai 4, effort kecil)*
+### 4. Retry otomatis antar-model (failover dalam provider) ✅ *(nilai 4, effort kecil)*
+- **Status:** `createFallbackProviders` kini mencoba model alternatif dari `PRESET_MODELS` provider yang sama sebelum lompat ke provider lain.
 - Kalau model utama gagal di `RateLimiter.executeWithRetry`, coba model cadangan pada provider yang sama sebelum lompat ke provider lain (fallback chain sudah ada di `TranslationPipeline`).
 
-### 5. Export CBZ mempertahankan struktur folder ⬜ *(nilai 3, effort kecil)*
+### 5. Export CBZ mempertahankan struktur folder ✅ *(nilai 3, effort kecil)*
+- **Status:** `createCbz` kini memakai path relatif dari direktori induk bersama (`commonParentDir`).
 - **Bug kecil dari audit:** `ArchiveExtractor.createCbz` menulis entry flat (`file.name` saja) padahal ekstraksi mempertahankan path asli. Gunakan path relatif agar nama tidak tabrakan.
 - **File:** `app/src/main/java/com/kzkt/app/util/ArchiveExtractor.kt`.
 
-### 6. Dukungan ACTION_SEND_MULTIPLE ⬜ *(nilai 3, effort kecil)*
+### 6. Dukungan ACTION_SEND_MULTIPLE ✅ *(nilai 3, effort kecil)*
+- **Status:** Intent-filter `SEND_MULTIPLE` + baca `ClipData`/`EXTRA_STREAM` di `MainActivity`.
 - Manifest hanya mendeklarasikan `ACTION_SEND` (1 gambar). Tambah `SEND_MULTIPLE` + baca `ClipData` agar bisa share banyak gambar sekaligus dari galeri.
 - **File:** `AndroidManifest.xml`, `MainActivity.kt`.
 
-### 7. Provider health check ("Test API Key") ⬜ *(nilai 4, effort kecil)*
+### 7. Provider health check ("Test API Key") ✅ *(nilai 4, effort kecil)*
+- **Status:** Tombol "Test API Key & Connection" di Settings — 1 request kecil + hasil inline.
 - Tombol yang mengirim 1 request kecil (model list / ping) untuk memvalidasi API key + model sebelum batch besar.
 - **File:** `MainViewModel.fetchModelsForProvider` (pola sudah ada).
 
-### 8. Filter history: bahasa + rentang tanggal ⬜ *(nilai 3, effort kecil)*
+### 8. Filter history: bahasa + rentang tanggal ✅ *(nilai 3, effort kecil)*
+- **Status:** Sudah terimplementasi (filter chip bahasa + date range picker di `HistoryScreen`).
 - Search & filter provider sudah ada di `HistoryScreen`; tambahkan filter bahasa dan rentang tanggal.
 
-### 9. Input dari folder (SAF tree picker) ⬜ *(nilai 4, effort kecil)*
+### 9. Input dari folder (SAF tree picker) ✅ *(nilai 4, effort kecil)*
+- **Status:** Tombol "Pick Folder" di Translate — `OpenDocumentTree` + traversal rekursif `DocumentFile`, gambar di-copy ke cache.
 - Pilih satu folder berisi puluhan gambar sekaligus (`OpenDocumentTree`), rekursif ambil gambar — lebih cepat daripada multi-select satu-satu.
 
-### 10. Themed icon Android 13+ (monochrome) ⬜ *(nilai 2, effort kecil)*
+### 10. Themed icon Android 13+ (monochrome) ✅ *(nilai 2, effort kecil)*
+- **Status:** Adaptive icon `mipmap-anydpi-v26` + layer `monochrome` di `mipmap-anydpi-v33`.
 - Tambahkan layer `monochrome` pada launcher icon agar tampil rapi di Pixel/launcher Material You.
 
 ---
 
 ## 🟡 Tier 2 — High Value
 
-### 11. Mode terjemahan SFX ⬜ *(nilai 5, effort menengah)*
+### 11. Mode terjemahan SFX ✅ *(nilai 5, effort menengah)*
+- **Status:** Toggle "Translate Sound Effects (SFX)" — prompt menginstruksikan LLM menerjemahkan onomatope alih-alih `SKIP`.
 - Sekarang SFX di-*skip* (LLM diinstruksikan membalas `SKIP`). Tambah toggle **"Translate SFX"** agar efek suara (ドドド, バキ, dsb.) ikut diterjemahkan dengan gaya bold/large.
 - **File:** `Constants.buildPrompt`, `TranslationPipeline.renderTranslations`, `TextRenderer`.
 
@@ -72,7 +83,8 @@ Skala nilai: **1** (rendah) – **5** (tinggi).
 ### 13. Pre-translation preview ⬜ *(nilai 4, effort menengah)*
 - Tampilkan hasil JSON LLM (bubble → teks) **sebelum** render final; user bisa koreksi, lalu render. Mencegah 100 halaman terbuang karena prompt/glossary salah.
 
-### 14. Backup & restore (settings + glossary + cache + history) ⬜ *(nilai 4, effort menengah)*
+### 14. Backup & restore (settings + glossary + cache + history) ✅ *(nilai 4, effort menengah)*
+- **Status:** `BackupManager` — export/import 1 file JSON (settings + glossary + history + translation cache) via menu Data di Settings.
 - Export semua data lokal ke 1 file (JSON/zip) yang bisa dibagikan ke perangkat lain.
 - **File:** `SettingsRepository`, `GlossaryRepository`, `TranslationCacheRepository`, `HistoryRepository` (semua sudah JSON-friendly).
 

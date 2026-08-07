@@ -417,6 +417,46 @@ fun HistoryScreen(
             },
         )
     }
+
+    // Date-range filter picker (opened by the "Custom Date" button above). The
+    // filter itself already runs on dateRangeState in [filteredEntries]; this is
+    // the missing dialog that lets the user actually set the range.
+    // (material3 1.5.0-alpha25 no longer ships DateRangePickerDialog, so the
+    // picker is wrapped in a plain Dialog + Card.)
+    if (showDateRangePicker) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showDateRangePicker = false }) {
+            Card(
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ),
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        "Filter by date range",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    DateRangePicker(
+                        state = dateRangeState,
+                        showModeToggle = false,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(onClick = {
+                            dateRangeState.setSelection(null, null)
+                            showDateRangePicker = false
+                        }) { Text("Clear") }
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(onClick = { showDateRangePicker = false }) { Text("OK") }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

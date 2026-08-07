@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
@@ -23,6 +24,19 @@
         android:supportsRtl="false"
         android:theme="@style/Theme.KZKT">
 
+        <!--
+            WorkManager's foreground service must declare a foregroundServiceType
+            when targeting SDK 35+ (Android 15/16). Without it Android 16 throws
+            InvalidForegroundServiceTypeException ("Starting FGS with type none") —
+            WorkManager 2.10.0's own manifest omits the attribute, so we add it
+            here via tools:node="merge". dataSync matches FOREGROUND_SERVICE_DATA_SYNC
+            and covers long-running translation jobs.
+        -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
         <provider
 
             android:name="androidx.core.content.FileProvider"
@@ -45,9 +59,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Accept share intents -->
+            <!-- Accept share intents (single + multiple images) -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
             </intent-filter>

@@ -37,7 +37,11 @@ object Constants {
     )
 
     // ── Prompt template (populated at runtime) ─────────────────────
-    fun buildPrompt(targetLanguage: String, glossary: Map<String, String> = emptyMap()): String {
+    fun buildPrompt(
+        targetLanguage: String,
+        glossary: Map<String, String> = emptyMap(),
+        translateSfx: Boolean = false,
+    ): String {
         val langKey = targetLanguage.lowercase().trim()
         val examples = TRANSLATION_EXAMPLES[langKey]
             ?: TRANSLATION_EXAMPLES["english"]!!
@@ -66,7 +70,11 @@ object Constants {
             appendLine("6. Do not create new sentences that sound unnatural if they are not in the original text.")
             appendLine("7. For long sentences, keep all parts of the meaning. Do not truncate.")
             appendLine("8. If unsure about some text, use [?] for that part.")
-            appendLine("9. If the bubble only contains SFX, scribbles, is empty, or is background art and not a meaningful dialogue, reply with 'SKIP'.")
+            if (translateSfx) {
+                appendLine("9. If the bubble contains sound effects (SFX) like ドドド, バキ, ガシャーン or scribbles, translate the onomatopoeia into $targetLanguage comic style instead of 'SKIP'.")
+            } else {
+                appendLine("9. If the bubble only contains SFX, scribbles, is empty, or is background art and not a meaningful dialogue, reply with 'SKIP'.")
+            }
             appendLine()
             if (glossary.isNotEmpty()) {
                 appendLine("GLOSSARY RULES (CRITICAL):")
@@ -82,9 +90,15 @@ object Constants {
             appendLine("3. This applies even when translating to non-Japanese languages.")
             appendLine()
             appendLine("SFX RULE:")
-            appendLine("1. If a bubble contains ONLY sound effects (SFX) with no dialogue, reply with 'SKIP'.")
-            appendLine("2. SFX examples: ドドド, ゴゴゴ, バキ, ギュウ, キラキラ, etc.")
-            appendLine("3. If a bubble has BOTH dialogue and SFX, translate only the dialogue part.")
+            if (translateSfx) {
+                appendLine("1. Sound effects (SFX) ARE translatable. Translate them into $targetLanguage onomatopoeia (e.g. ドドド → 'DOKO DOKO' or an equivalent sound word in $targetLanguage).")
+                appendLine("2. SFX examples: ドドド, ゴゴゴ, バキ, ギュウ, キラキラ, etc. Always translate them, never reply 'SKIP' for pure SFX.")
+                appendLine("3. Keep SFX short, impactful, and stylized (e.g. repeated letters like 'BOOM!!').")
+            } else {
+                appendLine("1. If a bubble contains ONLY sound effects (SFX) with no dialogue, reply with 'SKIP'.")
+                appendLine("2. SFX examples: ドドド, ゴゴゴ, バキ, ギュウ, キラキラ, etc.")
+                appendLine("3. If a bubble has BOTH dialogue and SFX, translate only the dialogue part.")
+            }
             appendLine()
             appendLine("RETURN ALL IDs RULE:")
             appendLine("1. You MUST return a JSON entry for EVERY red ID number visible in the image.")

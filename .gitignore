@@ -1,26 +1,55 @@
-# Android & Kotlin build outputs
+# ─────────────────────────────────────────────────────────────────
+# KZKT — Git ignore
+# Hanya file yang dibutuhkan untuk BUILD yang di-commit.
+# Output build, keystore, dan konfigurasi lokal TIDAK pernah di-commit.
+# ─────────────────────────────────────────────────────────────────
+
+# ── Android / Gradle build outputs ───────────────────────────────
 .gradle/
-build/
-app/build/
-opencv/build/
-.externalNativeBuild/
-.cxx/
+**/build/
 local.properties
 *.apk
 *.aab
 *.ap_
 *.dex
+*.class
+output-metadata.json
 
-# IDE & OS configuration
+# Native / CMake build outputs
+.cxx/
+.externalNativeBuild/
+
+# ── Keystore & kredensial signing — JANGAN PERNAH di-commit ──────
+keystore.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+*.mobileprovision
+
+# ── IDE & editor ─────────────────────────────────────────────────
 .idea/
 *.iml
 .vscode/
+*.swp
+*~
 .DS_Store
 Thumbs.db
-*.swp
-# Local workspace caches
+*.hprof
+
+# ── Konfigurasi lokal / personal ─────────────────────────────────
+.claude/settings.local.json
+.capture/
+captures/
+.kotlin/
+
+# ── Sisa proyek Python lama (bila ada) ───────────────────────────
+__pycache__/
+*.pyc
+
+# ── Cache lokal lama ─────────────────────────────────────────────
 /models/
 .serena/
-.kotlin/
 .remember/
-*~

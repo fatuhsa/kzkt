@@ -391,7 +391,7 @@ class TranslationPipeline(
         val allRawTexts = mutableMapOf<String, String>()
         if (cropsToTranslate.isNotEmpty()) {
             if (params.useLocalOcr) {
-                onProgress("  [Local OCR Engine] Extracting text from ${cropsToTranslate.size} speech bubbles via Google ML Kit (${params.localOcrScript})...")
+                onProgress("  [Local OCR Engine] Extracting text from ${cropsToTranslate.size} speech bubbles via Google ML Kit (auto: Japanese + Latin)...")
                 val maxPerBatch = minOf(params.maxBubblesPerRequest, 6)
                 val ocrCropItems = cropsToTranslate.map { MosaicBuilder.CropItem(it.id, it.bitmap) }
                 val chunks = MosaicBuilder.chunkCrops(ocrCropItems, maxPerBatch)
@@ -408,7 +408,13 @@ class TranslationPipeline(
                             ocrMap[item.id] = recognized
                             if (params.enableDevLogs) onProgress("  [Local OCR] Bubble ${item.id} -> \"$recognized\"")
                         } else {
-                            if (params.enableDevLogs) onProgress("  [Local OCR] Bubble ${item.id} -> (No text recognized)")
+                            val ocrErr = com.kzkt.app.core.ocr.LocalOcrEngine.lastError
+                            if (ocrErr != null) {
+                                com.kzkt.app.core.ocr.LocalOcrEngine.lastError = null
+                                if (params.enableDevLogs) onProgress("  [Local OCR] Bubble ${item.id} -> ML Kit error: $ocrErr")
+                            } else if (params.enableDevLogs) {
+                                onProgress("  [Local OCR] Bubble ${item.id} -> (No text recognized)")
+                            }
                         }
                     }
                     if (ocrMap.isEmpty()) {
@@ -418,7 +424,12 @@ class TranslationPipeline(
                     allRawTexts.putAll(ocrMap)
 
                     val textJson = com.google.gson.Gson().toJson(ocrMap)
-                    val textPrompt = "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage. Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
+                    val sfxInstruction = if (params.translateSfx) {
+                        " Sound effects (SFX) like ドドド, バキ, ゴゴゴ MUST be translated into $targetLanguage onomatopoeia (never skip them)."
+                    } else {
+                        ""
+                    }
+                    val textPrompt = "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage.$sfxInstruction Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
                     val providersChain = listOf(provider) + fallbackProviders
                     val dummyBmp = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
 
@@ -466,7 +477,7 @@ class TranslationPipeline(
                     val shrunk = MosaicBuilder.shrinkCropsIfTooTall(chunk, params.maxTinggiMosaik, params.jarakAntarPotongan)
                     val mosaic = MosaicBuilder.buildMosaic(shrunk, params)
 
-                    val prompt = Constants.buildPrompt(targetLanguage, glossary)
+                    val prompt = Constants.buildPrompt(targetLanguage, glossary, params.translateSfx)
                     val providersChain = listOf(provider) + fallbackProviders
 
                     for (prov in providersChain) {
@@ -787,14 +798,37 @@ class TranslationPipeline(
         val allTranslations = mutableMapOf<String, String>()
         val batchRawTexts = mutableMapOf<String, String>()
 
+        // Translation-memory lookup (same as the single-image path): bubbles that
+        // are pixel-identical to a previously translated crop are served from the
+        // local cache without burning an API call. This makes re-translating PDFs /
+        // multi-page batches (and repeated bubbles across pages) effectively free.
+        val cropsToTranslate = mutableListOf<MosaicBuilder.CropItem>()
+        if (cacheRepo != null) {
+            for (crop in cropItems) {
+                val cached = cacheRepo.getTranslation(crop.bitmap, targetLanguage, provider.providerName, provider.modelName)
+                if (cached != null) {
+                    allTranslations[crop.id] = cached
+                } else {
+                    cropsToTranslate.add(crop)
+                }
+            }
+            if (allTranslations.isNotEmpty()) {
+                onProgress("  [Cache Hit] Found ${allTranslations.size}/${cropItems.size} cached translations locally.")
+            }
+        } else {
+            cropsToTranslate.addAll(cropItems)
+        }
+
         if (params.useLocalOcr) {
-            if (params.enableDevLogs) {
-                onProgress("  [Local OCR Engine] Extracting text from ${cropItems.size} bubbles via Google ML Kit (${params.localOcrScript})...")
-            } else {
-                onProgress("  [Local OCR] Extracting text from ${cropItems.size} bubbles...")
+            if (cropsToTranslate.isNotEmpty()) {
+                if (params.enableDevLogs) {
+                    onProgress("  [Local OCR Engine] Extracting text from ${cropsToTranslate.size} bubbles via Google ML Kit (auto: Japanese + Latin)...")
+                } else {
+                    onProgress("  [Local OCR] Extracting text from ${cropsToTranslate.size} bubbles...")
+                }
             }
             val maxPerBatch = minOf(params.maxBubblesPerRequest, 6)
-            val chunks = MosaicBuilder.chunkCrops(cropItems, maxPerBatch)
+            val chunks = MosaicBuilder.chunkCrops(cropsToTranslate, maxPerBatch)
 
             var consecutiveFailures = 0
             for ((chunkIdx, chunk) in chunks.withIndex()) {
@@ -809,7 +843,13 @@ class TranslationPipeline(
                         ocrMap[item.id] = recognized
                         if (params.enableDevLogs) onProgress("  [Local OCR] Bubble ${item.id} -> \"$recognized\"")
                     } else {
-                        if (params.enableDevLogs) onProgress("  [Local OCR] Bubble ${item.id} -> (No text recognized)")
+                        val ocrErr = com.kzkt.app.core.ocr.LocalOcrEngine.lastError
+                        if (ocrErr != null) {
+                            com.kzkt.app.core.ocr.LocalOcrEngine.lastError = null
+                            if (params.enableDevLogs) onProgress("  [Local OCR] Bubble ${item.id} -> ML Kit error: $ocrErr")
+                        } else if (params.enableDevLogs) {
+                            onProgress("  [Local OCR] Bubble ${item.id} -> (No text recognized)")
+                        }
                     }
                 }
                 if (ocrMap.isEmpty()) {
@@ -826,7 +866,8 @@ class TranslationPipeline(
                     INSTRUCTIONS:
                     1. Smart OCR Correction: Infer and auto-correct any OCR errors, misread characters, typos, or incomplete words using comic/manga dialogue context before translating.
                     2. Natural Translation: Translate the corrected meaning naturally into $targetLanguage while preserving tone, emotion, and nuance suitable for manga speech bubbles.
-                    3. Strict Output Format: Return ONLY a valid JSON object mapping the exact input keys to their translated values. Do not wrap in markdown or add commentary.
+                    ${if (params.translateSfx) "3. Sound effects (SFX) like ドドド, バキ, ゴゴゴ MUST be translated into $targetLanguage onomatopoeia (never skip them)." else ""}
+                    4. Strict Output Format: Return ONLY a valid JSON object mapping the exact input keys to their translated values. Do not wrap in markdown or add commentary.
 
                     Input JSON:
                     $textJson
@@ -873,7 +914,7 @@ class TranslationPipeline(
                 kotlinx.coroutines.delay(500L)
             }
         } else {
-            val chunks = MosaicBuilder.chunkCrops(cropItems, params.maxBubblesPerRequest)
+            val chunks = MosaicBuilder.chunkCrops(cropsToTranslate, params.maxBubblesPerRequest)
 
             for ((chunkIdx, chunk) in chunks.withIndex()) {
                 if (isCancelled()) return emptyList()
@@ -884,7 +925,7 @@ class TranslationPipeline(
 
                 val shrunk = MosaicBuilder.shrinkCropsIfTooTall(chunk, params.maxTinggiMosaik, params.jarakAntarPotongan)
                 val mosaic = MosaicBuilder.buildMosaic(shrunk, params)
-                val prompt = Constants.buildPrompt(targetLanguage, glossary)
+                val prompt = Constants.buildPrompt(targetLanguage, glossary, params.translateSfx)
                 val providersChain = listOf(provider) + fallbackProviders
                 var batchSucceeded = false
 
@@ -906,6 +947,12 @@ class TranslationPipeline(
                                 val parsed = JsonUtils.parseTranslationMap(cleaned)
                                 if (parsed.isNotEmpty()) {
                                     allTranslations.putAll(parsed)
+                                    if (cacheRepo != null) {
+                                        for ((id, text) in parsed) {
+                                            val item = cropItems.find { it.id == id }
+                                            if (item != null) cacheRepo.saveTranslation(item.bitmap, targetLanguage, text, prov.providerName, prov.modelName)
+                                        }
+                                    }
                                     batchSucceeded = true
                                     break
                                 } else {

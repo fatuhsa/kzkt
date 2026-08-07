@@ -64,6 +64,8 @@ fun MainScreen(
         }
     }
 
+    val scope = rememberCoroutineScope()
+
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
@@ -95,6 +97,31 @@ fun MainScreen(
         }
     }
 
+    // ── Folder input (SAF tree picker): pick one folder, import all images in it ──
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { treeUri: Uri? ->
+        if (treeUri != null) {
+            val toastContext = context
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val uris = com.kzkt.app.ui.FileUtils.listImageUrisFromTree(context, treeUri)
+                if (uris.isEmpty()) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        android.widget.Toast.makeText(toastContext, "No images found in this folder", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                val paths = uris.mapNotNull { com.kzkt.app.ui.FileUtils.copyUriToCache(context, it) }
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (paths.isNotEmpty()) {
+                        viewModel.addFiles(paths)
+                        android.widget.Toast.makeText(toastContext, "Imported ${paths.size} images from folder", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -115,7 +142,7 @@ fun MainScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        ActionButtons(viewModel, filePickerLauncher)
+        ActionButtons(viewModel, filePickerLauncher, folderPickerLauncher)
 
         // ── Progress ──
         if (viewModel.translationActive.value) {
@@ -279,32 +306,51 @@ private fun QuickSettingsCard(viewModel: MainViewModel) {
 private fun ActionButtons(
     viewModel: MainViewModel,
     filePickerLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Array<String>, List<Uri>>,
+    folderPickerLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Uri?, Uri?>,
 ) {
     val active by remember { derivedStateOf { viewModel.translationActive.value } }
     val hasFiles by remember { derivedStateOf { viewModel.selectedFiles.isNotEmpty() } }
     val yoloReady by remember { derivedStateOf { viewModel.yoloReady.value } }
 
-    Row(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        OutlinedButton(
-            onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
-            enabled = !active,
-            modifier = Modifier.weight(1f),
+        // File inputs — side by side, each half width.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(4.dp))
-            Text("Pick File/Image")
+            OutlinedButton(
+                onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
+                enabled = !active,
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Pick File/Image")
+            }
+
+            OutlinedButton(
+                onClick = { folderPickerLauncher.launch(null) },
+                enabled = !active,
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Pick Folder")
+            }
         }
 
+        // Primary action — full width, natural height. (NOT weight(1f): inside a
+        // Column weight stretches vertically and made the button fill the screen.)
         if (active) {
             Button(
                 onClick = { viewModel.cancelTranslation() },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error,
                 ),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
@@ -319,7 +365,7 @@ private fun ActionButtons(
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                     ),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
@@ -329,7 +375,7 @@ private fun ActionButtons(
                 Button(
                     onClick = { viewModel.startTranslation() },
                     enabled = hasFiles && yoloReady,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))

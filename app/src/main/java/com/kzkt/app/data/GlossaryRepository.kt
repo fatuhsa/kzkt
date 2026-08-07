@@ -67,4 +67,9 @@ class GlossaryRepository(private val context: Context) {
             saveGlossary(current)
         }
     }
+
+    /** Replace the whole glossary in one write (used by backup restore). */
+    fun replaceAll(map: Map<String, String>) {
+        saveGlossary(map.toMutableMap())
+    }
 }

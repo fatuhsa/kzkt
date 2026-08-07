@@ -55,11 +55,27 @@ object FileUtils {
             val inputStream = context.contentResolver.openInputStream(uri) ?: return null
             val cacheFile = File(context.cacheDir, "input/$name")
             cacheFile.parentFile?.mkdirs()
-            FileOutputStream(cacheFile).use { out ->
+            // Collision-safe target: two sources with the same display name (e.g.
+            // "001.jpg" from different folders in a recursive folder import, or a
+            // multi-file share) must never overwrite each other — dedupe with a
+            // numeric suffix ("001_1.jpg", "001_2.jpg", ...).
+            val target = if (cacheFile.exists()) {
+                val dot = cacheFile.name.lastIndexOf('.')
+                val base = if (dot > 0) cacheFile.name.substring(0, dot) else cacheFile.name
+                val ext = if (dot > 0) cacheFile.name.substring(dot) else ""
+                var i = 1
+                var candidate = File(cacheFile.parentFile, "${base}_$i$ext")
+                while (candidate.exists()) {
+                    i++
+                    candidate = File(cacheFile.parentFile, "${base}_$i$ext")
+                }
+                candidate
+            } else cacheFile
+            FileOutputStream(target).use { out ->
                 inputStream.copyTo(out)
             }
             inputStream.close()
-            cacheFile.absolutePath
+            target.absolutePath
         } catch (_: Exception) {
             null
         }
@@ -76,6 +92,33 @@ object FileUtils {
         } catch (_: Exception) {
             null
         }
+    }
+
+    /**
+     * Recursively collect every image file URI inside a SAF tree directory.
+     * Uses DocumentFile so no storage permission is required (scoped storage safe).
+     */
+    fun listImageUrisFromTree(context: Context, treeUri: Uri): List<Uri> {
+        val root = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, treeUri)
+            ?: return emptyList()
+        val results = mutableListOf<Uri>()
+        fun walk(dir: androidx.documentfile.provider.DocumentFile) {
+            dir.listFiles().forEach { child ->
+                when {
+                    child.isDirectory -> walk(child)
+                    child.isFile && isImageMime(child.type) -> results.add(child.uri)
+                    else -> {}
+                }
+            }
+        }
+        walk(root)
+        return results.sortedBy { it.lastPathSegment }
+    }
+
+    private fun isImageMime(mime: String?): Boolean {
+        if (mime == null) return false
+        return mime.startsWith("image/") ||
+            mime == "application/vnd.comicbook+zip"
     }
 
     /**
@@ -130,11 +173,31 @@ object FileUtils {
     }
 
     /**
-     * Copy translated file to public MediaStore Download/Pictures gallery.
+     * Share any file (e.g. a JSON backup) with an explicit MIME type via a chooser.
      */
-    /**
-     * Copy translated file to public MediaStore Download/KZKT directory.
-     */
+    fun shareAnyFile(context: Context, filePath: String, mimeType: String = "application/json") {
+        try {
+            val file = File(filePath)
+            if (!file.exists()) return
+
+            val uri: Uri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(android.content.Intent.createChooser(intent, "Share File"))
+        } catch (e: Exception) {
+            android.util.Log.e("KZKT", "Failed to share file: ${e.message}")
+        }
+    }
+
+    /** Copy translated file to public MediaStore Download/KZKT directory. */
     fun saveToMediaStore(context: Context, filePath: String): String? {
         try {
             val file = File(filePath)
@@ -173,7 +236,20 @@ object FileUtils {
                             }
                         }
                     }
-                    return actualPath ?: file.absolutePath
+                    if (actualPath != null) return actualPath
+                    // MediaStore did not expose a real _data path (some devices). The
+                    // original cache copy is deleted by the caller right after this, so
+                    // returning it would leave History pointing at a missing file.
+                    // Park a copy in app-external storage instead — no permission needed
+                    // and the path stays valid.
+                    val fallbackDir = File(
+                        context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS),
+                        "KZKT"
+                    )
+                    fallbackDir.mkdirs()
+                    val fallbackFile = File(fallbackDir, fileName)
+                    file.copyTo(fallbackFile, overwrite = true)
+                    return fallbackFile.absolutePath
                 }
             }
 

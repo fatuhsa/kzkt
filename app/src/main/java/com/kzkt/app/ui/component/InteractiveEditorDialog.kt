@@ -64,6 +64,15 @@ fun InteractiveEditorDialog(
     var currentDragAction by remember { mutableStateOf(DragAction.NONE) }
     var baseBitmap by remember { mutableStateOf(originalBitmap) }
 
+    // ── Batch operations (find & replace + apply style to all) ──
+    var showBatchDialog by remember { mutableStateOf(false) }
+    var findText by remember { mutableStateOf("") }
+    var replaceText by remember { mutableStateOf("") }
+    var batchBold by remember { mutableStateOf(false) }
+    var batchItalic by remember { mutableStateOf(false) }
+    var batchAlign by remember { mutableStateOf(android.graphics.Paint.Align.CENTER) }
+    var batchFontScale by remember { mutableFloatStateOf(1.0f) }
+
     val history = remember { mutableStateListOf<Map<String, BubbleMeta>>() }
     var historyIndex by remember { mutableIntStateOf(-1) }
     
@@ -486,6 +495,13 @@ fun InteractiveEditorDialog(
                             .padding(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // Batch operations (Find & Replace + apply style to all)
+                        androidx.compose.material3.IconButton(
+                            onClick = { showBatchDialog = true },
+                            modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), androidx.compose.foundation.shape.CircleShape)
+                        ) {
+                            Icon(Icons.Default.FormatPaint, contentDescription = "Batch Edit")
+                        }
                         // Undo button
                         androidx.compose.material3.IconButton(
                             onClick = { undo() },
@@ -734,6 +750,119 @@ fun InteractiveEditorDialog(
                 // Add bottom spacer in Column so content can scroll past the bottom bar if necessary
                 Spacer(modifier = Modifier.height(80.dp))
             } // Close Column
+
+            // ── Batch Edit Dialog (Find & Replace + Style All) ──
+            if (showBatchDialog) {
+                AlertDialog(
+                    onDismissRequest = { showBatchDialog = false },
+                    title = { Text("Batch Edit") },
+                    text = {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text("Find & Replace", style = MaterialTheme.typography.labelLarge)
+                            OutlinedTextField(
+                                value = findText,
+                                onValueChange = { findText = it },
+                                label = { Text("Find") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            OutlinedTextField(
+                                value = replaceText,
+                                onValueChange = { replaceText = it },
+                                label = { Text("Replace with") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Button(
+                                onClick = {
+                                    if (findText.isNotBlank()) {
+                                        val keys = bubbles.keys.toList()
+                                        for (k in keys) {
+                                            val b = bubbles[k] ?: continue
+                                            if (b.text.contains(findText)) {
+                                                bubbles[k] = b.copy(text = b.text.replace(findText, replaceText))
+                                            }
+                                        }
+                                        pushState()
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Replace in all bubbles") }
+
+                            HorizontalDivider()
+
+                            Text("Apply style to ALL bubbles", style = MaterialTheme.typography.labelLarge)
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                FilterChip(
+                                    selected = batchBold,
+                                    onClick = { batchBold = !batchBold },
+                                    label = { Text("Bold") }
+                                )
+                                FilterChip(
+                                    selected = batchItalic,
+                                    onClick = { batchItalic = !batchItalic },
+                                    label = { Text("Italic") }
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Align", style = MaterialTheme.typography.labelSmall)
+                                Spacer(Modifier.width(8.dp))
+                                listOf(
+                                    android.graphics.Paint.Align.LEFT to "Left",
+                                    android.graphics.Paint.Align.CENTER to "Center",
+                                    android.graphics.Paint.Align.RIGHT to "Right",
+                                ).forEach { (align, label) ->
+                                    FilterChip(
+                                        selected = batchAlign == align,
+                                        onClick = { batchAlign = align },
+                                        label = { Text(label) }
+                                    )
+                                }
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Size", style = MaterialTheme.typography.labelSmall)
+                                Slider(
+                                    value = batchFontScale,
+                                    onValueChange = { batchFontScale = it },
+                                    valueRange = 0.5f..2.5f,
+                                    modifier = Modifier.weight(1f).padding(start = 8.dp)
+                                )
+                                Text("%.1fx".format(batchFontScale), style = MaterialTheme.typography.labelSmall)
+                            }
+                            Button(
+                                onClick = {
+                                    val keys = bubbles.keys.toList()
+                                    for (k in keys) {
+                                        val b = bubbles[k] ?: continue
+                                        bubbles[k] = b.copy(
+                                            isBold = batchBold,
+                                            isItalic = batchItalic,
+                                            align = batchAlign,
+                                            fontScale = batchFontScale
+                                        )
+                                    }
+                                    pushState()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Apply to all") }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showBatchDialog = false }) { Text("Close") }
+                    }
+                )
+            }
 
             // Action buttons wrapper (anchored to bottom)
             Box(

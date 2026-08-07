@@ -45,9 +45,9 @@ import com.kzkt.app.ui.component.ChipsRow
 import com.kzkt.app.ui.component.Material3SettingsGroup
 import com.kzkt.app.ui.component.Material3SettingsItem
 import com.kzkt.app.ui.theme.DefaultThemeColor
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.outlined.TextFields
@@ -78,6 +78,60 @@ fun SettingsScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
 
     var showFontDialog by remember { mutableStateOf(false) }
+
+    var confirmRestoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var isRestoring by remember { mutableStateOf(false) }
+
+    // Backup restore file picker
+    val backupPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) confirmRestoreUri = uri
+    }
+
+    fun exportBackup() {
+        val toastContext = context
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val settingsJson = viewModel.settingsRepo.exportAllJson()
+                val glossary = viewModel.glossaryRepo.glossary.value
+                val history = viewModel.historyRepo.entriesFlow.first()
+                val json = com.kzkt.app.data.BackupManager.buildBackup(toastContext, settingsJson, glossary, history)
+                val file = com.kzkt.app.data.BackupManager.writeToCache(toastContext, json)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    com.kzkt.app.ui.FileUtils.shareAnyFile(toastContext, file.absolutePath)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("KZKT", "Backup export failed: ${e.message}")
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    android.widget.Toast.makeText(toastContext, "Backup failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    fun restoreBackup(uri: android.net.Uri) {
+        val toastContext = context
+        isRestoring = true
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val json = com.kzkt.app.data.BackupManager.readFromUri(toastContext, uri)
+            val result = if (json != null) {
+                com.kzkt.app.data.BackupManager.applyBackup(
+                    toastContext, json,
+                    viewModel.settingsRepo, viewModel.glossaryRepo, viewModel.historyRepo
+                )
+            } else {
+                com.kzkt.app.data.BackupManager.BackupResult(false, "Could not read backup file")
+            }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                isRestoring = false
+                android.widget.Toast.makeText(
+                    toastContext, result.message,
+                    if (result.ok) android.widget.Toast.LENGTH_LONG else android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
 
     val fontPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -241,7 +295,7 @@ fun SettingsScreen(
                 // derivedStateOf, so changing one setting recomposes just this
                 // group — not the whole Settings screen (recomposition storm).
                 val useLocalOcr by remember { derivedStateOf { viewModel.settings.value.useLocalOcr } }
-                val localOcrScript by remember { derivedStateOf { viewModel.settings.value.localOcrScript } }
+                val translateSfx by remember { derivedStateOf { viewModel.settings.value.translateSfx } }
                 Material3SettingsGroup(
                     items = listOf(
                         Material3SettingsItem(
@@ -261,6 +315,22 @@ fun SettingsScreen(
                             }
                         ),
                         Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.Tune) },
+                            title = { Text("Translate Sound Effects (SFX)") },
+                            description = { Text(if (translateSfx) "ON: onomatopoeia like ドドド / バキ get translated too." else "OFF: pure SFX bubbles are skipped (default).") },
+                            trailingContent = {
+                                Switch(
+                                    checked = translateSfx,
+                                    onCheckedChange = { enabled ->
+                                        scope.launch { viewModel.settingsRepo.saveTranslateSfx(enabled) }
+                                    }
+                                )
+                            },
+                            onClick = {
+                                scope.launch { viewModel.settingsRepo.saveTranslateSfx(!translateSfx) }
+                            }
+                        ),
+                        Material3SettingsItem(
                             leadingContent = { SettingsIcon(androidx.compose.material.icons.Icons.Outlined.TextFields) },
                             title = { Text("Custom Dictionary / Glossary") },
                             description = { Text("Define how specific names or terms should be translated") },
@@ -277,8 +347,8 @@ fun SettingsScreen(
                         )
                     )
                 )
-                // OCR script language belongs inside the engine group — a nested
-                // card with the same visual language instead of a peer heading.
+                // OCR script is auto-detected: the single bundled ML Kit model
+                // (Japanese + Latin) reads both scripts, so no selector is needed.
                 if (useLocalOcr) {
                     Spacer(Modifier.height(4.dp))
                     Card(
@@ -289,31 +359,50 @@ fun SettingsScreen(
                         ),
                         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                     ) {
-                        Column(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
+                            SettingsIcon(Icons.Outlined.Tune)
                             Text(
-                                "Local OCR Script Language",
-                                style = MaterialTheme.typography.labelMedium,
+                                "Script auto-detected: Japanese + Latin (ML Kit)",
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            val ocrScriptChips = listOf(
-                                "Japanese (ML Kit)" to "Japanese (ML Kit)",
-                                "Latin / English (ML Kit)" to "Latin / English (ML Kit)"
-                            )
-                            ChipsRow(
-                                chips = ocrScriptChips,
-                                currentValue = localOcrScript,
-                                onValueUpdate = { script ->
-                                    scope.launch { viewModel.settingsRepo.saveLocalOcrScript(script) }
-                                }
                             )
                         }
                     }
                 }
+            }
+        }
+
+        // ── Data Management (Backup & Restore) ──
+        item(key = "data") {
+            Column {
+                Text(
+                    "Data",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
+                )
+                Material3SettingsGroup(
+                    items = listOf(
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.CloudDownload) },
+                            title = { Text("Export Backup") },
+                            description = { Text("Save settings, glossary, history and translation memory to one file") },
+                            onClick = { exportBackup() },
+                        ),
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.Link) },
+                            title = { Text("Restore Backup") },
+                            description = { Text("Import a backup file — overwrites current settings, glossary and history") },
+                            onClick = { backupPickerLauncher.launch("*/*") },
+                        ),
+                    )
+                )
             }
         }
 
@@ -484,6 +573,29 @@ fun SettingsScreen(
         }
     }
 
+    confirmRestoreUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { if (!isRestoring) confirmRestoreUri = null },
+            title = { Text("Restore backup?") },
+            text = { Text("This will overwrite your current settings, glossary, history and translation memory with the contents of the backup file.") },
+            confirmButton = {
+                TextButton(
+                    enabled = !isRestoring,
+                    onClick = {
+                        confirmRestoreUri = null
+                        restoreBackup(uri)
+                    }
+                ) { Text("Restore", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isRestoring,
+                    onClick = { confirmRestoreUri = null }
+                ) { Text("Cancel") }
+            },
+        )
+    }
+
     if (showFontDialog) {
         AlertDialog(
             onDismissRequest = { showFontDialog = false },
@@ -596,6 +708,24 @@ private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
         }
     } }
 
+    // Live API-key / base-URL field states (hoisted so the "Test API Key" button
+    // validates what the user is actually typing, not the debounced saved value).
+    var apiKeyText by remember(providerKey) { mutableStateOf(apiKey) }
+    var apiKeyVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(apiKeyText) {
+        if (apiKeyText != apiKey) {
+            kotlinx.coroutines.delay(350)
+            viewModel.settingsRepo.saveApiKey(providerKey, apiKeyText)
+        }
+    }
+    var baseUrlText by remember(providerKey) { mutableStateOf(baseUrl) }
+    LaunchedEffect(baseUrlText) {
+        if (baseUrlText != baseUrl) {
+            kotlinx.coroutines.delay(350)
+            viewModel.settingsRepo.saveBaseUrl(providerKey, baseUrlText)
+        }
+    }
+
     val detected: List<String> = viewModel.providerModels[providerKey] ?: emptyList()
     val presetList: List<String> = Config.PRESET_MODELS[providerKey] ?: emptyList()
     val allModels = remember(presetList, detected) { (presetList + detected).distinct().sorted() }
@@ -607,31 +737,21 @@ private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
             Material3SettingsItem(
                 leadingContent = { SettingsIcon(Icons.Outlined.GppGood) },
                 title = {
-                    // Key the field state on the provider only (not the persisted value), so
-                    // an autosave echo no longer resets the field mid-typing. The single
-                    // debounced LaunchedEffect below is the only write path — the old
-                    // duplicate onFocusChanged save was removed to cut DataStore writes.
-                    var textState by remember(providerKey) { mutableStateOf(apiKey) }
-                    var visible by remember { mutableStateOf(false) }
-                    LaunchedEffect(textState) {
-                        if (textState != apiKey) {
-                            kotlinx.coroutines.delay(350)
-                            viewModel.settingsRepo.saveApiKey(providerKey, textState)
-                        }
-                    }
+                    // Hoisted state: see apiKeyText / apiKeyVisible above. The single
+                    // debounced LaunchedEffect is the only write path.
                     OutlinedTextField(
-                        value = textState,
-                        onValueChange = { textState = it },
+                        value = apiKeyText,
+                        onValueChange = { apiKeyText = it },
                         label = { Text(if (meta.requiresKey) "${meta.displayName} API Key" else "${meta.displayName} API Key (Optional)") },
                         placeholder = { Text(if (meta.requiresKey) "Enter API Key" else "Optional API Key") },
-                        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+                        visualTransformation = if (apiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         trailingIcon = {
-                            IconButton(onClick = { visible = !visible }) {
+                            IconButton(onClick = { apiKeyVisible = !apiKeyVisible }) {
                                 Icon(
-                                    if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                    contentDescription = if (visible) "Hide" else "Show",
+                                    if (apiKeyVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = if (apiKeyVisible) "Hide" else "Show",
                                 )
                             }
                         },
@@ -641,24 +761,17 @@ private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
             Material3SettingsItem(
                 leadingContent = { SettingsIcon(Icons.Outlined.Link) },
                 title = {
-                    var urlText by remember(providerKey) { mutableStateOf(baseUrl) }
-                    LaunchedEffect(urlText) {
-                        if (urlText != baseUrl) {
-                            kotlinx.coroutines.delay(350)
-                            viewModel.settingsRepo.saveBaseUrl(providerKey, urlText)
-                        }
-                    }
                     OutlinedTextField(
-                        value = urlText,
-                        onValueChange = { urlText = it },
+                        value = baseUrlText,
+                        onValueChange = { baseUrlText = it },
                         label = { Text("Base URL") },
                         placeholder = { Text(if (defaultBaseUrl.isNotBlank()) defaultBaseUrl else "https://api.example.com") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         trailingIcon = {
-                            if (defaultBaseUrl.isNotBlank() && urlText != defaultBaseUrl) {
+                            if (defaultBaseUrl.isNotBlank() && baseUrlText != defaultBaseUrl) {
                                 TextButton(onClick = {
-                                    urlText = defaultBaseUrl
+                                    baseUrlText = defaultBaseUrl
                                     scope.launch { viewModel.settingsRepo.saveBaseUrl(providerKey, defaultBaseUrl) }
                                 }) {
                                     Text("Reset", style = MaterialTheme.typography.labelSmall)
@@ -707,6 +820,50 @@ private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
             )
             Spacer(Modifier.width(8.dp))
             Text("Detect Models from API")
+        }
+    }
+
+    // ── Health check: validate key + model + base URL with one tiny request ──
+    val testState = viewModel.providerTestState.value
+    Spacer(Modifier.height(8.dp))
+    OutlinedButton(
+        onClick = { viewModel.testProviderConnection(providerKey, baseUrlText, apiKeyText, currentModel) },
+        enabled = testState?.loading != true,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        if (testState?.loading == true) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("Testing…")
+        } else {
+            Icon(
+                imageVector = Icons.Outlined.GppGood,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("Test API Key & Connection")
+        }
+    }
+    testState?.let { state ->
+        if (!state.loading && state.message.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            val resultColor = when (state.ok) {
+                true -> MaterialTheme.colorScheme.primary
+                false -> MaterialTheme.colorScheme.error
+                null -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Text(
+                state.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = resultColor,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            )
         }
     }
 }

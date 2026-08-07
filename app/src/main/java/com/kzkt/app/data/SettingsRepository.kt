@@ -5,7 +5,9 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import org.json.JSONObject
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "kzkt_settings")
 
@@ -57,6 +59,7 @@ class SettingsRepository(private val context: Context) {
         private val KEY_CUSTOM_TIMEOUT = intPreferencesKey("custom_timeout_sec")
         private val KEY_DEV_LOGS = booleanPreferencesKey("enable_dev_logs")
         private val KEY_USE_IMAGE_UPSCALER = booleanPreferencesKey("use_image_upscaler")
+        private val KEY_TRANSLATE_SFX = booleanPreferencesKey("translate_sfx")
     }
  
     data class Settings(
@@ -93,6 +96,7 @@ class SettingsRepository(private val context: Context) {
         val customTimeoutSec: Int = 30,
         val enableDevLogs: Boolean = false,
         val useImageUpscaler: Boolean = false,
+        val translateSfx: Boolean = false,
     ) {
         fun getBaseUrl(provider: String): String = when (provider) {
             "gemini" -> baseUrlGemini
@@ -144,6 +148,7 @@ class SettingsRepository(private val context: Context) {
             customTimeoutSec = prefs[KEY_CUSTOM_TIMEOUT] ?: Defaults.settings.customTimeoutSec,
             enableDevLogs = prefs[KEY_DEV_LOGS] ?: Defaults.settings.enableDevLogs,
             useImageUpscaler = prefs[KEY_USE_IMAGE_UPSCALER] ?: Defaults.settings.useImageUpscaler,
+            translateSfx = prefs[KEY_TRANSLATE_SFX] ?: Defaults.settings.translateSfx,
         )
     }
 
@@ -227,6 +232,54 @@ class SettingsRepository(private val context: Context) {
     suspend fun saveUseImageUpscaler(use: Boolean) {
         context.dataStore.edit { it[KEY_USE_IMAGE_UPSCALER] = use }
     }
+
+    suspend fun saveTranslateSfx(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_TRANSLATE_SFX] = enabled }
+    }
+
+    /**
+     * Serialize every stored preference into a flat JSON map (key → {t: type, v: value}).
+     * Used by the full-data backup feature; types are tagged so [importAll] can rebuild
+     * strongly-typed preferences.
+     */
+    suspend fun exportAllJson(): String {
+        val prefs = context.dataStore.data.first()
+        val root = JSONObject()
+        prefs.asMap().forEach { (key, value) ->
+            val entry = JSONObject()
+            when (value) {
+                is String -> { entry.put("t", "string"); entry.put("v", value) }
+                is Int -> { entry.put("t", "int"); entry.put("v", value) }
+                is Long -> { entry.put("t", "long"); entry.put("v", value) }
+                is Float -> { entry.put("t", "float"); entry.put("v", value.toDouble()) }
+                is Boolean -> { entry.put("t", "boolean"); entry.put("v", value) }
+                is Set<*> -> { entry.put("t", "stringSet"); entry.put("v", value.joinToString("\u0001")) }
+                else -> return@forEach
+            }
+            root.put(key.name, entry)
+        }
+        return root.toString()
+    }
+
+    /** Restore all preferences from a JSON map produced by [exportAllJson]. */
+    suspend fun importAllJson(json: String) {
+        val root = JSONObject(json)
+        context.dataStore.edit { prefs ->
+            val keys = root.keys()
+            while (keys.hasNext()) {
+                val name = keys.next()
+                val entry = root.getJSONObject(name)
+                when (entry.getString("t")) {
+                    "string" -> prefs[stringPreferencesKey(name)] = entry.getString("v")
+                    "int" -> prefs[intPreferencesKey(name)] = entry.getInt("v")
+                    "long" -> prefs[longPreferencesKey(name)] = entry.getLong("v")
+                    "float" -> prefs[floatPreferencesKey(name)] = entry.getDouble("v").toFloat()
+                    "boolean" -> prefs[booleanPreferencesKey(name)] = entry.getBoolean("v")
+                    "stringSet" -> prefs[stringSetPreferencesKey(name)] = entry.getString("v").split("\u0001").toSet()
+                }
+            }
+        }
+    }
  
     suspend fun saveTweakParam(keyField: String, value: Any) {
         context.dataStore.edit { prefs ->
@@ -258,6 +311,7 @@ class SettingsRepository(private val context: Context) {
             prefs.remove(KEY_USE_LOCAL_OCR)
             prefs.remove(KEY_LOCAL_OCR_SCRIPT)
             prefs.remove(KEY_USE_IMAGE_UPSCALER)
+            prefs.remove(KEY_TRANSLATE_SFX)
         }
     }
 }

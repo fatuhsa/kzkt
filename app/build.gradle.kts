@@ -1,18 +1,53 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+// ── Release signing ──────────────────────────────────────────────
+// Mendukung keystore custom per-developer via file keystore.properties
+// (TIDAK di-commit — sudah di .gitignore). Contoh: lihat keystore.properties.example
+// dan panduan lengkap di BUILD_RELEASE.md.
+// Jika keystore.properties tidak ada, fallback ke debug keystore lokal
+// (~/.android/debug.keystore) sehingga `./gradlew assembleRelease` tetap
+// menghasilkan APK release yang bisa diinstall.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
 }
 
 android {
     namespace = "com.kzkt.app"
     compileSdk = 37
 
+    signingConfigs {
+        create("release") {
+            if (keystorePropertiesFile.exists()) {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            } else {
+                val debugKeystore = File(System.getProperty("user.home"), ".android/debug.keystore")
+                if (debugKeystore.exists()) {
+                    storeFile = debugKeystore
+                    storePassword = "android"
+                    keyAlias = "androiddebugkey"
+                    keyPassword = "android"
+                }
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.kzkt.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1250114
-        versionName = "1.25.1.14"
+        versionCode = 1250122
+        versionName = "1.25.1.22"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
@@ -30,6 +65,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // APK release langsung ter-sign saat build (tanpa langkah manual).
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
