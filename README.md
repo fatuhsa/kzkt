@@ -23,7 +23,7 @@ KZKT is a native Android application for automatic manga and comic translation. 
 
 ---
 
-## Technology Stack
+## Tech Stack
 
 | Layer | Technologies |
 | :--- | :--- |
@@ -82,6 +82,15 @@ KZKT is a native Android application for automatic manga and comic translation. 
 ├── settings.gradle.kts
 └── README.md
 ```
+
+---
+
+## Requirements
+
+- **JDK 17** — e.g. [Eclipse Temurin 17](https://adoptium.net/temurin/releases/?version=17).
+- **Android SDK** — `compileSdk = 37`, `minSdk = 26`, `targetSdk = 36` (installed automatically via Android Studio's SDK Manager).
+- **Gradle 9.6.1** — no manual install needed; the `gradlew` wrapper downloads it for you.
+- **Android Studio** (latest stable) — recommended for Gradle sync, editing, and emulators.
 
 ---
 

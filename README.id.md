@@ -23,7 +23,7 @@ KZKT adalah aplikasi Android untuk menerjemahkan manga dan komik secara otomatis
 
 ---
 
-## Teknologi yang Dipakai
+## Tech Stack
 
 | Bagian | Teknologi |
 | :--- | :--- |
@@ -82,6 +82,15 @@ KZKT adalah aplikasi Android untuk menerjemahkan manga dan komik secara otomatis
 ├── settings.gradle.kts
 └── README.md
 ```
+
+---
+
+## Kebutuhan Sebelum Build
+
+- **JDK 17** — misalnya [Eclipse Temurin 17](https://adoptium.net/temurin/releases/?version=17).
+- **Android SDK** — `compileSdk = 37`, `minSdk = 26`, `targetSdk = 36` (otomatis terpasang lewat SDK Manager di Android Studio).
+- **Gradle 9.6.1** — tidak perlu install manual, wrapper `gradlew` yang mengunduhnya.
+- **Android Studio** (versi stabil terbaru) — disarankan untuk sync Gradle, edit kode, dan emulator.
 
 ---
 
