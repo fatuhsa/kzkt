@@ -13,14 +13,14 @@ KZKT adalah aplikasi Android untuk menerjemahkan manga dan komik secara otomatis
 <div align="center">
   <table>
     <tr>
-      <td align="center"><b>Layar Utama / Terjemah</b></td>
-      <td align="center"><b>Layar Riwayat / History</b></td>
-      <td align="center"><b>Layar Pengaturan / Settings</b></td>
+      <td align="center" width="33%"><b>Layar Utama / Terjemah</b></td>
+      <td align="center" width="33%"><b>Layar Riwayat / History</b></td>
+      <td align="center" width="33%"><b>Layar Pengaturan / Settings</b></td>
     </tr>
     <tr>
-      <td><img src="docs/screenshots/translate.png" width="100%" alt="Layar Terjemah"></td>
-      <td><img src="docs/screenshots/history.png" width="100%" alt="Layar Riwayat"></td>
-      <td><img src="docs/screenshots/settings.png" width="100%" alt="Layar Pengaturan"></td>
+      <td align="center" width="33%"><img src="docs/screenshots/translate.png" width="100%" alt="Layar Terjemah"></td>
+      <td align="center" width="33%"><img src="docs/screenshots/history.png" width="100%" alt="Layar Riwayat"></td>
+      <td align="center" width="33%"><img src="docs/screenshots/settings.png" width="100%" alt="Layar Pengaturan"></td>
     </tr>
   </table>
 </div>

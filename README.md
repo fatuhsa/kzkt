@@ -13,14 +13,14 @@ KZKT is a native Android application for automatic manga and comic translation. 
 <div align="center">
   <table>
     <tr>
-      <td align="center"><b>Translate Screen</b></td>
-      <td align="center"><b>History Screen</b></td>
-      <td align="center"><b>Settings Screen</b></td>
+      <td align="center" width="33%"><b>Translate Screen</b></td>
+      <td align="center" width="33%"><b>History Screen</b></td>
+      <td align="center" width="33%"><b>Settings Screen</b></td>
     </tr>
     <tr>
-      <td><img src="docs/screenshots/translate.png" width="100%" alt="Translate Screen"></td>
-      <td><img src="docs/screenshots/history.png" width="100%" alt="History Screen"></td>
-      <td><img src="docs/screenshots/settings.png" width="100%" alt="Settings Screen"></td>
+      <td align="center" width="33%"><img src="docs/screenshots/translate.png" width="100%" alt="Translate Screen"></td>
+      <td align="center" width="33%"><img src="docs/screenshots/history.png" width="100%" alt="History Screen"></td>
+      <td align="center" width="33%"><img src="docs/screenshots/settings.png" width="100%" alt="Settings Screen"></td>
     </tr>
   </table>
 </div>
