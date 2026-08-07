@@ -116,7 +116,15 @@ This project is licensed under the [MIT License](LICENSE).
 
 ---
 
-## Credits
+## Open-Source Acknowledgments
 
-- Original application: [indravoyager/cypy](https://github.com/indravoyager/cypy)
-- Native Android rewrite: [kouzen-neo](https://github.com/kouzen-neo)
+KZKT is made possible by the work of many open-source projects and communities:
+
+- **CYPY** by [indravoyager](https://github.com/indravoyager) for the base framework and the original manga-translation pipeline.
+- **Microsoft ONNX Runtime** for on-device YOLO speech-bubble detection.
+- **OpenCV** for computer vision — bubble masking, inpainting, and the smart image upscaler.
+- **Google ML Kit** for on-device OCR (Japanese + Latin).
+- **Jetpack Compose, Material 3, and MaterialKolor** for the modern UI toolkit and dynamic Material You theming.
+- **OkHttp, Gson, Coil, DataStore, Room, and WorkManager** for networking, persistence, and background tasks.
+- Native Android rewrite and ongoing development by [kouzen-neo](https://github.com/kouzen-neo).
+- Translators, beta testers, contributors, and community members who continue to support the project.

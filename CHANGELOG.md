@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Release Signing Setup**: `app/build.gradle.kts` reads a git-ignored `keystore.properties` for a per-developer custom keystore, falling back to the local debug keystore when absent. `assembleRelease` now outputs a directly-signed `app-release.apk`.
 - **Build Guide**: New `BUILD_RELEASE.md` (English) covering debug builds, release builds with custom keystores, signature verification and troubleshooting; `keystore.properties.example` added.
 - **Repository Hygiene**: `.gitignore` rewritten (build outputs, keystores, IDE and local files); removed ~104 MB of unneeded tracked files (OpenCV test binaries, OpenCV javadoc, one-shot icon script, Python venv ignored).
+- **Repository History Rewrite**: dropped the pre-Android Python desktop era (105 commits) so the repository starts at the native Kotlin/Compose Android port (2026-07-30) — a solo Android repo. Desktop-era tags were removed, `v1.1-beta` was re-pointed, and the commit hashes cited in this changelog were updated to their rewritten equivalents. The original full history is preserved in a local backup bundle.
 
 ### Fixed
 
@@ -67,7 +68,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### 🎨 Major UI Overhaul (2026-08-02)
 
-Directly following the documentation commit that outlined the app's key features — **PDF support, 3-stage YOLO cascade, and zero memory leaks** (`b201476`) — the whole interface was rebuilt around modern Material 3 (`e15eea9`, +2556/−671 lines across 20 files):
+Directly following the documentation commit that outlined the app's key features — **PDF support, 3-stage YOLO cascade, and zero memory leaks** (`4d13002`) — the whole interface was rebuilt around modern Material 3 (`1ba321f`, +2556/−671 lines across 20 files):
 
 - **Modern Material 3 theme**: Material You seed-color theming (MaterialKolor) + M3 typography (`Theme.kt`/`Type.kt`), replacing the old custom theme.
 - **Bottom navigation with History tab**: `MainScreen` rebuilt as a 3-tab bottom nav — **Translate / History / Settings** — using `navigation-compose`.
@@ -125,20 +126,20 @@ Directly following the documentation commit that outlined the app's key features
 
 ### Added
 
-- **In-App Fullscreen Image Viewer** with pinch-to-zoom & pan gestures (`a6e06d5`).
-- **Quick Action buttons** to open translated results in the System Gallery or share via social media (`a6e06d5`).
-- **Official app launcher icon** at every Android screen density (mdpi to xxxhdpi) (`bb4d524`).
+- **In-App Fullscreen Image Viewer** with pinch-to-zoom & pan gestures (`96dd00c`).
+- **Quick Action buttons** to open translated results in the System Gallery or share via social media (`96dd00c`).
+- **Official app launcher icon** at every Android screen density (mdpi to xxxhdpi) (`1f39e00`).
 
 ### Fixed
 
-- **Translation cancellation delay**: pressing Cancel now stops the coroutine and network request instantly — no longer waits for the batch to finish (`8470ccb`).
-- **Custom LLM remote endpoint compatibility**: forced `stream: false` and added dynamic JSON parsing for Ollama, LM Studio, vLLM, and Cloudflare/Ngrok tunnels (`d11b068`).
-- **PhotoPicker synthetic-path crash on Android 13+**: output files routed directly to public `/Download/` (`51f330c`).
-- **OpenCV JNI `JNIEnv` library loading on release builds**: uses uncompressed legacy packaging (`51f330c`).
-- **JSON parsing errors on non-standard LLM responses**: lenient Gson parsing (`b275190`).
-- **Released native Mat/ONNX resources**, 3-stage YOLO cascade, bubble-sized overlay (`7dea054`).
-- **PDF input/output** via built-in `PdfRenderer`/`PdfDocument`, shared render path (`9911db9`).
-- **Theme color** changed from purple to a modern Light Blue (Sky Blue) (`4c8a657`).
+- **Translation cancellation delay**: pressing Cancel now stops the coroutine and network request instantly — no longer waits for the batch to finish (`37df21b`).
+- **Custom LLM remote endpoint compatibility**: forced `stream: false` and added dynamic JSON parsing for Ollama, LM Studio, vLLM, and Cloudflare/Ngrok tunnels (`343619a`).
+- **PhotoPicker synthetic-path crash on Android 13+**: output files routed directly to public `/Download/` (`5f5fb24`).
+- **OpenCV JNI `JNIEnv` library loading on release builds**: uses uncompressed legacy packaging (`5f5fb24`).
+- **JSON parsing errors on non-standard LLM responses**: lenient Gson parsing (`b35de92`).
+- **Released native Mat/ONNX resources**, 3-stage YOLO cascade, bubble-sized overlay (`d3be474`).
+- **PDF input/output** via built-in `PdfRenderer`/`PdfDocument`, shared render path (`4d3ff98`).
+- **Theme color** changed from purple to a modern Light Blue (Sky Blue) (`ad8dae0`).
 
 ---
 
