@@ -52,6 +52,9 @@ Thumbs.db
 captures/
 .kotlin/
 
+# Catatan ide pribadi (tidak untuk repo publik)
+IDEAS.md
+
 # ── Sisa proyek Python lama (bila ada) ───────────────────────────
 __pycache__/
 *.pyc
