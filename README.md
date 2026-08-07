@@ -117,12 +117,6 @@ KZKT is a native Android application for automatic manga and comic translation. 
 
 ---
 
-## License
-
-This project is licensed under the [MIT License](LICENSE).
-
----
-
 ## Open-Source Acknowledgments
 
 KZKT is made possible by the work of many open-source projects and communities:
@@ -132,3 +126,9 @@ KZKT is made possible by the work of many open-source projects and communities:
 - Jetpack Compose and Material 3 for the UI toolkit.
 - Native Android rewrite and development by kouzen-neo.
 - Translators, beta testers, and contributors who support the project.
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
