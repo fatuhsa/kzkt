@@ -100,6 +100,7 @@ KZKT is a native Android application for automatic manga and comic translation. 
 ├── opencv/                     # OpenCV 4.x Android SDK module (native JNI)
 ├── build.gradle.kts
 ├── settings.gradle.kts
+├── Dockerfile                  # self-contained Android build image (JDK 17 + SDK)
 └── README.md
 ```
 
@@ -134,6 +135,46 @@ KZKT is a native Android application for automatic manga and comic translation. 
    ```text
    app/build/outputs/apk/debug/app-debug.apk
    ```
+
+### Build with Docker
+
+The repo ships a self-contained `Dockerfile` (JDK 17 + Android SDK) so you can build without installing Android Studio:
+
+```bash
+# 1. Build the builder image (first time only)
+docker build -t kzkt-builder .
+
+# 2. Debug APK (Gradle cache persists via a named volume)
+docker run --rm -v kzkt-gradle:/root/.gradle \
+  kzkt-builder ./gradlew assembleDebug
+
+# 3. Release APK — falls back to your local debug keystore
+#    (mount ~/.android so the keystore is available in the container)
+docker run --rm -v kzkt-gradle:/root/.gradle \
+  -v "$HOME/.android:/root/.android" \
+  kzkt-builder ./gradlew assembleRelease
+
+# 4. Copy the APK out of the container
+CID=$(docker run -d -v kzkt-gradle:/root/.gradle \
+  -v "$HOME/.android:/root/.android" \
+  kzkt-builder ./gradlew assembleRelease)
+docker wait "$CID"
+docker cp "$CID:/app/app/build/outputs/apk/release/app-release.apk" .
+docker rm "$CID"
+```
+
+For publishing, mount your own keystore read-only:
+
+```bash
+docker run --rm -v kzkt-gradle:/root/.gradle \
+  -v "$PWD/keystore.properties:/app/keystore.properties:ro" \
+  -v "$PWD/release.keystore:/app/release.keystore:ro" \
+  kzkt-builder ./gradlew assembleRelease
+```
+
+### Continuous Integration (GitHub Actions)
+
+Every push / pull request to `main` is built automatically by [GitHub Actions](.github/workflows/android.yml) using the **same Dockerfile**: unit tests + `assembleDebug` run in a container, and the debug APK is uploaded as a downloadable **artifact** (`kzkt-app-debug`) on the run page. Gradle dependencies are cached between runs, so follow-up builds are much faster.
 
 ---
 

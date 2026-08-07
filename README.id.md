@@ -100,6 +100,7 @@ KZKT adalah aplikasi Android untuk menerjemahkan manga dan komik secara otomatis
 ├── opencv/                     # modul SDK OpenCV 4.x Android (JNI native)
 ├── build.gradle.kts
 ├── settings.gradle.kts
+├── Dockerfile                  # image build Android lengkap (JDK 17 + SDK)
 └── README.md
 ```
 
@@ -134,6 +135,46 @@ KZKT adalah aplikasi Android untuk menerjemahkan manga dan komik secara otomatis
    ```text
    app/build/outputs/apk/debug/app-debug.apk
    ```
+
+### Build dengan Docker
+
+Reponya sudah dibekali `Dockerfile` lengkap (JDK 17 + Android SDK), jadi kamu bisa build tanpa perlu install Android Studio:
+
+```bash
+# 1. Bangun image builder-nya (cukup sekali)
+docker build -t kzkt-builder .
+
+# 2. APK debug (cache Gradle disimpan lewat named volume supaya awet)
+docker run --rm -v kzkt-gradle:/root/.gradle \
+  kzkt-builder ./gradlew assembleDebug
+
+# 3. APK release — otomatis pakai debug keystore lokalmu
+#    (mount ~/.android biar keystore-nya kebaca di dalam container)
+docker run --rm -v kzkt-gradle:/root/.gradle \
+  -v "$HOME/.android:/root/.android" \
+  kzkt-builder ./gradlew assembleRelease
+
+# 4. Salin APK keluar dari container
+CID=$(docker run -d -v kzkt-gradle:/root/.gradle \
+  -v "$HOME/.android:/root/.android" \
+  kzkt-builder ./gradlew assembleRelease)
+docker wait "$CID"
+docker cp "$CID:/app/app/build/outputs/apk/release/app-release.apk" .
+docker rm "$CID"
+```
+
+Kalau mau publish, mount keystore punyamu sendiri (read-only):
+
+```bash
+docker run --rm -v kzkt-gradle:/root/.gradle \
+  -v "$PWD/keystore.properties:/app/keystore.properties:ro" \
+  -v "$PWD/release.keystore:/app/release.keystore:ro" \
+  kzkt-builder ./gradlew assembleRelease
+```
+
+### Integrasi Berkelanjutan (GitHub Actions)
+
+Setiap push / pull request ke `main` otomatis di-build oleh [GitHub Actions](.github/workflows/android.yml) pakai **Dockerfile yang sama**: unit test + `assembleDebug` dijalankan di dalam container, lalu APK debug-nya diunggah sebagai **artifact** yang bisa diunduh (`kzkt-app-debug`) di halaman run. Dependensi Gradle di-cache antar-run, jadi build berikutnya jauh lebih cepat.
 
 ---
 
