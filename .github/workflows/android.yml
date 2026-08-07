@@ -37,6 +37,10 @@ jobs:
             -v "$PWD/gradle-cache:/root/.gradle" \
             -v "$PWD/app/build:/app/app/build" \
             kzkt-builder ./gradlew testDebugUnitTest assembleDebug
+          # The container writes as root, so hand ownership back to the runner
+          # user — otherwise the actions/cache post-step can't read gradle-cache
+          # (and to be safe, also fix app/build before artifact upload).
+          sudo chown -R "$(id -u):$(id -g)" gradle-cache app/build
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
