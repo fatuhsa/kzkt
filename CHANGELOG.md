@@ -4,6 +4,13 @@ All notable changes to KZKT are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.30.1] - 2026-08-09
+
+### Fixed
+
+- **Startup update check no longer pops up a dialog**: the launch-time auto-check now runs fully in the background and only shows the update dialog when a newer version is actually available (previously a "Checking for updates…" dialog appeared at every app launch). Manual checks from Settings keep their spinner + feedback.
+- **Stuck "Checking for updates…" dialog**: when the background check found nothing new (or failed), its state was never reset and the spinner dialog stayed on screen indefinitely — it now clears silently. A dedicated concurrency guard also prevents overlapping auto/manual checks.
+
 ## [v1.30.0] - 2026-08-08
 
 ### Added

@@ -76,6 +76,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
     val updateState = mutableStateOf(UpdateUiState())
     private var autoCheckDone = false
+    // Guards against concurrent checks. Can't rely on `updateState.checking` for
+    // this because background checks never set it (that flag only shows the
+    // dialog for manual checks). Volatile: written on the IO thread (finally)
+    // and read on the Main thread — same pattern as UpdateManager.updateChannelReady.
+    @Volatile
+    private var checkInProgress = false
 
     private var yolo: YoloOnnx? = null
     private var textRenderer: TextRenderer? = null
@@ -363,23 +369,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * feedback; automatic checks silently no-op when nothing is new.
      */
     fun checkForUpdate(manual: Boolean) {
-        val current = updateState.value
-        if (current.checking || current.downloading) return
-        updateState.value = UpdateUiState(checking = true)
+        if (checkInProgress || updateState.value.downloading) return
+        checkInProgress = true
+
+        // Only a manual check (Settings → Check for Updates) shows the spinner
+        // dialog. The launch-time auto-check runs fully in the background and
+        // never pops up unless an update is actually available.
+        updateState.value = if (manual) UpdateUiState(checking = true) else UpdateUiState()
 
         viewModelScope.launch(Dispatchers.IO) {
-            when (val result = com.kzkt.app.core.UpdateManager.checkForUpdate()) {
-                is com.kzkt.app.core.UpdateManager.CheckResult.Available -> {
-                    post { updateState.value = UpdateUiState(info = result.info) }
-                }
-                com.kzkt.app.core.UpdateManager.CheckResult.UpToDate -> {
-                    if (manual) post { updateState.value = UpdateUiState(upToDate = true) }
-                }
-                is com.kzkt.app.core.UpdateManager.CheckResult.Failed -> {
-                    if (manual) {
-                        post { updateState.value = UpdateUiState(error = "Could not check for updates: ${result.message}") }
+            try {
+                when (val result = com.kzkt.app.core.UpdateManager.checkForUpdate()) {
+                    is com.kzkt.app.core.UpdateManager.CheckResult.Available -> {
+                        // Pop-up — the only case a background check surfaces UI.
+                        post { updateState.value = UpdateUiState(info = result.info) }
+                    }
+                    com.kzkt.app.core.UpdateManager.CheckResult.UpToDate -> {
+                        post {
+                            updateState.value = if (manual) UpdateUiState(upToDate = true) else UpdateUiState()
+                        }
+                    }
+                    is com.kzkt.app.core.UpdateManager.CheckResult.Failed -> {
+                        post {
+                            updateState.value = if (manual) {
+                                UpdateUiState(error = "Could not check for updates: ${result.message}")
+                            } else {
+                                UpdateUiState() // background failures stay silent
+                            }
+                        }
                     }
                 }
+            } finally {
+                checkInProgress = false
             }
         }
     }
