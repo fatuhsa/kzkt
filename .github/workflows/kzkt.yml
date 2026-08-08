@@ -147,10 +147,26 @@ jobs:
           ls -lh KZKT-*.apk
           sha256sum KZKT-*.apk | tee sha256sums.txt
 
-      # Susun body release (daftar APK + sha256) — file markdown polos
-      - name: Compose release body
+      # Susun body release: section CHANGELOG.md untuk versi ini + daftar APK + sha256.
+      # Deskripsi SELALU berasal dari CHANGELOG.md — bukan histori commit — jadi
+      # generate_release_notes dimatikan dan teks disusun manual di sini.
+      - name: Compose release body (from CHANGELOG.md)
         run: |
+          V="${{ needs.prepare.outputs.version }}"
+          # Ekstrak section "## [vX.Y.Z]" sampai header changelog berikutnya
+          awk -v v="v$V" 'index($0, "## [" v "]") == 1 { flag=1; next } flag && /^## \[/ { exit } flag { print }' CHANGELOG.md > /tmp/changelog-section.md
+          if [ ! -s /tmp/changelog-section.md ]; then
+            echo "::warning::Section [v$V] tidak ditemukan di CHANGELOG.md — body hanya berisi daftar APK."
+          fi
           {
+            echo "# 🚀 KZKT v$V"
+            echo ""
+            if [ -s /tmp/changelog-section.md ]; then
+              cat /tmp/changelog-section.md
+              echo ""
+            fi
+            echo "---"
+            echo ""
             echo "## 📦 APK"
             echo ""
             while read -r hash file; do
@@ -160,6 +176,10 @@ jobs:
             done < apks/sha256sums.txt
             echo ""
             echo "Klik file di bawah untuk mengunduh, atau unduh via Telegram."
+            echo ""
+            echo "---"
+            echo ""
+            echo "*Full changelog: [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md)*"
           } > /tmp/release-body.md
           cat /tmp/release-body.md
 
@@ -173,7 +193,6 @@ jobs:
             apks/sha256sums.txt
           name: KZKT ${{ needs.prepare.outputs.tag }}
           body_path: /tmp/release-body.md
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

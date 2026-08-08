@@ -4,6 +4,21 @@ All notable changes to KZKT are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.30.0] - 2026-08-08
+
+### Added
+
+- **Update download notification**: the in-app self-update now mirrors its download progress (percent + progress bar) in the notification shade via a dedicated low-importance channel, so progress stays visible even if the app is backgrounded. No-ops cleanly when notification permission is off.
+
+### Changed
+
+- **Release descriptions now come from `CHANGELOG.md`**: the CI release workflow extracts this version's section from this file as the release body (instead of auto-generating notes from commit history), so every release page reads exactly like the changelog.
+
+### Fixed
+
+- **White update dialog**: the update popup ignored the app theme (rendered with the default light scheme) because it was composed outside `KzktTheme` — it now follows dark/light mode and dynamic Material You colors.
+- **Raw markdown in release notes**: the update dialog now renders release-note markdown properly (headers, bullet lists, bold, inline code, links) via a lightweight in-app renderer instead of showing literal `##` text.
+
 ## [v1.25.1] - 2026-08-08
 
 ### Added
