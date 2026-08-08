@@ -388,21 +388,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun downloadAndInstallUpdate() {
         val info = updateState.value.info ?: return
         updateState.value = updateState.value.copy(downloading = true, downloadProgress = 0f)
+        // Mirror the download in the notification shade so progress is visible
+        // even if the user leaves the app / the dialog. No-ops if notifications
+        // are disabled (POST_NOTIFICATIONS not granted).
+        com.kzkt.app.core.UpdateManager.showDownloadNotification(getApplication(), info)
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val file = com.kzkt.app.core.UpdateManager.downloadApk(
                     getApplication(), info,
                     onProgress = { p ->
-                        post { updateState.value = updateState.value.copy(downloadProgress = p) }
+                        post {
+                            updateState.value = updateState.value.copy(downloadProgress = p)
+                            com.kzkt.app.core.UpdateManager.updateDownloadNotification(getApplication(), info, p)
+                        }
                     },
                 )
                 post {
                     updateState.value = UpdateUiState()
+                    com.kzkt.app.core.UpdateManager.cancelDownloadNotification(getApplication())
                     com.kzkt.app.core.UpdateManager.installApk(getApplication(), file)
                 }
             } catch (e: Exception) {
                 post {
+                    com.kzkt.app.core.UpdateManager.cancelDownloadNotification(getApplication())
                     updateState.value = updateState.value.copy(
                         downloading = false,
                         error = "Download failed: ${e.message}",

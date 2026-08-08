@@ -77,11 +77,6 @@ fun KzktApp(
         }
     }
 
-    // ── Self-update dialog (global — visible from any tab) ──
-    // Reads updateState inside its own small composable so download-progress
-    // ticks (~100/s max) don't recompose the whole Scaffold/NavHost.
-    UpdateDialogHost(viewModel)
-
     val initialDarkTheme = isSystemInDarkTheme()
     var darkTheme by rememberSaveable { mutableStateOf(initialDarkTheme) }
     var pureBlack by rememberSaveable { mutableStateOf(false) }
@@ -92,6 +87,14 @@ fun KzktApp(
         pureBlack = pureBlack,
         themeColor = themeColor,
     ) {
+        // ── Self-update dialog (global — visible from any tab) ──
+        // Composed INSIDE KzktTheme so the AlertDialog follows the app theme
+        // (dark/light + dynamic colors) instead of the default light scheme
+        // (which rendered a white dialog). State is still read in its own small
+        // composable so download-progress ticks don't recompose the whole
+        // Scaffold/NavHost.
+        UpdateDialogHost(viewModel)
+
         val backStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = backStackEntry?.destination?.route
 
