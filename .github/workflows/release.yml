@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # ── Build image builder (sama dengan android.yml & build lokal) ──
       - name: Build Docker image
@@ -44,7 +44,7 @@ jobs:
 
       # ── Gradle cache (reuse antara run) ────────────────────────────
       - name: Cache Gradle dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: gradle-cache
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
