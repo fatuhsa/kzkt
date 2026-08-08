@@ -19,6 +19,14 @@ val keystoreProperties = Properties().apply {
     }
 }
 
+// ── Per-ABI APK (ala Komikku) ────────────────────────────────────
+// Build menghasilkan 1 APK per chip + 1 universal. CI matrix dapat
+// membatasi build ke 1 ABI dengan -PabiFilter=arm64-v8a.
+// Tanpa flag = semua ABI + universal (perilaku default seperti sebelumnya).
+val abiFilter = (project.findProperty("abiFilter") as String?)?.takeIf {
+    it.isNotBlank() && it != "all"
+}
+
 android {
     namespace = "com.kzkt.app"
     compileSdk = 37
@@ -50,17 +58,26 @@ android {
         versionName = "1.25.1.22"
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            // AGP melarang ndk.abiFilters di-set bersamaan dengan splits.abi.
+            // -PabiFilter=arm64-v8a → splits yang mengontrol (1 ABI saja).
+            // tanpa flag → set abiFilters semua ABI (perilaku default).
+            if (abiFilter == null) {
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            }
         }
     }
 
-    // Per-ABI APK (ala Komikku): 1 APK per chip + 1 universal.
     splits {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
-            isUniversalApk = true
+            if (abiFilter != null) {
+                include(abiFilter)
+                isUniversalApk = false
+            } else {
+                include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+                isUniversalApk = true
+            }
         }
     }
 

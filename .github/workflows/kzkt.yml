@@ -1,0 +1,187 @@
+name: Auto Release
+
+on:
+  push:
+    tags:
+      - "v*"        # rilis otomatis saat tag v1.25.3 dst di-push
+  workflow_dispatch:  # atau jalankan manual dari tab Actions
+    inputs:
+      version:
+        description: "Versi untuk rilis manual (mis. 1.25.3). Kosongkan jika trigger via tag."
+        required: false
+        default: ""
+
+permissions:
+  contents: write    # untuk membuat GitHub Release
+
+jobs:
+  # ── Job 1: persiapan ──────────────────────────────────────────────
+  # Tentukan tag & versi, build image builder sekali saja.
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve release tag & version
+        id: tag
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            TAG="v${{ github.event.inputs.version }}"
+          else
+            echo "::error::Rilis manual butuh input 'version' (mis. 1.25.3)"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+  # ── Job 2-6: matrix build (paralel, 1 job per ABI + universal) ────
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, armeabi-v7a, x86, x86_64, universal]
+    steps:
+      - uses: actions/checkout@v5
+
+      # Setiap job matrix berjalan di runner terpisah → build image sendiri.
+      - name: Build Docker image
+        run: docker build -t kzkt-builder .
+
+      # Rekonstruksi keystore dari GitHub Secrets
+      # Secrets: KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+      - name: Restore keystore from secrets
+        run: |
+          if [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "::error::KEYSTORE_BASE64 kosong — isi 4 secret (KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD) di Settings → Secrets → Actions"
+            exit 1
+          fi
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > kzkt-release.jks
+          cat > keystore.properties <<EOF
+          storeFile=/app/kzkt-release.jks
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          EOF
+
+      # Gradle cache (reuse antara run & job)
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v5
+        with:
+          path: gradle-cache
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      # Build release SIGNED untuk satu ABI (R8 + shrink)
+      - name: Build APK (${{ matrix.abi }})
+        run: |
+          mkdir -p gradle-cache
+          # universal → tanpa filter ABI (semua lib + APK universal)
+          FLAG=""
+          if [ "${{ matrix.abi }}" != "universal" ]; then
+            FLAG="-PabiFilter=${{ matrix.abi }}"
+          fi
+          docker run --rm \
+            -v "$PWD/gradle-cache:/root/.gradle" \
+            -v "$PWD/app/build:/app/app/build" \
+            -v "$PWD/keystore.properties:/app/keystore.properties:ro" \
+            -v "$PWD/kzkt-release.jks:/app/kzkt-release.jks:ro" \
+            kzkt-builder ./gradlew assembleRelease $FLAG
+          sudo chown -R "$(id -u):$(id -g)" gradle-cache app/build
+
+      # Simpan APK hasil build (per ABI) agar job release bisa ambil
+      - name: Upload APK (${{ matrix.abi }})
+        uses: actions/upload-artifact@v5
+        with:
+          name: kzkt-apk-${{ matrix.abi }}
+          path: app/build/outputs/apk/release/app-${{ matrix.abi }}-release.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  # ── Job 7: gabung semua APK → GitHub Release + Telegram ───────────
+  release:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Ambil semua APK dari job build (matrix)
+      - name: Download all APKs
+        uses: actions/download-artifact@v5
+        with:
+          pattern: kzkt-apk-*
+          path: apks
+          merge-multiple: true
+
+      # Rename ke format Komikku + hitung sha256
+      - name: Rename APKs & generate checksums
+        run: |
+          set -e
+          cd apks
+          ls -la
+          V="${{ needs.prepare.outputs.version }}"
+          mv app-arm64-v8a-release.apk   "KZKT-arm64-v8a-v${V}.apk"
+          mv app-armeabi-v7a-release.apk "KZKT-armeabi-v7a-v${V}.apk"
+          mv app-x86-release.apk         "KZKT-x86-v${V}.apk"
+          mv app-x86_64-release.apk      "KZKT-x86_64-v${V}.apk"
+          mv app-universal-release.apk   "KZKT-v${V}.apk"
+          echo "── File release: ──"
+          ls -lh KZKT-*.apk
+          sha256sum KZKT-*.apk | tee sha256sums.txt
+
+      # Susun body release (daftar APK + sha256) — file markdown polos
+      - name: Compose release body
+        run: |
+          {
+            echo "## 📦 APK"
+            echo ""
+            while read -r hash file; do
+              size=$(du -h "apks/$file" | cut -f1)
+              echo "- **\`$file\`** (${size})"
+              echo "  sha256: \`$hash\`"
+            done < apks/sha256sums.txt
+            echo ""
+            echo "Klik file di bawah untuk mengunduh, atau unduh via Telegram."
+          } > /tmp/release-body.md
+          cat /tmp/release-body.md
+
+      # Buat GitHub Release + lampirkan semua APK (tanpa draft → langsung jadi)
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          files: |
+            apks/KZKT-*.apk
+            apks/sha256sums.txt
+          name: KZKT ${{ needs.prepare.outputs.tag }}
+          body_path: /tmp/release-body.md
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # (Opsional) Notifikasi ke Telegram — kirim pesan + link release.
+      # APK TIDAK dikirim langsung karena Telegram Bot API membatasi file
+      # maks 50 MB sedangkan APK > 100 MB.
+      - name: Send release info to Telegram
+        env:
+          TG_BOT: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TG_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          if [ -z "$TG_BOT" ] || [ -z "$TG_CHAT" ]; then
+            echo "ℹ️ Telegram secrets belum diisi — lewati."
+            exit 0
+          fi
+          RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TG_TAG}"
+          MSG="📦 KZKT ${TG_TAG} — release baru!\\n\\nSemua varian APK + sha256 ada di GitHub Releases:\\n${RELEASE_URL}\\n\\n(Pilih KZKT-arm64-v8a-${TG_TAG}.apk untuk HP modern)"
+          curl -s -F "chat_id=$TG_CHAT" \
+            -F "text=$MSG" \
+            "https://api.telegram.org/bot$TG_BOT/sendMessage" \
+            | grep -q '"ok":true' && echo "✅ Notifikasi terkirim ke Telegram" || echo "⚠️ Gagal kirim ke Telegram"
