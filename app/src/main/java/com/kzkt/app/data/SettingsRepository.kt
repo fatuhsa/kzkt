@@ -55,7 +55,6 @@ class SettingsRepository(private val context: Context) {
         private val KEY_CUSTOM_FONT = stringPreferencesKey("custom_font_path")
         private val KEY_USE_INPAINTING = booleanPreferencesKey("use_inpainting")
         private val KEY_USE_LOCAL_OCR = booleanPreferencesKey("use_local_ocr")
-        private val KEY_LOCAL_OCR_SCRIPT = stringPreferencesKey("local_ocr_script")
         private val KEY_CUSTOM_TIMEOUT = intPreferencesKey("custom_timeout_sec")
         private val KEY_DEV_LOGS = booleanPreferencesKey("enable_dev_logs")
         private val KEY_USE_IMAGE_UPSCALER = booleanPreferencesKey("use_image_upscaler")
@@ -92,7 +91,6 @@ class SettingsRepository(private val context: Context) {
         val customFontPath: String = "",
         val useInpainting: Boolean = false,
         val useLocalOcr: Boolean = false,
-        val localOcrScript: String = "Japanese (ML Kit)",
         val customTimeoutSec: Int = 30,
         val enableDevLogs: Boolean = false,
         val useImageUpscaler: Boolean = false,
@@ -144,7 +142,6 @@ class SettingsRepository(private val context: Context) {
             customFontPath = prefs[KEY_CUSTOM_FONT] ?: Defaults.settings.customFontPath,
             useInpainting = prefs[KEY_USE_INPAINTING] ?: Defaults.settings.useInpainting,
             useLocalOcr = prefs[KEY_USE_LOCAL_OCR] ?: Defaults.settings.useLocalOcr,
-            localOcrScript = prefs[KEY_LOCAL_OCR_SCRIPT] ?: Defaults.settings.localOcrScript,
             customTimeoutSec = prefs[KEY_CUSTOM_TIMEOUT] ?: Defaults.settings.customTimeoutSec,
             enableDevLogs = prefs[KEY_DEV_LOGS] ?: Defaults.settings.enableDevLogs,
             useImageUpscaler = prefs[KEY_USE_IMAGE_UPSCALER] ?: Defaults.settings.useImageUpscaler,
@@ -154,10 +151,6 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun saveUseLocalOcr(enabled: Boolean) {
         context.dataStore.edit { it[KEY_USE_LOCAL_OCR] = enabled }
-    }
-
-    suspend fun saveLocalOcrScript(script: String) {
-        context.dataStore.edit { it[KEY_LOCAL_OCR_SCRIPT] = script }
     }
  
     suspend fun saveProvider(provider: String) {
@@ -290,7 +283,6 @@ class SettingsRepository(private val context: Context) {
                 "pad_x" -> if (value is Float) prefs[KEY_PAD_X] = value
                 "pad_y" -> if (value is Float) prefs[KEY_PAD_Y] = value
                 "min_pad" -> if (value is Int) prefs[KEY_MIN_PAD] = value
-                "use_inpainting" -> if (value is Boolean) prefs[KEY_USE_INPAINTING] = value
                 "custom_timeout" -> if (value is Int) prefs[KEY_CUSTOM_TIMEOUT] = value.coerceIn(30, 600)
             }
         }
@@ -309,7 +301,6 @@ class SettingsRepository(private val context: Context) {
             prefs.remove(KEY_DEV_LOGS)
             prefs.remove(KEY_CUSTOM_FONT)
             prefs.remove(KEY_USE_LOCAL_OCR)
-            prefs.remove(KEY_LOCAL_OCR_SCRIPT)
             prefs.remove(KEY_USE_IMAGE_UPSCALER)
             prefs.remove(KEY_TRANSLATE_SFX)
         }

@@ -80,7 +80,13 @@ class TranslationWorker(
     private suspend fun startTask(files: List<String>, retry: Boolean = false): Result {
         TranslationProgressTracker.isCancelled = false
         if (!retry) TranslationProgressTracker.clearCache()
-        
+
+        // One shared scope for progress/log emission — the pipeline callbacks fire on
+        // arbitrary dispatchers, and emitting into the flow must happen off the calling
+        // thread. A single scope (instead of one CoroutineScope per message) keeps
+        // allocations flat during long batches.
+        val emitScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+
         val notification = setupNotification()
         // Android 15+ (targetSdk 35+) requires an explicit foreground service type.
         // WorkManager forwards the ForegroundInfo type straight to
@@ -96,6 +102,8 @@ class TranslationWorker(
         )
 
         return try {
+                // Note: emitScope is cancelled in the finally below so no progress/log
+                // coroutines linger after the worker finishes.
                 // Initialize model if VM hasn't initialized it yet
                 val yoloInstance = KzktApplication.yolo ?: run {
                     emitLog("[System] Loading YOLO model...")
@@ -130,7 +138,6 @@ class TranslationWorker(
                     customFontPath = s.customFontPath,
                     useInpainting = s.useInpainting,
                     useLocalOcr = s.useLocalOcr,
-                    localOcrScript = s.localOcrScript,
                     enableDevLogs = s.enableDevLogs,
                     useImageUpscaler = s.useImageUpscaler,
                     translateSfx = s.translateSfx,
@@ -151,11 +158,9 @@ class TranslationWorker(
                     glossary = glossary,
                     fallbackProviders = fallbackProviders,
                     context = applicationContext,
-                    onProgress = { msg ->
-                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch { emitLog(msg) }
-                    },
+                    onProgress = { msg -> emitScope.launch { emitLog(msg) } },
                     onStepProgress = { percent, msg ->
-                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+                        emitScope.launch {
                             emitProgress(percent, 100)
                             updateNotificationProgress(msg, percent, 100)
                         }
@@ -226,10 +231,10 @@ class TranslationWorker(
                                 cacheRepo = cacheRepo,
                                 fallbackProviders = fallbackProviders,
                                 context = applicationContext,
-                                onProgress = { msg -> kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch { emitLog(msg) } },
+                                onProgress = { msg -> emitScope.launch { emitLog(msg) } },
                                 onStepProgress = { groupPercent, msg ->
                                     val overallPercent = ((groupIdx * 100f + groupPercent) / pageGroups.size).toInt().coerceIn(0, 100)
-                                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+                                    emitScope.launch {
                                         emitProgress(completed, totalSteps)
                                         updateNotificationProgress("[$fileName - Group ${groupIdx + 1}/${pageGroups.size}] $msg", completed, totalSteps)
                                     }
@@ -262,6 +267,23 @@ class TranslationWorker(
                                 if (publicPath != null) {
                                     emitLog("[+] PDF Reassembled and saved to public folder: $publicPath")
                                     emitResultPath(publicPath)
+                                    // PDF results must be recorded in History too — the image
+                                    // branch below already records, but the PDF branch did not,
+                                    // so translated PDFs never appeared in the History tab.
+                                    try {
+                                        com.kzkt.app.data.HistoryRepository(applicationContext).record(
+                                            com.kzkt.app.data.HistoryEntry(
+                                                timestamp = System.currentTimeMillis(),
+                                                fileName = fileName,
+                                                outputPath = publicPath,
+                                                pageCount = pages.size,
+                                                provider = s.llmProvider,
+                                                targetLanguage = s.targetLanguage
+                                            )
+                                        )
+                                    } catch (e: Exception) {
+                                        emitLog("[!] Failed to record PDF history: ${e.message}")
+                                    }
                                 } else {
                                     emitLog("[!] Failed to save PDF to public downloads folder.")
                                 }
@@ -344,6 +366,8 @@ class TranslationWorker(
                     showFinalNotification("Translation Failed", "An error occurred: $msg")
                     Result.failure()
                 }
+            } finally {
+                emitScope.cancel()
             }
     }
 

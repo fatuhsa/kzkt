@@ -31,7 +31,6 @@ class HistoryRepository(private val context: Context) {
 
     private companion object {
         val KEY_ENTRIES = stringPreferencesKey("entries")
-        val KEY_REV = stringPreferencesKey("rev")
     }
 
     private val gson = Gson()
@@ -65,7 +64,6 @@ class HistoryRepository(private val context: Context) {
             }
             val updated = (listOf(entry) + existing).sortedByDescending { it.timestamp }
             prefs[KEY_ENTRIES] = gson.toJson(updated)
-            prefs[KEY_REV] = (System.currentTimeMillis()).toString()
         }
     }
 
@@ -77,7 +75,6 @@ class HistoryRepository(private val context: Context) {
                 val updated = gson.fromJson(json, Array<HistoryEntry>::class.java)
                     .filterNot { it.timestamp == timestamp }
                 prefs[KEY_ENTRIES] = gson.toJson(updated)
-                prefs[KEY_REV] = (System.currentTimeMillis()).toString()
             } catch (_: Exception) {
                 // corrupt entry list — leave as is
             }
@@ -91,14 +88,12 @@ class HistoryRepository(private val context: Context) {
     suspend fun restoreAll(entries: List<HistoryEntry>) {
         context.historyDataStore.edit { prefs ->
             prefs[KEY_ENTRIES] = gson.toJson(entries.sortedByDescending { it.timestamp })
-            prefs[KEY_REV] = (System.currentTimeMillis()).toString()
         }
     }
 
     suspend fun clear() {
         context.historyDataStore.edit { prefs ->
             prefs[KEY_ENTRIES] = "[]"
-            prefs[KEY_REV] = (System.currentTimeMillis()).toString()
         }
     }
 }

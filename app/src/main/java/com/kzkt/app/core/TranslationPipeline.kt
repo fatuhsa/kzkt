@@ -2,21 +2,14 @@ package com.kzkt.app.core
 
 import android.content.Context
 import android.graphics.*
-import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Environment
-import android.util.Log
 import com.kzkt.app.core.Config.TweakParams
 import com.kzkt.app.core.providers.LlmProvider
 import com.kzkt.app.ui.FileUtils
 import com.kzkt.app.util.JsonUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.withPermit
-import org.opencv.android.Utils
-import org.opencv.core.Core
-import org.opencv.core.Mat
-import org.opencv.core.Size
-import org.opencv.imgproc.Imgproc
 import java.io.File
 import java.io.FileOutputStream
 
@@ -55,7 +48,6 @@ class TranslationPipeline(
     data class PageData(
         val path: String,
         val pil: Bitmap,
-        val draws: Canvas?,
         val imgWidth: Int,
         val imgHeight: Int,
         val crops: MutableList<Pair<String, Bitmap>>,
@@ -126,7 +118,7 @@ class TranslationPipeline(
 
         if (results.size == splitCount) {
             // Recombine right-to-left (manga order)
-            val images = results.map { ImageProcessor.loadBitmap(it)!! }.reversed()
+            val images = results.mapNotNull { ImageProcessor.loadBitmap(it) }.reversed()
             val targetH = images.maxOf { it.height }
             val resized = images.map { bmp ->
                 if (bmp.height != targetH) {
@@ -403,7 +395,7 @@ class TranslationPipeline(
                     }
                     val ocrMap = mutableMapOf<String, String>()
                     for (item in chunk) {
-                        val recognized = com.kzkt.app.core.ocr.LocalOcrEngine.recognizeText(item.bitmap, params.localOcrScript)
+                        val recognized = com.kzkt.app.core.ocr.LocalOcrEngine.recognizeText(item.bitmap)
                         if (recognized.isNotBlank()) {
                             ocrMap[item.id] = recognized
                             if (params.enableDevLogs) onProgress("  [Local OCR] Bubble ${item.id} -> \"$recognized\"")
@@ -625,7 +617,7 @@ class TranslationPipeline(
                 async(Dispatchers.Default) {
                     if (isCancelled()) {
                         val doneCount = completedCount.incrementAndGet()
-                        return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
+                        return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), 0, 0,
                             mutableListOf(), mutableMapOf(), failed = true)
                     }
 
@@ -655,7 +647,7 @@ class TranslationPipeline(
                         } else {
                             onProgress("  [Page $actualPageNum/$totalPages] Skipping (Already translated).")
                         }
-                        return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
+                        return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), 0, 0,
                             mutableListOf(), mutableMapOf(), alreadyDone = true)
                     }
 
@@ -672,7 +664,7 @@ class TranslationPipeline(
                     if (bitmap == null) {
                         val doneCount = completedCount.incrementAndGet()
                         onProgress("  [Page $actualPageNum/$totalPages] Failed to load image.")
-                        return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
+                        return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), 0, 0,
                             mutableListOf(), mutableMapOf(), failed = true)
                     }
 
@@ -681,7 +673,7 @@ class TranslationPipeline(
 
                     val result = semaphore.withPermit {
                         if (isCancelled()) {
-                            PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), null, 0, 0,
+                            PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), 0, 0,
                                 mutableListOf(), mutableMapOf(), failed = true)
                         } else {
                             // YOLO detection — 3-stage cascade (each stage: distinct conf/iou threshold)
@@ -744,7 +736,7 @@ class TranslationPipeline(
                                 cropMatFull.release()
                             }
 
-                            PageData(imgPath, resultBmp, Canvas(resultBmp), imgWidth, imgHeight,
+                            PageData(imgPath, resultBmp, imgWidth, imgHeight,
                                 crops.toMutableList(), coordMap, bubbleColors)
                         }
                     }
@@ -838,7 +830,7 @@ class TranslationPipeline(
                 }
                 val ocrMap = mutableMapOf<String, String>()
                 for (item in chunk) {
-                    val recognized = com.kzkt.app.core.ocr.LocalOcrEngine.recognizeText(item.bitmap, params.localOcrScript)
+                    val recognized = com.kzkt.app.core.ocr.LocalOcrEngine.recognizeText(item.bitmap)
                     if (recognized.isNotBlank()) {
                         ocrMap[item.id] = recognized
                         if (params.enableDevLogs) onProgress("  [Local OCR] Bubble ${item.id} -> \"$recognized\"")

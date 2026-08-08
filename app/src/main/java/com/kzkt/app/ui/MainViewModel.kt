@@ -65,9 +65,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     data class ProviderTestState(val loading: Boolean = false, val ok: Boolean? = null, val message: String = "")
     val providerTestState = mutableStateOf<ProviderTestState?>(null)
 
-    // Cancel flag
-    private var _cancelled = false
-
     private var yolo: YoloOnnx? = null
     private var textRenderer: TextRenderer? = null
 
@@ -221,6 +218,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         translationProgress.value = 0f
         translationTotal.value = selectedFiles.size
         translationDone.value = 0
+        // Reset stale UI state from a previous run so the old preview/editor never
+        // lingers while the new batch is starting.
+        currentPreviewPath.value = null
+        lastResultForEditing.value = null
+        showInteractiveEditor.value = false
 
         com.kzkt.app.core.TranslationWorker.startTranslation(getApplication(), selectedFiles.toList())
     }
@@ -278,7 +280,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
-        yolo?.close()
+        // Do NOT close the shared YOLO session here: KzktApplication.yolo is a process-wide
+        // singleton also used by the background TranslationWorker. Closing it when the
+        // activity/ViewModel is destroyed would leave the worker (and the next launch in
+        // this process) with a dead ONNX session → every predict() throws
+        // IllegalStateException("Model not loaded"). The process owns the session for its
+        // lifetime; the OS reclaims it when the process dies.
         com.kzkt.app.core.TranslationProgressTracker.clearCache()
     }
 

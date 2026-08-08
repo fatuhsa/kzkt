@@ -102,7 +102,6 @@ object Config {
         var useInpainting: Boolean = false,
         var customFontPath: String = "",
         var useLocalOcr: Boolean = false,
-        var localOcrScript: String = "Japanese (ML Kit)",
         var enableDevLogs: Boolean = false,
         var useImageUpscaler: Boolean = false,
         var translateSfx: Boolean = false,

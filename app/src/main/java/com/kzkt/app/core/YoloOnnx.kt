@@ -371,6 +371,14 @@ class YoloOnnx(
         return detections
     }
 
+    /**
+     * Intentionally NOT called from the app lifecycle: the session is a process-wide
+     * singleton (KzktApplication.yolo) also used by the background TranslationWorker.
+     * Closing it while a worker runs would kill every subsequent predict() call, and a
+     * closed session would never be re-created (KzktApplication.yolo is non-null). The
+     * OS reclaims the native memory when the process dies. Kept as a public API for
+     * explicit teardown in tests/embedding, but do NOT wire it into the ViewModel.
+     */
     fun close() {
         Log.d("KZKT/YOLO", "Closing...")
         try { ortSession?.close() } catch (_: Exception) {}
