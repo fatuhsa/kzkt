@@ -59,6 +59,7 @@ class SettingsRepository(private val context: Context) {
         private val KEY_DEV_LOGS = booleanPreferencesKey("enable_dev_logs")
         private val KEY_USE_IMAGE_UPSCALER = booleanPreferencesKey("use_image_upscaler")
         private val KEY_TRANSLATE_SFX = booleanPreferencesKey("translate_sfx")
+        private val KEY_AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
     }
  
     data class Settings(
@@ -95,6 +96,7 @@ class SettingsRepository(private val context: Context) {
         val enableDevLogs: Boolean = false,
         val useImageUpscaler: Boolean = false,
         val translateSfx: Boolean = false,
+        val autoCheckUpdates: Boolean = true,
     ) {
         fun getBaseUrl(provider: String): String = when (provider) {
             "gemini" -> baseUrlGemini
@@ -146,6 +148,7 @@ class SettingsRepository(private val context: Context) {
             enableDevLogs = prefs[KEY_DEV_LOGS] ?: Defaults.settings.enableDevLogs,
             useImageUpscaler = prefs[KEY_USE_IMAGE_UPSCALER] ?: Defaults.settings.useImageUpscaler,
             translateSfx = prefs[KEY_TRANSLATE_SFX] ?: Defaults.settings.translateSfx,
+            autoCheckUpdates = prefs[KEY_AUTO_CHECK_UPDATES] ?: Defaults.settings.autoCheckUpdates,
         )
     }
 
@@ -230,6 +233,10 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[KEY_TRANSLATE_SFX] = enabled }
     }
 
+    suspend fun saveAutoCheckUpdates(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_AUTO_CHECK_UPDATES] = enabled }
+    }
+
     /**
      * Serialize every stored preference into a flat JSON map (key → {t: type, v: value}).
      * Used by the full-data backup feature; types are tagged so [importAll] can rebuild
@@ -303,6 +310,7 @@ class SettingsRepository(private val context: Context) {
             prefs.remove(KEY_USE_LOCAL_OCR)
             prefs.remove(KEY_USE_IMAGE_UPSCALER)
             prefs.remove(KEY_TRANSLATE_SFX)
+            prefs.remove(KEY_AUTO_CHECK_UPDATES)
         }
     }
 }

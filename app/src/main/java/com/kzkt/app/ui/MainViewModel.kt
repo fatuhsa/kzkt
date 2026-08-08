@@ -65,6 +65,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     data class ProviderTestState(val loading: Boolean = false, val ok: Boolean? = null, val message: String = "")
     val providerTestState = mutableStateOf<ProviderTestState?>(null)
 
+    // ── Self-update state (GitHub Releases) ──
+    data class UpdateUiState(
+        val checking: Boolean = false,
+        val info: com.kzkt.app.core.UpdateManager.UpdateInfo? = null,
+        val downloading: Boolean = false,
+        val downloadProgress: Float = 0f,
+        val error: String? = null,
+        val upToDate: Boolean = false,
+    )
+    val updateState = mutableStateOf(UpdateUiState())
+    private var autoCheckDone = false
+
     private var yolo: YoloOnnx? = null
     private var textRenderer: TextRenderer? = null
 
@@ -84,6 +96,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsRepo.settingsFlow.collect { s ->
                 settings.value = s
+            }
+        }
+        // Auto-check for updates once per app launch (only if the toggle is on).
+        viewModelScope.launch {
+            val autoCheck = settingsRepo.settingsFlow.first().autoCheckUpdates
+            if (autoCheck && !autoCheckDone) {
+                autoCheckDone = true
+                checkForUpdate(manual = false)
             }
         }
         // Hoist history into memory: parse the JSON once, then replay on every
@@ -333,6 +353,68 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    // ── Self-update ──
+
+    /**
+     * Check GitHub Releases for a newer version. When [manual] is true the dialog
+     * stays open with "already up to date" / error state so the user sees
+     * feedback; automatic checks silently no-op when nothing is new.
+     */
+    fun checkForUpdate(manual: Boolean) {
+        val current = updateState.value
+        if (current.checking || current.downloading) return
+        updateState.value = UpdateUiState(checking = true)
+
+        viewModelScope.launch(Dispatchers.IO) {
+            when (val result = com.kzkt.app.core.UpdateManager.checkForUpdate()) {
+                is com.kzkt.app.core.UpdateManager.CheckResult.Available -> {
+                    post { updateState.value = UpdateUiState(info = result.info) }
+                }
+                com.kzkt.app.core.UpdateManager.CheckResult.UpToDate -> {
+                    if (manual) post { updateState.value = UpdateUiState(upToDate = true) }
+                }
+                is com.kzkt.app.core.UpdateManager.CheckResult.Failed -> {
+                    if (manual) {
+                        post { updateState.value = UpdateUiState(error = "Could not check for updates: ${result.message}") }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Download the selected update with progress, then open the system installer. */
+    fun downloadAndInstallUpdate() {
+        val info = updateState.value.info ?: return
+        updateState.value = updateState.value.copy(downloading = true, downloadProgress = 0f)
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val file = com.kzkt.app.core.UpdateManager.downloadApk(
+                    getApplication(), info,
+                    onProgress = { p ->
+                        post { updateState.value = updateState.value.copy(downloadProgress = p) }
+                    },
+                )
+                post {
+                    updateState.value = UpdateUiState()
+                    com.kzkt.app.core.UpdateManager.installApk(getApplication(), file)
+                }
+            } catch (e: Exception) {
+                post {
+                    updateState.value = updateState.value.copy(
+                        downloading = false,
+                        error = "Download failed: ${e.message}",
+                    )
+                }
+            }
+        }
+    }
+
+    /** Dismiss the update dialog and clear transient state. */
+    fun dismissUpdateDialog() {
+        updateState.value = UpdateUiState()
     }
 
     fun fetchModelsForProvider(providerKey: String, baseUrl: String, apiKey: String) {

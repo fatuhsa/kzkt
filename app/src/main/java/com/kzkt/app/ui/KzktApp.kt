@@ -46,6 +46,23 @@ private enum class BottomTab(
 }
 
 @Composable
+private fun UpdateDialogHost(viewModel: MainViewModel) {
+    val state = viewModel.updateState.value
+    if (state.checking || state.info != null || state.downloading || state.error != null || state.upToDate) {
+        com.kzkt.app.ui.component.UpdateDialog(
+            checking = state.checking,
+            info = state.info,
+            downloading = state.downloading,
+            downloadProgress = state.downloadProgress,
+            error = state.error,
+            upToDate = state.upToDate,
+            onDownload = { viewModel.downloadAndInstallUpdate() },
+            onDismiss = { viewModel.dismissUpdateDialog() },
+        )
+    }
+}
+
+@Composable
 fun KzktApp(
     // Files shared into the app via ACTION_SEND (see MainActivity) — loaded once
     // on first composition into the Translate tab's file list.
@@ -59,6 +76,11 @@ fun KzktApp(
             viewModel.addFiles(initialSharedFiles)
         }
     }
+
+    // ── Self-update dialog (global — visible from any tab) ──
+    // Reads updateState inside its own small composable so download-progress
+    // ticks (~100/s max) don't recompose the whole Scaffold/NavHost.
+    UpdateDialogHost(viewModel)
 
     val initialDarkTheme = isSystemInDarkTheme()
     var darkTheme by rememberSaveable { mutableStateOf(initialDarkTheme) }

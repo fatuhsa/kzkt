@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.BrightnessLow
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.GppGood
 import androidx.compose.material.icons.outlined.Link
@@ -400,6 +401,47 @@ fun SettingsScreen(
                             title = { Text("Restore Backup") },
                             description = { Text("Import a backup file — overwrites current settings, glossary and history") },
                             onClick = { backupPickerLauncher.launch("*/*") },
+                        ),
+                    )
+                )
+            }
+        }
+
+        // ── Updates (self-update via GitHub Releases) ──
+        item(key = "updates") {
+            Column {
+                Text(
+                    "Updates",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
+                )
+                val autoCheckUpdates by remember { derivedStateOf { viewModel.settings.value.autoCheckUpdates } }
+                Material3SettingsGroup(
+                    items = listOf(
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.SystemUpdate) },
+                            title = { Text("Check for Updates Automatically") },
+                            description = { Text("Check GitHub Releases for a new version when the app opens") },
+                            trailingContent = {
+                                Switch(
+                                    checked = autoCheckUpdates,
+                                    onCheckedChange = { enabled ->
+                                        scope.launch { viewModel.settingsRepo.saveAutoCheckUpdates(enabled) }
+                                    }
+                                )
+                            },
+                            onClick = {
+                                scope.launch { viewModel.settingsRepo.saveAutoCheckUpdates(!autoCheckUpdates) }
+                            }
+                        ),
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.CloudDownload) },
+                            title = { Text("Check for Updates") },
+                            description = {
+                                Text("Current version: ${com.kzkt.app.BuildConfig.VERSION_NAME}")
+                            },
+                            onClick = { viewModel.checkForUpdate(manual = true) },
                         ),
                     )
                 )
