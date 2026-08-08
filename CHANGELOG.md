@@ -4,6 +4,19 @@ All notable changes to KZKT are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.30.2] - 2026-08-09
+
+### Added
+
+- **Foreground-service download**: the update download now runs in a dedicated foreground service (`dataSync` type, same pattern as the translation worker), so it survives app backgrounding / swipe-from-recents and no longer aborts mid-way. Progress keeps streaming to the notification shade and the dialog reflects the live state when the app is reopened.
+- **Speed + ETA in the UI**: the update dialog and notification now show the transferred amount, download speed, and estimated time remaining (e.g. `12.3 / 110 MB · 0.3 MB/s · ~5 min`), reported every 1% or every 500 ms — so slow downloads never look frozen.
+
+### Changed
+
+- **Resumable downloads (HTTP Range)**: partial files are stored under a stable name (`kzkt-update-<version>.apk`) and resumed from the last byte via the `Range` header (server replies `206 Partial Content`). If a transfer is interrupted, the next attempt continues where it left off instead of restarting from zero.
+- **Separate download timeout**: the download client now uses a 120-second read timeout instead of the 15-second API timeout, so short network stalls no longer kill the transfer.
+- **Automatic retry**: interrupted downloads retry up to 3 times with escalating backoff (2 s / 4 s), each attempt resuming from the partial file. User cancellations are respected and never retried.
+
 ## [v1.30.1] - 2026-08-09
 
 ### Fixed

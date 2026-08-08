@@ -32,6 +32,9 @@ fun UpdateDialog(
     info: UpdateManager.UpdateInfo?,
     downloading: Boolean,
     downloadProgress: Float,
+    downloadedBytes: Long,
+    totalBytes: Long,
+    downloadSpeedBps: Long,
     error: String?,
     upToDate: Boolean,
     onDownload: () -> Unit,
@@ -57,6 +60,7 @@ fun UpdateDialog(
         }
 
         downloading -> {
+            val pct = (downloadProgress.coerceIn(0f, 1f) * 100).toInt()
             AlertDialog(
                 onDismissRequest = {},
                 title = { Text("Downloading update…") },
@@ -67,11 +71,13 @@ fun UpdateDialog(
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Text(
-                            "${(downloadProgress.coerceIn(0f, 1f) * 100).toInt()}%",
+                            "$pct% · ${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)}" +
+                                formatSpeed(downloadSpeedBps) +
+                                formatEta(downloadedBytes, totalBytes, downloadSpeedBps),
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Text(
-                            "Please keep the app open while the APK downloads.",
+                            "The download continues even if you leave the app.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -142,4 +148,22 @@ fun UpdateDialog(
             )
         }
     }
+}
+
+private fun formatBytes(bytes: Long): String =
+    if (bytes <= 0) "0 MB" else "%.1f MB".format(bytes / 1048576f)
+
+private fun formatSpeed(speedBps: Long): String =
+    if (speedBps > 0) " · %.1f MB/s".format(speedBps / 1048576f) else ""
+
+private fun formatEta(downloaded: Long, total: Long, speedBps: Long): String {
+    if (speedBps <= 0 || total <= downloaded) return ""
+    val remainingSecs = (total - downloaded) / speedBps
+    return " · sisa ${formatDuration(remainingSecs)}"
+}
+
+private fun formatDuration(secs: Long): String = when {
+    secs < 60 -> "$secs dtk"
+    secs < 3600 -> "${secs / 60} mnt"
+    else -> "${secs / 3600} j ${(secs % 3600) / 60} mnt"
 }

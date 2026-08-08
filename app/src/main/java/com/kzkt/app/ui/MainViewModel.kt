@@ -71,6 +71,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val info: com.kzkt.app.core.UpdateManager.UpdateInfo? = null,
         val downloading: Boolean = false,
         val downloadProgress: Float = 0f,
+        val downloadedBytes: Long = 0L,
+        val totalBytes: Long = 0L,
+        val downloadSpeedBps: Long = 0L,
         val error: String? = null,
         val upToDate: Boolean = false,
     )
@@ -110,6 +113,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (autoCheck && !autoCheckDone) {
                 autoCheckDone = true
                 checkForUpdate(manual = false)
+            }
+        }
+        // Mirror the foreground-service download into the update dialog state so
+        // progress (percent + size + speed) keeps updating while the app is open.
+        viewModelScope.launch {
+            com.kzkt.app.core.UpdateDownloadTracker.events.collect { event ->
+                when (event) {
+                    is com.kzkt.app.core.UpdateDownloadTracker.Event.Progress -> {
+                        val s = updateState.value
+                        updateState.value = s.copy(
+                            downloading = true,
+                            downloadProgress = event.progress.fraction,
+                            downloadedBytes = event.progress.downloadedBytes,
+                            totalBytes = event.progress.totalBytes,
+                            downloadSpeedBps = event.progress.speedBytesPerSec,
+                        )
+                    }
+                    com.kzkt.app.core.UpdateDownloadTracker.Event.Completed -> updateState.value = UpdateUiState()
+                    com.kzkt.app.core.UpdateDownloadTracker.Event.Cancelled -> updateState.value = UpdateUiState()
+                    is com.kzkt.app.core.UpdateDownloadTracker.Event.Failed -> updateState.value = updateState.value.copy(
+                        downloading = false,
+                        error = event.message,
+                    )
+                }
             }
         }
         // Hoist history into memory: parse the JSON once, then replay on every
@@ -405,41 +432,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Download the selected update with progress, then open the system installer. */
+    /**
+     * Start the update download. The actual download runs in a foreground service
+     * ([UpdateDownloadService]) so it survives backgrounding and process death;
+     * progress is mirrored back here through [UpdateDownloadTracker].
+     */
     fun downloadAndInstallUpdate() {
         val info = updateState.value.info ?: return
         updateState.value = updateState.value.copy(downloading = true, downloadProgress = 0f)
-        // Mirror the download in the notification shade so progress is visible
-        // even if the user leaves the app / the dialog. No-ops if notifications
-        // are disabled (POST_NOTIFICATIONS not granted).
-        com.kzkt.app.core.UpdateManager.showDownloadNotification(getApplication(), info)
-
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val file = com.kzkt.app.core.UpdateManager.downloadApk(
-                    getApplication(), info,
-                    onProgress = { p ->
-                        post {
-                            updateState.value = updateState.value.copy(downloadProgress = p)
-                            com.kzkt.app.core.UpdateManager.updateDownloadNotification(getApplication(), info, p)
-                        }
-                    },
-                )
-                post {
-                    updateState.value = UpdateUiState()
-                    com.kzkt.app.core.UpdateManager.cancelDownloadNotification(getApplication())
-                    com.kzkt.app.core.UpdateManager.installApk(getApplication(), file)
-                }
-            } catch (e: Exception) {
-                post {
-                    com.kzkt.app.core.UpdateManager.cancelDownloadNotification(getApplication())
-                    updateState.value = updateState.value.copy(
-                        downloading = false,
-                        error = "Download failed: ${e.message}",
-                    )
-                }
-            }
-        }
+        com.kzkt.app.core.UpdateDownloadService.start(getApplication(), info)
     }
 
     /** Dismiss the update dialog and clear transient state. */

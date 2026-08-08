@@ -1,7 +1,9 @@
 package com.kzkt.app.core
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -9,12 +11,17 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.FileProvider
 import com.kzkt.app.BuildConfig
+import com.kzkt.app.MainActivity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -42,6 +49,17 @@ object UpdateManager {
         val publishedAt: String,
     )
 
+    /**
+     * Download progress with live throughput, so the UI can show speed + ETA
+     * instead of a percent that barely moves on slow CDNs.
+     */
+    data class DownloadProgress(
+        val fraction: Float,
+        val downloadedBytes: Long,
+        val totalBytes: Long,
+        val speedBytesPerSec: Long,
+    )
+
     /** Result of a version check — distinguishes "no update" from "check failed". */
     sealed class CheckResult {
         data class Available(val info: UpdateInfo) : CheckResult()
@@ -52,6 +70,14 @@ object UpdateManager {
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
+        .build()
+
+    // Separate client for the ~110 MB payload: the short 15s read timeout above
+    // aborts mid-download on flaky networks (any stall >15s = restart from 0).
+    // Downloads tolerate much longer gaps, especially combined with resume.
+    private val downloadClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
         .build()
 
     /**
@@ -136,51 +162,136 @@ object UpdateManager {
         return Build.SUPPORTED_ABIS.firstOrNull { it in priority }
     }
 
-    /** Download the update APK to cacheDir, reporting 0f..1f progress. */
+    /**
+     * Download the update APK to cacheDir with resume + live speed reporting.
+     *
+     * Resume: the partial file is kept under a stable name (kzkt-update-<version>.apk)
+     * across attempts. If it already exists, the server is asked for the remaining
+     * bytes via `Range`; a 206 response continues where we left off, a 200 means the
+     * server ignored the range and we restart from scratch. On failure the partial
+     * file is left in place so the next attempt resumes instead of restarting.
+     */
     suspend fun downloadApk(
         context: Context,
         info: UpdateInfo,
-        onProgress: (Float) -> Unit,
+        onProgress: (DownloadProgress) -> Unit,
+        isCancelled: () -> Boolean = { false },
+        onCallCreated: (Call) -> Unit = {},
     ): File = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(info.apkUrl).build()
-        httpClient.newCall(request).execute().use { response ->
+        // Clear partials from older versions (they can never be resumed) but keep
+        // ours — it may already hold most of the file.
+        sweepStalePartials(context, info.version)
+
+        val file = File(context.cacheDir, "kzkt-update-${info.version}.apk")
+        val existing = if (file.exists()) file.length() else 0L
+
+        // Fast path: the file is already complete (e.g. a previous attempt finished
+        // downloading but was interrupted before install).
+        if (existing > 0 && info.apkSizeBytes > 0 && existing >= info.apkSizeBytes) {
+            onProgress(DownloadProgress(1f, existing, existing, 0L))
+            return@withContext file
+        }
+
+        val requestBuilder = Request.Builder().url(info.apkUrl)
+        if (existing > 0) requestBuilder.header("Range", "bytes=$existing-")
+
+        val call = downloadClient.newCall(requestBuilder.build())
+        onCallCreated(call)
+
+        val startNanos = System.nanoTime()
+        var lastReportNanos = startNanos
+        var lastReportedPct = -1
+
+        call.execute().use { response ->
             if (!response.isSuccessful) {
                 throw IOException("Download failed: HTTP ${response.code}")
             }
+            val resume = response.code == 206
             val body = response.body ?: throw IOException("Empty response body")
-            val total = body.contentLength()
-            val file = File(context.cacheDir, "kzkt-update-${System.currentTimeMillis()}.apk")
+            val remaining = body.contentLength()      // 206: bytes left; 200: full size
+            // `base` = bytes already on disk before this session — 0 when the
+            // server ignored our Range and restarted the download from scratch
+            // (the partial was wiped below), existing when we truly resume.
+            val base = if (resume) existing else 0L
+            val total = if (remaining > 0) base + remaining else info.apkSizeBytes
 
-            body.byteStream().use { input ->
-                file.outputStream().use { output ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    var downloaded = 0L
-                    var lastReported = 0L
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read == -1) break
-                        output.write(buffer, 0, read)
-                        downloaded += read
-                        // Throttle progress callbacks to ~1% granularity so we don't
-                        // flood the main thread with thousands of updates.
-                        if (total > 0) {
-                            val pct = downloaded * 100 / total
-                            if (pct > lastReported) {
-                                lastReported = pct
-                                onProgress(downloaded.toFloat() / total)
-                            }
-                        }
+            if (!resume && existing > 0) file.delete() // server restarted us — wipe partial
+
+            FileOutputStream(file, resume).use { output ->
+                val buffer = ByteArray(64 * 1024)
+                val input = body.byteStream()
+                var session = 0L
+                while (true) {
+                    if (isCancelled()) throw CancellationException("Download cancelled")
+                    val read = input.read(buffer)
+                    if (read == -1) break
+                    output.write(buffer, 0, read)
+                    session += read
+
+                    val downloadedTotal = base + session
+                    val fraction = if (total > 0) (downloadedTotal.toFloat() / total).coerceIn(0f, 1f) else 0f
+                    val now = System.nanoTime()
+                    val elapsedSec = (now - startNanos) / 1_000_000_000.0
+                    val speed = if (elapsedSec > 0.5) (session / elapsedSec).toLong() else 0L
+                    val pct = (fraction * 100).toInt()
+
+                    // Report on percent change OR every ~500ms — on a slow CDN a single
+                    // percent can take seconds, so the speed/ETA text keeps refreshing
+                    // even while the percent bar is stationary.
+                    if (pct > lastReportedPct || now - lastReportNanos > 500_000_000L) {
+                        lastReportedPct = pct
+                        lastReportNanos = now
+                        onProgress(DownloadProgress(fraction, downloadedTotal, total, speed))
                     }
                 }
             }
-            onProgress(1f)
+            if (total > 0) onProgress(DownloadProgress(1f, total, total, 0L))
             file
         }
     }
 
+    private fun sweepStalePartials(context: Context, currentVersion: String) {
+        try {
+            context.cacheDir.listFiles { f ->
+                f.name.startsWith("kzkt-update-") && f.name != "kzkt-update-$currentVersion.apk"
+            }?.forEach { it.delete() }
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * [downloadApk] with automatic retry + backoff; every attempt resumes the
+     * partial file, so an interrupted download continues instead of restarting.
+     */
+    suspend fun downloadApkWithRetry(
+        context: Context,
+        info: UpdateInfo,
+        onProgress: (DownloadProgress) -> Unit,
+        isCancelled: () -> Boolean = { false },
+        onCallCreated: (Call) -> Unit = {},
+    ): File {
+        var lastError: Exception? = null
+        repeat(MAX_DOWNLOAD_ATTEMPTS) { attempt ->
+            try {
+                return downloadApk(context, info, onProgress, isCancelled, onCallCreated)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                lastError = e
+                if (isCancelled()) throw CancellationException("Download cancelled")
+                if (attempt < MAX_DOWNLOAD_ATTEMPTS - 1) {
+                    delay(RETRY_BACKOFF_MS * (attempt + 1)) // 2s, then 4s
+                }
+            }
+        }
+        throw lastError ?: IOException("Download failed")
+    }
+
     // ── Download-progress notification ────────────────────────────────
     private const val UPDATE_CHANNEL_ID = "kzkt_update_download"
-    private const val UPDATE_NOTIFICATION_ID = 2001
+    const val UPDATE_NOTIFICATION_ID = 2001
+
+    private const val MAX_DOWNLOAD_ATTEMPTS = 3
+    private const val RETRY_BACKOFF_MS = 2000L
 
     private fun notifManager(context: Context): NotificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -188,7 +299,7 @@ object UpdateManager {
     private fun notifEnabled(context: Context): Boolean =
         NotificationManagerCompat.from(context).areNotificationsEnabled()
 
-    // Created at most once per process — progress ticks (~100/s) must not
+    // Created at most once per process — progress ticks (~2/s) must not
     // hammer createNotificationChannel (a binder call) on every update.
     @Volatile
     private var updateChannelReady = false
@@ -206,29 +317,55 @@ object UpdateManager {
         updateChannelReady = true
     }
 
-    /**
-     * Show (or update) the download-progress notification for the in-flight
-     * update. No-ops silently when notifications are disabled/not granted.
-     */
-    fun showDownloadNotification(context: Context, info: UpdateInfo, progress: Float = 0f) {
-        if (!notifEnabled(context)) return
+    /** Build the download notification — also used by the service for startForeground. */
+    fun buildDownloadNotification(context: Context, info: UpdateInfo, progress: DownloadProgress?): Notification {
         ensureUpdateChannel(context)
-        val pct = (progress.coerceIn(0f, 1f) * 100).toInt()
-        val notification = NotificationCompat.Builder(context, UPDATE_CHANNEL_ID)
+        val pct = if (progress != null) (progress.fraction.coerceIn(0f, 1f) * 100).toInt() else 0
+        val contentText = if (progress != null) {
+            val doneMb = progress.downloadedBytes / 1048576f
+            val totalMb = maxOf(1, progress.totalBytes) / 1048576f
+            val speed = if (progress.speedBytesPerSec > 0) " · ${formatMbps(progress.speedBytesPerSec)}" else ""
+            "%.1f / %.1f MB%s".format(doneMb, totalMb, speed)
+        } else {
+            info.apkFileName
+        }
+        val openIntent = Intent(context, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_SINGLE_TOP }
+        val openPendingIntent = PendingIntent.getActivity(
+            context, 0, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val cancelIntent = Intent(context, UpdateDownloadService::class.java).apply {
+            action = UpdateDownloadService.ACTION_CANCEL
+        }
+        val cancelPendingIntent = PendingIntent.getService(
+            context, 1, cancelIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(context, UPDATE_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("Downloading KZKT ${info.version}…")
-            .setContentText(info.apkFileName)
+            .setContentText(contentText)
             .setSubText("$pct%")
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOnlyAlertOnce(true)
             .setOngoing(true)
             .setProgress(100, pct, false)
+            .setContentIntent(openPendingIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPendingIntent)
             .build()
-        notifManager(context).notify(UPDATE_NOTIFICATION_ID, notification)
+    }
+
+    private fun formatMbps(bytesPerSec: Long): String =
+        "%.1f".format(bytesPerSec / 1048576f) + " MB/s"
+
+    /** Show (or update) the download-progress notification. No-ops when notifications are disabled. */
+    fun showDownloadNotification(context: Context, info: UpdateInfo, progress: DownloadProgress? = null) {
+        if (!notifEnabled(context)) return
+        notifManager(context).notify(UPDATE_NOTIFICATION_ID, buildDownloadNotification(context, info, progress))
     }
 
     /** Alias with clearer intent at call sites that are mid-download. */
-    fun updateDownloadNotification(context: Context, info: UpdateInfo, progress: Float) =
+    fun updateDownloadNotification(context: Context, info: UpdateInfo, progress: DownloadProgress) =
         showDownloadNotification(context, info, progress)
 
     /** Remove the download notification (after install is handed to the system). */

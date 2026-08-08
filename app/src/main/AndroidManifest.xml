@@ -39,6 +39,18 @@
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
 
+        <!--
+            Foreground service for the self-update download: keeps the ~110 MB
+            download (and the process) alive while the app is backgrounded, so it
+            no longer aborts when the user leaves the app. dataSync matches the
+            permission above; activity starts for the installer are exempt from
+            background restrictions while this service is running.
+        -->
+        <service
+            android:name=".core.UpdateDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <provider
 
             android:name="androidx.core.content.FileProvider"
