@@ -4,6 +4,26 @@ All notable changes to KZKT are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.25.1] - 2026-08-08
+
+### Added
+
+- **Self-Update via GitHub Releases**: `UpdateManager` checks the public `releases/latest` endpoint on app launch (toggle in Settings, ON by default) and via a "Check for Updates" button. It picks the APK matching the device ABI (arm64-v8a → armeabi-v7a → x86_64 → x86, universal fallback), downloads it with live progress, and opens the system installer through FileProvider (`REQUEST_INSTALL_PACKAGES`).
+- **Auto Version Bump**: CI release workflow now takes a version input (e.g. `1.25.2`) and passes `-PversionName`/`-PversionCode` to Gradle — `versionCode` is derived automatically from the name (`1.25.2` → `12502000`), so releases no longer require editing `build.gradle.kts`.
+- **Per-ABI Release APKs (ala Komikku)**: `assembleRelease` now splits output into one APK per ABI (arm64-v8a, armeabi-v7a, x86, x86_64) plus a universal APK; `-PabiFilter=<abi>` builds just one variant.
+- **Multi-Job CI Matrix**: `.github/workflows/kzkt.yml` restructures the release pipeline into `prepare → build (5 parallel ABI jobs) → create release` — with the arrow flowchart on the Actions page and a Telegram notification containing clickable links.
+- **AGENTS.md**: AI-agent instruction file so external AI tools follow the same build/verify/sign/send workflow as this project's maintainers.
+
+### Changed
+
+- **CI artifact naming**: debug APK artifact path fixed after per-ABI splits (`app-arm64-v8a-debug.apk` / `app-universal-debug.apk`).
+- **GitHub Release flow**: releases are published immediately (no draft), with APK assets + `sha256sums.txt`.
+
+### Fixed
+
+- **WorkManager 10 KB limit crash**: importing a folder with many images threw `IllegalStateException: Data cannot occupy more than 10240 bytes when serialized` because the whole file list was passed as WorkManager input data. The list is now written to a JSON file in `cacheDir` and only its path is passed; the worker reads + deletes it, with a size-safe fallback and a stale-file sweep for orphans.
+- **Telegram notification newlines**: `\n` was sent as literal text — now built with `printf` so links render on their own clickable lines.
+
 ## [v1.25.1.22] - 2026-08-07
 
 ### Added
