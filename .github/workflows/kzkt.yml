@@ -180,7 +180,8 @@ jobs:
             exit 0
           fi
           RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TG_TAG}"
-          MSG="📦 KZKT ${TG_TAG} — release baru!\\n\\nSemua varian APK + sha256 ada di GitHub Releases:\\n${RELEASE_URL}\\n\\n(Pilih KZKT-arm64-v8a-${TG_TAG}.apk untuk HP modern)"
+          # printf menerjemahkan \n jadi baris baru sungguhan (bukan teks literal)
+          MSG=$(printf '📦 KZKT %s — release baru!\n\nSemua varian APK + sha256 ada di GitHub Releases:\n%s\n\n(Pilih KZKT-arm64-v8a-%s.apk untuk HP modern)' "$TG_TAG" "$RELEASE_URL" "$TG_TAG")
           curl -s -F "chat_id=$TG_CHAT" \
             -F "text=$MSG" \
             "https://api.telegram.org/bot$TG_BOT/sendMessage" \
