@@ -1,0 +1,118 @@
+name: Auto Release
+
+on:
+  push:
+    tags:
+      - "v*"        # rilis otomatis saat tag v1.25.3 dst di-push
+  workflow_dispatch:  # atau jalankan manual dari tab Actions
+    inputs:
+      version:
+        description: "Versi untuk rilis manual (mis. 1.25.3). Kosongkan jika trigger via tag."
+        required: false
+        default: ""
+
+permissions:
+  contents: write    # untuk membuat GitHub Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Build image builder (sama dengan android.yml & build lokal) ──
+      - name: Build Docker image
+        run: docker build -t kzkt-builder .
+
+      # ── Rekonstruksi keystore dari GitHub Secrets ──────────────────
+      # Secrets: KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+      - name: Restore keystore from secrets
+        run: |
+          if [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "::error::KEYSTORE_BASE64 kosong — isi 4 secret (KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD) di Settings → Secrets → Actions"
+            exit 1
+          fi
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > kzkt-release.jks
+          cat > keystore.properties <<EOF
+          storeFile=/app/kzkt-release.jks
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          EOF
+          ls -la kzkt-release.jks keystore.properties
+
+      # ── Gradle cache (reuse antara run) ────────────────────────────
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: gradle-cache
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      # ── Unit test + build release SIGNED (R8 + shrink) ────────────
+      - name: Unit tests + Release APK (Docker)
+        run: |
+          mkdir -p gradle-cache
+          docker run --rm \
+            -v "$PWD/gradle-cache:/root/.gradle" \
+            -v "$PWD/app/build:/app/app/build" \
+            -v "$PWD/keystore.properties:/app/keystore.properties:ro" \
+            -v "$PWD/kzkt-release.jks:/app/kzkt-release.jks:ro" \
+            kzkt-builder ./gradlew testDebugUnitTest assembleRelease
+          sudo chown -R "$(id -u):$(id -g)" gradle-cache app/build
+
+      # ── Verifikasi signature (harus CN=kouzen-neo, bukan debug) ───
+      - name: Verify APK signature
+        run: |
+          docker run --rm \
+            -v "$PWD/app/build:/app/app/build" \
+            kzkt-builder sh -c "ls -lh /app/app/build/outputs/apk/release/app-release.apk"
+          echo "── Certificate: ──"
+          docker run --rm \
+            -v "$PWD/app/build:/app/app/build" \
+            kzkt-builder sh -c "keytool -printcert -jarfile /app/app/build/outputs/apk/release/app-release.apk 2>/dev/null | grep -E 'Owner|CN='" || echo "⚠️ tidak bisa baca cert (cek di artifact)"
+
+      # ── Tentukan tag tujuan release ────────────────────────────────
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "tag=v${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Rilis manual butuh input 'version' (mis. 1.25.3)"
+            exit 1
+          fi
+
+      # ── Buat GitHub Release + lampirkan APK ────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          files: app/build/outputs/apk/release/app-release.apk
+          name: KZKT ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          draft: true   # biar bisa review dulu sebelum publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── (Opsional) Kirim APK ke Telegram ───────────────────────────
+      # Aktif hanya jika secrets TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID diisi.
+      - name: Send APK to Telegram
+        env:
+          TG_BOT: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TG_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if [ -z "$TG_BOT" ] || [ -z "$TG_CHAT" ]; then
+            echo "ℹ️ Telegram secrets belum diisi — lewati."
+            exit 0
+          fi
+          curl -s -F "chat_id=$TG_CHAT" \
+            -F "document=@app/build/outputs/apk/release/app-release.apk" \
+            -F "caption=📦 KZKT $TG_TAG — release baru!" \
+            "https://api.telegram.org/bot$TG_BOT/sendDocument" \
+            | grep -q '"ok":true' && echo "✅ APK terkirim ke Telegram" || echo "⚠️ Gagal kirim ke Telegram"
