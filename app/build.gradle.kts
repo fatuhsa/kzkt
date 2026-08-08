@@ -54,8 +54,21 @@ android {
         applicationId = "com.kzkt.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1250122
-        versionName = "1.25.1.22"
+        // ── Version bump otomatis ────────────────────────────────────
+        // CI dapat meng-Override dengan -PversionName=1.25.2 (dikirim dari
+        // workflow_dispatch input). versionCode diturunkan otomatis dari
+        // nama versi (1.25.2 → 1250020) sehingga selalu naik per rilis.
+        // Tanpa flag: pakai nilai default di bawah.
+        val ciVersionName = (project.findProperty("versionName") as String?)?.takeIf { it.isNotBlank() }
+        val ciVersionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull()
+        // Turunkan versionCode dari nama versi, skema x.y.z → major*10^7 + minor*10^5 + patch*10^3
+        // (1.25.2 → 12502000, 1.25.10 → 12510000) — selalu naik per rilis dan jauh di atas
+        // versionCode lama (1250122) sehingga update tetap bisa diinstall.
+        val derivedCode = ciVersionName?.split('.')?.take(3)?.mapIndexed { i, s ->
+            (s.toIntOrNull() ?: 0) * listOf(10_000_000, 100_000, 1_000)[i]
+        }?.sum()
+        versionCode = ciVersionCode ?: derivedCode ?: 1250122
+        versionName = ciVersionName ?: "1.25.1.22"
 
         ndk {
             // AGP melarang ndk.abiFilters di-set bersamaan dengan splits.abi.

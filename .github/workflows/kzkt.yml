@@ -7,7 +7,11 @@ on:
   workflow_dispatch:  # atau jalankan manual dari tab Actions
     inputs:
       version:
-        description: "Versi untuk rilis manual (mis. 1.25.3). Kosongkan jika trigger via tag."
+        description: "Versi untuk rilis manual (mis. 1.25.3). Kosongkan jika trigger via tag. VersionCode otomatis diturunkan dari ini."
+        required: false
+        default: ""
+      versionCode:
+        description: "(Opsional) VersionCode custom. Kosongkan untuk auto-derive dari nama versi."
         required: false
         default: ""
 
@@ -88,12 +92,19 @@ jobs:
           if [ "${{ matrix.abi }}" != "universal" ]; then
             FLAG="-PabiFilter=${{ matrix.abi }}"
           fi
+          # Auto version bump: -PversionName diambil dari input/tag.
+          # -PversionCode diisi bila user isi kolom custom, selain itu biarkan
+          # build.gradle.kts menurunkannya otomatis dari nama versi.
+          VERSION_ARGS="-PversionName=${{ needs.prepare.outputs.version }}"
+          if [ -n "${{ github.event.inputs.versionCode }}" ]; then
+            VERSION_ARGS="$VERSION_ARGS -PversionCode=${{ github.event.inputs.versionCode }}"
+          fi
           docker run --rm \
             -v "$PWD/gradle-cache:/root/.gradle" \
             -v "$PWD/app/build:/app/app/build" \
             -v "$PWD/keystore.properties:/app/keystore.properties:ro" \
             -v "$PWD/kzkt-release.jks:/app/kzkt-release.jks:ro" \
-            kzkt-builder ./gradlew assembleRelease $FLAG
+            kzkt-builder ./gradlew assembleRelease $FLAG $VERSION_ARGS
           sudo chown -R "$(id -u):$(id -g)" gradle-cache app/build
 
       # Simpan APK hasil build (per ABI) agar job release bisa ambil
