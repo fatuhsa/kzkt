@@ -43,7 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- **Batch Edit in Touch-up Editor**: New 🎨 button opens a Batch Edit dialog — Find & Replace text across every bubble, and apply Bold / Italic / Alignment / Font Size to all bubbles at once.
+- **Batch Edit in Touch-up Editor**: New palette-icon button opens a Batch Edit dialog — Find & Replace text across every bubble, and apply Bold / Italic / Alignment / Font Size to all bubbles at once.
 - **In-Provider Model Failover**: New `ProviderFactory` builds the fallback chain — if the primary model fails or is rate-limited, alternate models of the *same* provider are tried first, then the other configured providers.
 - **CBZ Export Preserves Folder Structure**: `createCbz` now writes entries relative to the deepest common parent directory, keeping chapter/folder layout intact inside the archive.
 - **Share Multiple Images**: `ACTION_SEND_MULTIPLE` intent-filter + `ClipData` fallback in `MainActivity`, so the app accepts multi-image shares from galleries/file managers.
@@ -101,7 +101,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [v1.25.1.13] - 2026-08-01 → 2026-08-06
 
-### 🎨 Major UI Overhaul (2026-08-02)
+### Major UI Overhaul (2026-08-02)
 
 Directly following the documentation commit that outlined the app's key features — **PDF support, 3-stage YOLO cascade, and zero memory leaks** (`4d13002`) — the whole interface was rebuilt around modern Material 3 (`1ba321f`, +2556/−671 lines across 20 files):
 

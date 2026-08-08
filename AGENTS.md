@@ -1,4 +1,4 @@
-# 🤖 AGENTS.md — Instructions for AI Coding Agents
+# AGENTS.md — Instructions for AI Coding Agents
 
 > **Read this before modifying or building anything in this repo.** These are the
 > conventions the project owner expects every AI agent to follow. Human-facing
@@ -46,6 +46,15 @@ LLM provider, and writes translated images back.
 8. **WorkManager input data is limited to 10 KB.** Never pass a big file list via
    `workDataOf`; write it to a JSON file in `cacheDir` and pass only the file path
    (see `TranslationWorker.startTranslation`).
+9. **Release descriptions ALWAYS come from `CHANGELOG.md` — never from git commit
+   history.** The CI workflow (`kzkt.yml`) extracts the section matching the
+   version (`## [v1.30.0]`) as the release body; `generate_release_notes` is
+   intentionally off. Keep the changelog as the single source of truth for what
+   users see on the release page.
+10. **Before every release, add a `CHANGELOG.md` section first.** Without
+    `## [vX.Y.Z] - YYYY-MM-DD` the release body has no notes (the CI prints a
+    warning and ships only the APK list). Write the section, commit + push it,
+    THEN trigger the Auto Release workflow — never release without changelog.
 
 ---
 
@@ -174,10 +183,27 @@ docker cp <CID>:/app/app/build/outputs/apk/release/app-arm64-v8a-release.apk .
 - **`.github/workflows/kzkt.yml`** — **Auto Release** (manual dispatch): multi-job
   matrix (prepare → build 5 ABI variants in parallel → create GitHub Release +
   Telegram notification). Version comes from the workflow input or the git tag.
-  Uses `-PabiFilter` per job and `-PversionName` from the input.
+  Uses `-PabiFilter` per job and `-PversionName` from the input. The release body
+  is **extracted from `CHANGELOG.md`** (the `## [vX.Y.Z]` section for the version
+  being released) — commit history is NOT used (`generate_release_notes` is off).
 
 If you add release/CI features, keep this structure: `prepare → build (matrix) →
 release`, and always pass `-PabiFilter` + `-PversionName` to Gradle.
+
+### 6.1 Cutting a release (ALWAYS in this order)
+
+1. **Add a section to `CHANGELOG.md`**: `## [v1.30.0] - YYYY-MM-DD` with
+   `### Added` / `### Changed` / `### Fixed` bullets. This exact text becomes the
+   GitHub release description.
+2. **Commit + push the changelog** to `main` — the release job reads the file
+   from the checked-out repo, so it must already be on the branch.
+3. **Trigger the release**:
+   ```bash
+   gh workflow run kzkt.yml -f version=1.30.0
+   ```
+   or via the GitHub UI: **Actions → Auto Release → Run workflow → version**.
+4. **Verify after it finishes**: the release body starts with the changelog
+   section (not commit history) and all 5 APKs + `sha256sums.txt` are attached.
 
 ---
 
@@ -193,14 +219,32 @@ release`, and always pass `-PabiFilter` + `-PversionName` to Gradle.
 | **OpenCV** | `System.loadLibrary("opencv_java4")` must run before `OpenCVLoader.initLocal()` | See `KzktApplication.onCreate` — don't reorder |
 | **YOLO asset** | `kzkt.dat` missing → model fails to load at runtime | It's committed in `app/src/main/assets/models/`; never delete |
 | **AGP `abiFilters` vs `splits`** | Setting both with different ABIs fails the build | `-PabiFilter` makes `splits` control the ABI and skips `ndk.abiFilters` (already handled in `app/build.gradle.kts`) |
+| **Release notes** | Release body has no notes / only the APK list → the `## [vX.Y.Z]` section is missing from `CHANGELOG.md` | Always add the changelog section and push it BEFORE triggering Auto Release (rules 9–10) |
 
 ---
 
 ## 8. Before finishing a task
 
-1. ✅ Compile + unit tests pass (`compileDebugKotlin` + `testDebugUnitTest`).
-2. ✅ If the user asked for an APK: build the **right variant** (release + matching
+1. Compile + unit tests pass (`compileDebugKotlin` + `testDebugUnitTest`).
+2. If the user asked for an APK: build the **right variant** (release + matching
    ABI), verify version & signature, and share it via KDE Connect.
-3. ✅ If asked to commit: conventional message, only relevant files, push to `main`.
-4. ✅ Summarize concisely: what changed, verification results, and how the user can
+3. If asked to commit: conventional message, only relevant files, push to `main`.
+4. Summarize concisely: what changed, verification results, and how the user can
    test it.
+
+---
+
+## 9. Communication style (owner preferences)
+
+The owner keeps communication clean and minimal. Follow these rules in every
+reply and in every artifact you produce:
+
+1. **No emojis. Ever.** Not in chat replies, instructions, commit messages,
+   GitHub release descriptions, Telegram notifications, or documentation
+   (`CHANGELOG.md`, READMEs, `AGENTS.md`, code comments).
+2. **Be concise and structured.** Use short paragraphs, headers, tables, and code
+   blocks where they add clarity — no filler, no celebration, no bullet spam.
+3. **Report concrete results**: `BUILD SUCCESSFUL`/`FAILED`, version codes, file
+   paths, and actual command outputs — never vague summaries.
+4. **Mirror the user's language** — reply in the language they write in
+   (Indonesian or English).

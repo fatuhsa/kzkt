@@ -159,7 +159,7 @@ jobs:
             echo "::warning::Section [v$V] tidak ditemukan di CHANGELOG.md — body hanya berisi daftar APK."
           fi
           {
-            echo "# 🚀 KZKT v$V"
+            echo "# KZKT v$V"
             echo ""
             if [ -s /tmp/changelog-section.md ]; then
               cat /tmp/changelog-section.md
@@ -167,7 +167,7 @@ jobs:
             fi
             echo "---"
             echo ""
-            echo "## 📦 APK"
+            echo "## APK"
             echo ""
             while read -r hash file; do
               size=$(du -h "apks/$file" | cut -f1)
@@ -206,13 +206,13 @@ jobs:
           TG_TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           if [ -z "$TG_BOT" ] || [ -z "$TG_CHAT" ]; then
-            echo "ℹ️ Telegram secrets belum diisi — lewati."
+            echo "Telegram secrets belum diisi — lewati."
             exit 0
           fi
           RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TG_TAG}"
           # printf menerjemahkan \n jadi baris baru sungguhan (bukan teks literal)
-          MSG=$(printf '📦 KZKT %s — release baru!\n\nSemua varian APK + sha256 ada di GitHub Releases:\n%s\n\n(Pilih KZKT-arm64-v8a-%s.apk untuk HP modern)' "$TG_TAG" "$RELEASE_URL" "$TG_TAG")
+          MSG=$(printf 'KZKT %s — release baru!\n\nSemua varian APK + sha256 ada di GitHub Releases:\n%s\n\n(Pilih KZKT-arm64-v8a-%s.apk untuk HP modern)' "$TG_TAG" "$RELEASE_URL" "$TG_TAG")
           curl -s -F "chat_id=$TG_CHAT" \
             -F "text=$MSG" \
             "https://api.telegram.org/bot$TG_BOT/sendMessage" \
-            | grep -q '"ok":true' && echo "✅ Notifikasi terkirim ke Telegram" || echo "⚠️ Gagal kirim ke Telegram"
+            | grep -q '"ok":true' && echo "Notifikasi terkirim ke Telegram" || echo "Gagal kirim ke Telegram"

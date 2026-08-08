@@ -1,4 +1,4 @@
-# 📦 Building KZKT APKs (Debug & Signed Release)
+# Building KZKT APKs (Debug & Signed Release)
 
 This guide explains how to build KZKT — from a quick **debug** APK for testing to a
 minified, **signed release** APK for distribution — with either your **own keystore**
@@ -58,7 +58,7 @@ Output (already signed, R8-minified + resource-shrunk):
 app/build/outputs/apk/release/app-release.apk
 ```
 
-> ⚠️ **Debug-signing must NOT be published** to the Play Store. Use it only for
+> **Debug-signing must NOT be published** to the Play Store. Use it only for
 > personal installation / testing across devices.
 
 ---
