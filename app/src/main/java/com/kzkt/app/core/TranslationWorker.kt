@@ -19,6 +19,7 @@ import androidx.work.ExistingWorkPolicy
 import com.kzkt.app.MainActivity
 import com.kzkt.app.KzktApplication
 import com.kzkt.app.core.providers.*
+import com.google.gson.Gson
 import com.kzkt.app.data.SettingsRepository
 import com.kzkt.app.data.TranslationCacheRepository
 import com.kzkt.app.util.PdfImporter
@@ -40,17 +41,48 @@ class TranslationWorker(
         const val NOTIFICATION_ID = 1001
 
         const val EXTRA_FILES = "com.kzkt.app.extra.FILES"
+        const val EXTRA_FILES_FILE = "com.kzkt.app.extra.FILES_FILE"
         const val EXTRA_RETRY = "com.kzkt.app.extra.RETRY"
 
         fun startTranslation(context: Context, files: List<String>, retry: Boolean = false) {
+            // WorkManager caps input data at ~10 KB when serialized, so a large folder
+            // (dozens of long paths) blows past it with IllegalStateException. Instead of
+            // inlining the list, persist it to a cache file and pass only that file path.
+            val listFile = File(context.cacheDir, "translation_files_${System.currentTimeMillis()}.json")
+            try {
+                listFile.writeText(Gson().toJson(files))
+            } catch (e: Exception) {
+                // Disk failure — fall back to in-band, but ONLY if it fits the 10 KB limit.
+                val inputDataSmall = try {
+                    workDataOf(EXTRA_FILES to files.toTypedArray(), EXTRA_RETRY to retry)
+                } catch (limit: IllegalStateException) {
+                    // Still too big — surface a clear error instead of silently truncating.
+                    TranslationProgressTracker.progressFlow.tryEmit(
+                        TranslationProgressTracker.ProgressEvent.Error(
+                            "Batch terlalu besar untuk diproses sekaligus. Pilih lebih sedikit file dan coba lagi."
+                        )
+                    )
+                    return
+                }
+                val workRequestSmall = OneTimeWorkRequestBuilder<TranslationWorker>()
+                    .setInputData(inputDataSmall)
+                    .build()
+                WorkManager.getInstance(context).enqueueUniqueWork(
+                    "TranslationWorker",
+                    ExistingWorkPolicy.REPLACE,
+                    workRequestSmall
+                )
+                return
+            }
+
             val inputData = workDataOf(
-                EXTRA_FILES to files.toTypedArray(),
+                EXTRA_FILES_FILE to listFile.absolutePath,
                 EXTRA_RETRY to retry
             )
             val workRequest = OneTimeWorkRequestBuilder<TranslationWorker>()
                 .setInputData(inputData)
                 .build()
-            
+
             WorkManager.getInstance(context).enqueueUniqueWork(
                 "TranslationWorker",
                 ExistingWorkPolicy.REPLACE,
@@ -67,11 +99,33 @@ class TranslationWorker(
         notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
 
-        val filesArray = inputData.getStringArray(EXTRA_FILES)
-        if (filesArray.isNullOrEmpty()) {
+        // Sweep stale queue files left behind by cancelled/replaced runs.
+        try {
+            context.cacheDir.listFiles { f ->
+                f.name.startsWith("translation_files_") &&
+                    System.currentTimeMillis() - f.lastModified() > 24 * 60 * 60 * 1000L
+            }?.forEach { it.delete() }
+        } catch (_: Exception) {}
+
+        // New path: file list persisted to a cache JSON (no 10 KB WorkManager limit).
+        val filePath = inputData.getString(EXTRA_FILES_FILE)
+        val files: List<String> = if (!filePath.isNullOrBlank()) {
+            val f = File(filePath)
+            try {
+                val type = object : com.google.gson.reflect.TypeToken<List<String>>() {}.type
+                val parsed = Gson().fromJson<List<String>>(f.readText(), type)
+                f.delete()
+                parsed ?: emptyList()
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } else {
+            // Legacy path (in-band array) for compatibility.
+            inputData.getStringArray(EXTRA_FILES)?.toList() ?: emptyList()
+        }
+        if (files.isEmpty()) {
             return Result.failure()
         }
-        val files = filesArray.toList()
         val retry = inputData.getBoolean(EXTRA_RETRY, false)
 
         return startTask(files, retry)
