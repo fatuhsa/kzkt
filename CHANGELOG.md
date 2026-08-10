@@ -4,6 +4,20 @@ All notable changes to KZKT are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.30.7] - 2026-08-11
+
+### Changed
+
+- **4x faster image saving**: translated `.jpg`/`.jpeg` pages are now encoded as JPEG at quality 92 instead of lossless PNG, cutting encode time from ~1.4 s to ~0.33 s on upscaled 2x pages and shrinking output files about 4x (16.6 MB -> 4.3 MB) — measured with a dedicated encode benchmark. `.png`/`.webp` and other extensions keep lossless PNG so the filename extension and gallery MIME type always match.
+- **Lower peak memory in batch translation**: the batch pipeline no longer makes a redundant full-resolution copy of every page before rendering — pages are rendered directly from the loaded bitmap, freeing roughly 23-93 MB per page (up to ~280 MB across the 3 concurrent pages) while a batch runs.
+- **Local OCR batches are ~50% larger**: the on-device OCR chunk size is raised from 6 to 12 bubbles per LLM request, halving the number of text-translation API calls for OCR mode (the request pacing from the rate limiter is unchanged).
+- **No more dead 500 ms wait between OCR batches**: the extra fixed delay after every OCR batch was removed; the rate limiter already enforces the minimum request interval.
+
+### Fixed
+
+- **Unscaled crop bitmaps are now recycled**: the single-image translation path freed the scaled crop copy but let the original-size crop become garbage — it now recycles it immediately, matching the batch path and keeping the memory spike flat on bubble-heavy pages.
+- **Potential OpenCV Mat double-release**: when outside-bubble masking is disabled, the same Mat could be released twice (corrupting its reference count). A guard now releases the mask Mat only when it is a separate object.
+
 ## [v1.30.3] - 2026-08-11
 
 ### Added

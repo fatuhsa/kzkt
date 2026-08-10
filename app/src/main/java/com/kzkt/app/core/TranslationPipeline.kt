@@ -407,7 +407,9 @@ class TranslationPipeline(
                 // Scale up
                 val scale = params.skalaPotonganMosaik
                 val cropBitmap = ImageProcessor.matToBitmap(maskedMat)
-                maskedMat.release()
+                // maskOutsideBubble returns `crop` itself when maskAreaLuarBox is off —
+                // releasing the same Mat twice would corrupt its refcount.
+                if (maskedMat !== cropMat) maskedMat.release()
                 val scaledBitmap = if (scale != 1.0) {
                     Bitmap.createScaledBitmap(
                         cropBitmap,
@@ -416,6 +418,9 @@ class TranslationPipeline(
                         true
                     )
                 } else cropBitmap
+                // Free the unscaled crop copy explicitly (GC would reclaim it eventually,
+                // but explicit recycle keeps the transient spike flat on bubble-heavy pages).
+                if (scaledBitmap !== cropBitmap && !cropBitmap.isRecycled) cropBitmap.recycle()
 
                 cropItems.add(MosaicBuilder.CropItem(id, scaledBitmap))
                 coordinateMap[id] = box
@@ -448,7 +453,7 @@ class TranslationPipeline(
         if (cropsToTranslate.isNotEmpty()) {
             if (params.useLocalOcr) {
                 onProgress("  [Local OCR Engine] Extracting text from ${cropsToTranslate.size} speech bubbles via Google ML Kit (auto: Japanese + Latin)...")
-                val maxPerBatch = minOf(params.maxBubblesPerRequest, 6)
+                val maxPerBatch = minOf(params.maxBubblesPerRequest, 12)
                 val ocrCropItems = cropsToTranslate.map { MosaicBuilder.CropItem(it.id, it.bitmap) }
                 val chunks = MosaicBuilder.chunkCrops(ocrCropItems, maxPerBatch)
 
@@ -827,7 +832,10 @@ class TranslationPipeline(
                                 sfxMat.release()
                             }
 
-                            val resultBmp = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                            // Use the loaded page bitmap directly as the render surface — the
+                            // full-res copy was redundant (rendering draws on page.pil when not
+                            // inpainting, and inpainting builds a fresh bitmap anyway). Saves
+                            // ~23-93 MB per page × 3 concurrent pages in batch mode.
                             val crops = mutableListOf<Pair<String, Bitmap>>()
                             val coordMap = mutableMapOf<String, IntArray>()
                             val bubbleColors = mutableMapOf<String, Int>()
@@ -853,7 +861,8 @@ class TranslationPipeline(
 
                                     val scale = params.skalaPotonganMosaik
                                     val cropBitmap = ImageProcessor.matToBitmap(maskedMat)
-                                    maskedMat.release()
+                                    // maskOutsideBubble returns `crop` itself when maskAreaLuarBox is off.
+                                    if (maskedMat !== cropMat) maskedMat.release()
                                     val scaled = if (scale != 1.0) {
                                         val s = Bitmap.createScaledBitmap(cropBitmap,
                                             maxOf(1, (cropBitmap.width * scale).toInt()),
@@ -869,7 +878,7 @@ class TranslationPipeline(
                                 cropMatFull.release()
                             }
 
-                            PageData(imgPath, resultBmp, imgWidth, imgHeight,
+                            PageData(imgPath, bitmap, imgWidth, imgHeight,
                                 crops.toMutableList(), coordMap, bubbleColors)
                         }
                     }
@@ -952,7 +961,7 @@ class TranslationPipeline(
                     onProgress("  [Local OCR] Extracting text from ${cropsToTranslate.size} bubbles...")
                 }
             }
-            val maxPerBatch = minOf(params.maxBubblesPerRequest, 6)
+            val maxPerBatch = minOf(params.maxBubblesPerRequest, 12)
             val chunks = MosaicBuilder.chunkCrops(cropsToTranslate, maxPerBatch)
 
             for ((chunkIdx, chunk) in chunks.withIndex()) {
@@ -1036,7 +1045,6 @@ class TranslationPipeline(
                 if (!batchSucceeded) {
                     onProgress("  [!] Batch ${chunkIdx + 1}/${chunks.size} failed all providers (no response received; skipping these bubbles).")
                 }
-                kotlinx.coroutines.delay(500L)
             }
         } else {
             val chunks = MosaicBuilder.chunkCrops(cropsToTranslate, params.maxBubblesPerRequest)
@@ -1233,9 +1241,21 @@ class TranslationPipeline(
     private fun saveBitmap(bitmap: Bitmap, path: String) {
         val file = File(path)
         file.parentFile?.mkdirs()
+        // Encode benchmark (JVM ImageIO, representative ratio): JPEG q92 encodes ~4x
+        // faster and yields ~4x smaller files than PNG on scan-like content. JPEG is
+        // used ONLY for .jpg/.jpeg outputs so the extension ↔ MIME type stays
+        // consistent (MediaStore infers MIME from the filename — writing JPEG into a
+        // .png/.gif/extensionless name would mislabel the file in the gallery).
+        val lowerName = file.name.lowercase()
+        val format = if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
+            Bitmap.CompressFormat.JPEG
+        } else {
+            Bitmap.CompressFormat.PNG
+        }
+        val quality = if (format == Bitmap.CompressFormat.JPEG) 92 else 100
         try {
             FileOutputStream(file).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                bitmap.compress(format, quality, out)
             }
         } catch (e: Exception) {
             val ctx = context
@@ -1246,7 +1266,7 @@ class TranslationPipeline(
                     val fallbackFile = File(ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "KZKT/${file.name}")
                     fallbackFile.parentFile?.mkdirs()
                     FileOutputStream(fallbackFile).use { out ->
-                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                        bitmap.compress(format, quality, out)
                     }
                 }
             }
