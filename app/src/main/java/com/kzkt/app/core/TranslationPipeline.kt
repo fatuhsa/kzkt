@@ -94,10 +94,13 @@ class TranslationPipeline(
         onProgress("[Auto-Split] Wide image detected. Splitting into $splitCount parts...")
         val imgHeight = bitmap.height
         val splitWidth = bitmap.width / splitCount
-        val results = mutableListOf<String>()
+        val partResults = mutableListOf<PipelineResult>()
 
         for (i in 0 until splitCount) {
-            if (isCancelled()) return PipelineResult(null, failed = true)
+            if (isCancelled()) {
+                if (!bitmap.isRecycled) bitmap.recycle()
+                return PipelineResult(null, failed = true)
+            }
 
             val xEnd = bitmap.width - (i * splitWidth)
             val xStart = if (i == splitCount - 1) 0 else xEnd - splitWidth
@@ -111,14 +114,20 @@ class TranslationPipeline(
 
             onProgress("  Translating Part ${i + 1}...")
             val result = processBitmap(partBitmap, partPath, outputDir)
-            if (result.outputPath != null) results.add(result.outputPath)
+            if (result.outputPath != null) partResults.add(result)
+
+            // Free the split part (and any copy the sub-pipeline retained for editing —
+            // landscape results are recombined below, so the copies are no longer needed).
+            result.originalBitmap?.takeIf { it !== partBitmap && !it.isRecycled }?.recycle()
+            if (!partBitmap.isRecycled) partBitmap.recycle()
 
             File(partPath).delete()
         }
 
-        if (results.size == splitCount) {
-            // Recombine right-to-left (manga order)
-            val images = results.mapNotNull { ImageProcessor.loadBitmap(it) }.reversed()
+        if (partResults.size == splitCount) {
+            val partPaths = partResults.mapNotNull { it.outputPath }
+            // Recombine right-to-left (manga order): part 0 was the rightmost strip.
+            val images = partPaths.mapNotNull { ImageProcessor.loadBitmap(it) }.reversed()
             val targetH = images.maxOf { it.height }
             val resized = images.map { bmp ->
                 if (bmp.height != targetH) {
@@ -136,15 +145,70 @@ class TranslationPipeline(
                 x += img.width
             }
 
-            // Cleanup individual results
-            results.forEach { File(it).delete() }
+            // Cleanup: split-part files and every bitmap used to compose the final page.
+            partPaths.forEach { File(it).delete() }
+            for (img in resized) {
+                if (img !in images && !img.isRecycled) img.recycle() // scaled copies only
+            }
+            for (img in images) if (!img.isRecycled) img.recycle()
 
             val outputPath = MosaicBuilder.makeOutputPath(inputPath, targetLanguage, outputDir)
             saveBitmap(combined, outputPath)
-            return PipelineResult(outputPath, bubblesFound = results.size)
+
+            // Merge each part's edit metadata into the combined page so the touch-up
+            // editor works for auto-split (landscape) results too, not just single images.
+            saveLandscapeEditMetadata(combined, outputPath, partResults, resized)
+
+            if (!combined.isRecycled) combined.recycle()
+            if (!bitmap.isRecycled) bitmap.recycle() // the wide input page is no longer needed
+            return PipelineResult(outputPath, bubblesFound = partResults.size)
         }
 
+        if (!bitmap.isRecycled) bitmap.recycle()
         return PipelineResult(null, failed = true)
+    }
+
+    /**
+     * Merge per-part bubble metadata into the combined landscape page. Parts are laid out
+     * left-to-right in the combined image (original part [i] sits at position splitCount-1-i),
+     * so each part's bubble boxes are shifted by the cumulative width of everything to its
+     * left. IDs are prefixed with the part index to avoid collisions across parts.
+     */
+    private fun saveLandscapeEditMetadata(
+        combined: Bitmap,
+        outputPath: String,
+        partResults: List<PipelineResult>,
+        resized: List<Bitmap>,
+    ) {
+        if (combined.isRecycled) return
+        val ctx = context ?: return
+        val splitCount = partResults.size
+        val translations = mutableMapOf<String, String>()
+        val coords = mutableMapOf<String, IntArray>()
+        val rawTexts = mutableMapOf<String, String>()
+        var accWidth = 0
+        // Iterate parts right-to-left split order (part splitCount-1 is leftmost → offset 0).
+        for (i in splitCount - 1 downTo 0) {
+            val res = partResults[i]
+            val offset = accWidth
+            for ((id, text) in res.translations) {
+                val newId = "${i}_$id"
+                translations[newId] = text
+                res.coordinateMap[id]?.let { box ->
+                    coords[newId] = intArrayOf(box[0] + offset, box[1], box[2] + offset, box[3])
+                }
+            }
+            for ((id, text) in res.rawTexts ?: emptyMap()) rawTexts["${i}_$id"] = text
+            // resized[splitCount-1-i] is this part's strip in combined (left→right) order.
+            accWidth += resized.getOrNull(splitCount - 1 - i)?.width ?: 0
+        }
+        if (translations.isEmpty() || coords.isEmpty()) return
+        try {
+            com.kzkt.app.data.EditMetadataRepository(ctx)
+                .saveForOutput(outputPath, combined, translations, coords, targetLanguage, rawTexts.ifEmpty { null })
+        } catch (_: Exception) {
+            // Best-effort — never fail a translation because metadata couldn't be saved.
+        }
     }
 
     /**
@@ -410,7 +474,11 @@ class TranslationPipeline(
                         }
                     }
                     if (ocrMap.isEmpty()) {
-                        onProgress("  [Local OCR] No text recognized in chunk ${chunkIdx + 1}. Continuing...")
+                        // ML Kit found no text (stylized fonts / tiny crops / screentones):
+                        // fall back to the vision LLM for this chunk instead of dropping it,
+                        // which previously failed the entire page.
+                        onProgress("  [Local OCR] No text recognized in chunk ${chunkIdx + 1} — falling back to vision for ${chunk.size} bubbles.")
+                        translateChunkViaVision(chunk, allTranslations, cropItems)
                         continue
                     }
                     allRawTexts.putAll(ocrMap)
@@ -578,6 +646,71 @@ class TranslationPipeline(
             coordinateMap = coordinateMap,
             rawTexts = finalRawTexts,
         )
+    }
+
+    /**
+     * Vision-LLM fallback for Local OCR mode: when ML Kit finds no text in a chunk
+     * (stylized manga fonts, tiny crops, screentone backgrounds), send the chunk as
+     * a mosaic to the image-capable provider chain instead of silently skipping
+     * those bubbles — which previously made an entire page fail with
+     * "No text recognized ... [!] Translation failed.".
+     * Returns true when at least one provider produced a parseable translation.
+     */
+    private suspend fun translateChunkViaVision(
+        chunk: List<MosaicBuilder.CropItem>,
+        allTranslations: MutableMap<String, String>,
+        cropItems: List<MosaicBuilder.CropItem>,
+    ): Boolean {
+        if (isCancelled()) return false
+        val shrunk = MosaicBuilder.shrinkCropsIfTooTall(chunk, params.maxTinggiMosaik, params.jarakAntarPotongan)
+        val mosaic = MosaicBuilder.buildMosaic(shrunk, params)
+        val prompt = Constants.buildPrompt(targetLanguage, glossary, params.translateSfx)
+        val providersChain = listOf(provider) + fallbackProviders
+        var succeeded = false
+        try {
+            for (prov in providersChain) {
+                if (isCancelled()) break
+                onProgress("  [OCR Fallback] Translating ${chunk.size} bubbles via ${prov.providerName} vision...")
+                try {
+                    val result = rateLimiter.executeWithRetry(
+                        apiCall = { prov.translateImage(mosaic, prompt) },
+                        providerName = prov.providerName,
+                        isCancelled = isCancelled,
+                        onWait = { msg -> onProgress(msg) }
+                    )
+                    if (result != null) {
+                        val cleaned = JsonUtils.sanitizeJson(result)
+                        val parsed = JsonUtils.parseTranslationMap(cleaned)
+                        if (parsed.isNotEmpty()) {
+                            allTranslations.putAll(parsed)
+                            if (cacheRepo != null) {
+                                for ((id, text) in parsed) {
+                                    val item = cropItems.find { it.id == id }
+                                    if (item != null) cacheRepo.saveTranslation(item.bitmap, targetLanguage, text, prov.providerName, prov.modelName)
+                                }
+                            }
+                            succeeded = true
+                            break
+                        } else {
+                            onProgress("  [!] ${prov.providerName} returned unparseable output (raw: ${cleaned.take(80)}). Trying next provider...")
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException || isCancelled()) {
+                        throw e
+                    }
+                    onProgress("  [Failover] ${prov.providerName} failed (${e.message}). Trying fallback provider...")
+                }
+            }
+        } finally {
+            if (!mosaic.isRecycled) mosaic.recycle()
+            for (item in shrunk) {
+                if (item.bitmap != cropItems.firstOrNull { it.id == item.id }?.bitmap && !item.bitmap.isRecycled) {
+                    item.bitmap.recycle()
+                }
+            }
+        }
+        return succeeded
     }
 
     /**
@@ -822,7 +955,6 @@ class TranslationPipeline(
             val maxPerBatch = minOf(params.maxBubblesPerRequest, 6)
             val chunks = MosaicBuilder.chunkCrops(cropsToTranslate, maxPerBatch)
 
-            var consecutiveFailures = 0
             for ((chunkIdx, chunk) in chunks.withIndex()) {
                 if (isCancelled()) break
                 if (params.enableDevLogs && chunks.size > 1) {
@@ -845,7 +977,8 @@ class TranslationPipeline(
                     }
                 }
                 if (ocrMap.isEmpty()) {
-                    if (params.enableDevLogs) onProgress("  [Local OCR] No text recognized in batch ${chunkIdx + 1}. Continuing...")
+                    onProgress("  [Local OCR] No text recognized in batch ${chunkIdx + 1} — falling back to vision for ${chunk.size} bubbles.")
+                    translateChunkViaVision(chunk, allTranslations, cropItems)
                     continue
                 }
                 batchRawTexts.putAll(ocrMap)

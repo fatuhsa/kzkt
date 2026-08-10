@@ -333,13 +333,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
-        // Do NOT close the shared YOLO session here: KzktApplication.yolo is a process-wide
-        // singleton also used by the background TranslationWorker. Closing it when the
-        // activity/ViewModel is destroyed would leave the worker (and the next launch in
-        // this process) with a dead ONNX session → every predict() throws
-        // IllegalStateException("Model not loaded"). The process owns the session for its
-        // lifetime; the OS reclaims it when the process dies.
-        com.kzkt.app.core.TranslationProgressTracker.clearCache()
+        // Do NOT close the shared YOLO session here (same reasoning as below) and do NOT
+        // recycle the retry-cache bitmaps via clearCache(): the background TranslationWorker
+        // may still be running (it lives in a foreground service that survives the activity),
+        // and recycling bitmaps it is actively using would crash it with
+        // "Canvas: trying to use a recycled bitmap". The worker clears the cache itself when
+        // it finishes, and a new run clears it on start.
     }
 
     // ── Custom provider model auto-detect ──

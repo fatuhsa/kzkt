@@ -4,6 +4,28 @@ All notable changes to KZKT are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.30.3] - 2026-08-11
+
+### Added
+
+- **Instant in-app PDF reader**: translated PDFs now open in a new lazy reader that renders only the pages on screen via Android's built-in `PdfRenderer` — no more waiting for the whole document to be rasterized to disk first. Includes pinch-to-zoom (1x–4x), webtoon mode, a page counter, and sharing the PDF. Wired into both the History tab and the Translate result preview.
+- **Save feedback in the touch-up editor**: the Save button now shows a "Saving…" spinner and blocks dismissal while edits are being written, then confirms with a toast — and reports failure honestly instead of silently closing.
+- **Persistent theme**: dark mode, pure black, and the accent color are now saved to settings and restored on the next launch (previously they reset at every app start).
+
+### Changed
+
+- **Smart Image Upscaler no longer distorts pages**: PDF page rasterization now caps resolution with one uniform scale factor so the page aspect ratio is always preserved. Previously the 2048px cap was applied to width and height independently, which stretched or squished large pages — most visible when the upscaler doubled translated PDF pages.
+- **Saved edits show up immediately**: the reader reloads the edited page from disk right after saving, instead of showing the stale cached image until the page was swiped away and back.
+- **Touch-up editing for auto-split (landscape) pages**: bubble metadata from every split part is merged into the recombined page, so the editor works on wide images too. Intermediate bitmaps are now recycled (small memory leak fixed).
+- **Local OCR falls back to the vision LLM**: when ML Kit recognizes no text in a chunk, that chunk is sent to the image-capable provider chain instead of being dropped — a page no longer fails outright just because OCR found nothing.
+
+### Fixed
+
+- **Reader crash on app exit during a background translation**: the ViewModel no longer recycles bitmaps the background worker may still be using — the retry cache is now owned and cleared by the worker itself.
+- **Webtoon mode stuck (unable to scroll)**: tapping the toolbar no longer hijacks the drag gesture, and each page reserves its aspect-ratio space while decoding so the list scrolls smoothly.
+- **History reader showing a single page**: sibling pages with pure-numbered names (`001`, `002`, …) or ` (1)` name collisions are now grouped into one reader session instead of opening one isolated page.
+- **Glossary UI jank and lost terms**: glossary file I/O moved off the main thread and mutations are serialized, so rapid add/remove can no longer drop or overwrite existing terms.
+
 ## [v1.30.2] - 2026-08-09
 
 ### Added

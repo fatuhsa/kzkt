@@ -41,7 +41,7 @@ fun InteractiveEditorDialog(
     rawTexts: Map<String, String>? = null,
     styles: Map<String, BubbleMeta>? = null,
     onDismiss: () -> Unit,
-    onSave: (Bitmap, Map<String, String>, Map<String, IntArray>, Map<String, BubbleMeta>) -> Unit,
+    onSave: (Bitmap, Map<String, String>, Map<String, IntArray>, Map<String, BubbleMeta>, onSaved: () -> Unit) -> Unit,
 ) {
     val bubbles = remember {
         val map = androidx.compose.runtime.mutableStateMapOf<String, BubbleMeta>()
@@ -63,6 +63,9 @@ fun InteractiveEditorDialog(
 
     var currentDragAction by remember { mutableStateOf(DragAction.NONE) }
     var baseBitmap by remember { mutableStateOf(originalBitmap) }
+    // True while the caller is persisting the edits — the Save button shows a spinner
+    // and all dismiss paths are blocked so the user gets clear feedback.
+    var isSaving by remember { mutableStateOf(false) }
 
     // ── Batch operations (find & replace + apply style to all) ──
     var showBatchDialog by remember { mutableStateOf(false) }
@@ -155,7 +158,7 @@ fun InteractiveEditorDialog(
     }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
@@ -879,6 +882,7 @@ fun InteractiveEditorDialog(
                 ) {
                     Button(
                         onClick = { isDrawingMode = !isDrawingMode },
+                        enabled = !isSaving,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isDrawingMode) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant,
                             contentColor = if (isDrawingMode) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -890,17 +894,35 @@ fun InteractiveEditorDialog(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = onDismiss) { Text("Cancel") }
+                        TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Cancel") }
                         Spacer(Modifier.width(8.dp))
                         Button(
-                            onClick = { 
+                            onClick = {
+                                isSaving = true
                                 val updatedTranslations = bubbles.mapValues { it.value.text }
                                 val updatedCoords = bubbles.mapValues { it.value.box }
                                 val updatedStyles = bubbles.toMap()
-                                onSave(editedBitmap, updatedTranslations, updatedCoords, updatedStyles) 
+                                // The caller persists asynchronously, then invokes onSaved() on
+                                // the main thread; only then does the dialog close itself.
+                                onSave(editedBitmap, updatedTranslations, updatedCoords, updatedStyles) {
+                                    isSaving = false
+                                    onDismiss()
+                                }
                             },
-                            enabled = bubbles.isNotEmpty(),
-                        ) { Text("Save & Apply") }
+                            enabled = bubbles.isNotEmpty() && !isSaving,
+                        ) {
+                            if (isSaving) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text("Saving...")
+                            } else {
+                                Text("Save & Apply")
+                            }
+                        }
                     }
                 }
             }

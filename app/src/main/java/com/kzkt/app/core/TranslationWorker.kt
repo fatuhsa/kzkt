@@ -199,6 +199,9 @@ class TranslationWorker(
 
                 val cacheRepo = TranslationCacheRepository(applicationContext)
                 val glossaryRepo = com.kzkt.app.data.GlossaryRepository(applicationContext)
+                // The repo loads its file asynchronously (off the main thread); wait for that
+                // read so the glossary rules are present in the very first translation prompt.
+                glossaryRepo.awaitInitialLoad()
                 val glossary = glossaryRepo.glossary.value
                 val fallbackProviders = createFallbackProviders(s, s.llmProvider)
 

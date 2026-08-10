@@ -20,19 +20,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.kzkt.app.ui.theme.ColorSaver
 import com.kzkt.app.ui.theme.KzktTheme
-import com.kzkt.app.ui.theme.DefaultThemeColor
 
 private enum class BottomTab(
     val route: String,
@@ -80,10 +82,35 @@ fun KzktApp(
         }
     }
 
-    val initialDarkTheme = isSystemInDarkTheme()
-    var darkTheme by rememberSaveable { mutableStateOf(initialDarkTheme) }
-    var pureBlack by rememberSaveable { mutableStateOf(false) }
-    var themeColor by rememberSaveable(stateSaver = ColorSaver) { mutableStateOf(DefaultThemeColor) }
+    // Theme state is initialized from (and persisted to) SettingsRepository so dark mode,
+    // pure black and the accent color survive app restarts (previously they were only
+    // rememberSaveable local state and reset on every launch).
+    val systemDark = isSystemInDarkTheme()
+    val initialSettings = viewModel.settings.value
+    var darkTheme by remember {
+        mutableStateOf(
+            when (initialSettings.themeMode) {
+                "dark" -> true
+                "light" -> false
+                else -> systemDark
+            }
+        )
+    }
+    var pureBlack by remember { mutableStateOf(initialSettings.pureBlack) }
+    var themeColor by remember { mutableStateOf(Color(initialSettings.accentColor)) }
+    val scope = rememberCoroutineScope()
+
+    // Re-apply the persisted theme once DataStore emits (async) on a fresh start.
+    val settingsSnapshot = viewModel.settings.value
+    LaunchedEffect(settingsSnapshot.themeMode, settingsSnapshot.pureBlack, settingsSnapshot.accentColor) {
+        darkTheme = when (settingsSnapshot.themeMode) {
+            "dark" -> true
+            "light" -> false
+            else -> systemDark
+        }
+        pureBlack = settingsSnapshot.pureBlack
+        themeColor = Color(settingsSnapshot.accentColor)
+    }
 
     KzktTheme(
         darkTheme = darkTheme,
@@ -150,11 +177,20 @@ fun KzktApp(
                     SettingsScreen(
                         viewModel = viewModel,
                         darkTheme = darkTheme,
-                        onDarkThemeChange = { darkTheme = it },
+                        onDarkThemeChange = {
+                            darkTheme = it
+                            scope.launch { viewModel.settingsRepo.saveThemeMode(if (it) "dark" else "light") }
+                        },
                         pureBlack = pureBlack,
-                        onPureBlackChange = { pureBlack = it },
+                        onPureBlackChange = {
+                            pureBlack = it
+                            scope.launch { viewModel.settingsRepo.savePureBlack(it) }
+                        },
                         themeColor = themeColor,
-                        onThemeColorChange = { themeColor = it },
+                        onThemeColorChange = {
+                            themeColor = it
+                            scope.launch { viewModel.settingsRepo.saveAccentColor(it.toArgb().toLong() and 0xFFFFFFFFL) }
+                        },
                         onNavigateToGlossary = { navController.navigate("glossary") }
                     )
                 }

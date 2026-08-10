@@ -500,6 +500,9 @@ private fun ResultPreview(
 
     if (previewPath != null || resultList.isNotEmpty()) {
         var showFullscreenViewer by remember { mutableStateOf(false) }
+        // PDF results are viewed in the lazy in-app PDF reader (renders only the
+        // visible pages) instead of rasterizing every page to disk first.
+        var pdfReaderPath by remember { mutableStateOf<String?>(null) }
         val currentPath = previewPath ?: resultList.last()
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
@@ -537,7 +540,15 @@ private fun ResultPreview(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Button(
-                        onClick = { showFullscreenViewer = true },
+                        onClick = {
+                            // PDF results open in the lazy in-app PDF reader (instant — no
+                            // upfront per-page rasterization); images use the page reader.
+                            if (currentPath.endsWith(".pdf", ignoreCase = true)) {
+                                pdfReaderPath = currentPath
+                            } else {
+                                showFullscreenViewer = true
+                            }
+                        },
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(vertical = 4.dp, horizontal = 8.dp)
                     ) {
@@ -577,26 +588,9 @@ private fun ResultPreview(
 
         val lastResult = viewModel.lastResultForEditing.value
         val allResultPaths = viewModel.resultPaths.toList()
-        var pdfReaderPages by remember { mutableStateOf<List<String>?>(null) }
-
-        LaunchedEffect(showFullscreenViewer, currentPath) {
-            if (showFullscreenViewer && currentPath.endsWith(".pdf", ignoreCase = true)) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val cacheDir = File(context.cacheDir, "pdf_reader_cache")
-                    val pages = com.kzkt.app.util.PdfImporter.extractPdfToImages(File(currentPath), cacheDir, context = context)
-                    pdfReaderPages = pages
-                }
-            } else {
-                pdfReaderPages = null
-            }
-        }
 
         if (showFullscreenViewer) {
-            val pagesToDisplay = when {
-                currentPath.endsWith(".pdf", ignoreCase = true) -> pdfReaderPages ?: emptyList()
-                allResultPaths.isNotEmpty() -> allResultPaths
-                else -> listOf(currentPath)
-            }
+            val pagesToDisplay = if (allResultPaths.isNotEmpty()) allResultPaths else listOf(currentPath)
 
             if (pagesToDisplay.isNotEmpty()) {
                 com.kzkt.app.ui.component.MangaReaderDialog(
@@ -607,6 +601,13 @@ private fun ResultPreview(
                     onDismiss = { showFullscreenViewer = false }
                 )
             }
+        }
+
+        pdfReaderPath?.let { path ->
+            com.kzkt.app.ui.component.PdfReaderDialog(
+                pdfPath = path,
+                onDismiss = { pdfReaderPath = null }
+            )
         }
 
         if (viewModel.showInteractiveEditor.value && lastResult?.originalBitmap != null) {
@@ -620,32 +621,44 @@ private fun ResultPreview(
                 rawTexts = lastResult.rawTexts,
                 styles = lastResult.styles,
                 onDismiss = { viewModel.showInteractiveEditor.value = false },
-                onSave = { updatedBitmap, updatedTranslations, updatedCoords, updatedStyles ->
+                onSave = { updatedBitmap, updatedTranslations, updatedCoords, updatedStyles, onSaved ->
                     val outputPath = lastResult.outputPath
                     if (outputPath != null) {
                         // Persist the edited image + bubble metadata off the main thread so
-                        // reopening from History/reader shows the updated edits.
+                        // reopening from History/reader shows the updated edits. onSaved() is
+                        // called on the main thread once persistence finishes, which lets the
+                        // editor show its "Saving..." state and then close itself.
                         val pristineOriginal = lastResult.originalBitmap
                         val rawTexts = lastResult.rawTexts
                         val targetLang = viewModel.settings.value.targetLanguage
                         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            // finally guarantees onSaved() runs (even on unexpected errors) so
+                            // the editor's "Saving..." state can never get stuck.
                             try {
-                                java.io.FileOutputStream(File(outputPath)).use { stream ->
-                                    updatedBitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
-                                }
-                            } catch (e: Exception) {
-                                android.util.Log.w("KZKT", "Failed to save edited image: ${e.message}")
-                            }
-                            if (pristineOriginal != null) {
                                 try {
-                                    com.kzkt.app.data.EditMetadataRepository(context).saveForOutput(
-                                        outputPath, pristineOriginal, updatedTranslations,
-                                        updatedCoords, targetLang, rawTexts, updatedStyles)
+                                    java.io.FileOutputStream(File(outputPath)).use { stream ->
+                                        updatedBitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
+                                    }
                                 } catch (e: Exception) {
-                                    android.util.Log.w("KZKT", "Failed to save edit metadata: ${e.message}")
+                                    android.util.Log.w("KZKT", "Failed to save edited image: ${e.message}")
+                                }
+                                if (pristineOriginal != null) {
+                                    try {
+                                        com.kzkt.app.data.EditMetadataRepository(context).saveForOutput(
+                                            outputPath, pristineOriginal, updatedTranslations,
+                                            updatedCoords, targetLang, rawTexts, updatedStyles)
+                                    } catch (e: Exception) {
+                                        android.util.Log.w("KZKT", "Failed to save edit metadata: ${e.message}")
+                                    }
+                                }
+                            } finally {
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    onSaved()
                                 }
                             }
                         }
+                    } else {
+                        onSaved()
                     }
 
                     // Update state so if the user opens the editor again, they see their new edits
@@ -654,8 +667,6 @@ private fun ResultPreview(
                         coordinateMap = updatedCoords,
                         styles = updatedStyles
                     )
-
-                    viewModel.showInteractiveEditor.value = false
                 }
             )
         }

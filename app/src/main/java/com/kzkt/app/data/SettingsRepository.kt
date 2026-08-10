@@ -60,6 +60,10 @@ class SettingsRepository(private val context: Context) {
         private val KEY_USE_IMAGE_UPSCALER = booleanPreferencesKey("use_image_upscaler")
         private val KEY_TRANSLATE_SFX = booleanPreferencesKey("translate_sfx")
         private val KEY_AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
+        // Theme (persisted so dark mode / pure black / accent survive app restarts)
+        private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
+        private val KEY_PURE_BLACK = booleanPreferencesKey("pure_black")
+        private val KEY_ACCENT_COLOR = longPreferencesKey("accent_color")
     }
  
     data class Settings(
@@ -97,6 +101,11 @@ class SettingsRepository(private val context: Context) {
         val useImageUpscaler: Boolean = false,
         val translateSfx: Boolean = false,
         val autoCheckUpdates: Boolean = true,
+        // "system" = follow device theme, "light" / "dark" = explicit override.
+        // 0xFFED5564 is the DefaultThemeColor ARGB (system Material You dynamic color).
+        val themeMode: String = "system",
+        val pureBlack: Boolean = false,
+        val accentColor: Long = 0xFFED5564L,
     ) {
         fun getBaseUrl(provider: String): String = when (provider) {
             "gemini" -> baseUrlGemini
@@ -149,6 +158,9 @@ class SettingsRepository(private val context: Context) {
             useImageUpscaler = prefs[KEY_USE_IMAGE_UPSCALER] ?: Defaults.settings.useImageUpscaler,
             translateSfx = prefs[KEY_TRANSLATE_SFX] ?: Defaults.settings.translateSfx,
             autoCheckUpdates = prefs[KEY_AUTO_CHECK_UPDATES] ?: Defaults.settings.autoCheckUpdates,
+            themeMode = prefs[KEY_THEME_MODE] ?: Defaults.settings.themeMode,
+            pureBlack = prefs[KEY_PURE_BLACK] ?: Defaults.settings.pureBlack,
+            accentColor = prefs[KEY_ACCENT_COLOR] ?: Defaults.settings.accentColor,
         )
     }
 
@@ -235,6 +247,18 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun saveAutoCheckUpdates(enabled: Boolean) {
         context.dataStore.edit { it[KEY_AUTO_CHECK_UPDATES] = enabled }
+    }
+
+    suspend fun saveThemeMode(mode: String) {
+        context.dataStore.edit { it[KEY_THEME_MODE] = mode }
+    }
+
+    suspend fun savePureBlack(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_PURE_BLACK] = enabled }
+    }
+
+    suspend fun saveAccentColor(argb: Long) {
+        context.dataStore.edit { it[KEY_ACCENT_COLOR] = argb }
     }
 
     /**

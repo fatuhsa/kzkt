@@ -40,9 +40,18 @@ object PdfImporter {
                 for (i in 0 until renderer.pageCount) {
                     val page = renderer.openPage(i)
                     try {
-                        // Cap resolution to 2048px for ultra-fast rendering & zero OOM
-                        val width = (page.width * dpiScale).toInt().coerceIn(1, 2048)
-                        val height = (page.height * dpiScale).toInt().coerceIn(1, 2048)
+                        // Cap resolution to 2048px for ultra-fast rendering & zero OOM.
+                        // IMPORTANT: the cap must scale BOTH dimensions by the same uniform
+                        // factor. Capping width and height independently breaks the page's
+                        // aspect ratio once one axis exceeds 2048 (e.g. translated PDFs whose
+                        // pages are 2x when the Smart Upscaler is ON) — the rendered page then
+                        // looks squished / stretched. A uniform fit keeps the page intact.
+                        val maxDim = 2048
+                        val rawW = page.width * dpiScale
+                        val rawH = page.height * dpiScale
+                        val fit = minOf(1.0f, maxDim / maxOf(rawW, rawH))
+                        val width = (rawW * fit).toInt().coerceAtLeast(1)
+                        val height = (rawH * fit).toInt().coerceAtLeast(1)
                         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                         try {
                             page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
@@ -71,7 +80,7 @@ object PdfImporter {
         return imagePaths
     }
 
-    private fun openPdfFileDescriptor(context: android.content.Context?, pdfFile: File): ParcelFileDescriptor? {
+    fun openPdfFileDescriptor(context: android.content.Context?, pdfFile: File): ParcelFileDescriptor? {
         if (pdfFile.exists() && pdfFile.canRead()) {
             try {
                 return ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)

@@ -68,7 +68,8 @@ fun HistoryScreen(
     var confirmClearAll by remember { mutableStateOf(false) }
     var readerPages by remember { mutableStateOf<List<String>?>(null) }
     var readerInitialIndex by remember { mutableIntStateOf(0) }
-    var isExtractingPdf by remember { mutableStateOf(false) }
+    // Translated PDFs open in the lazy in-app PDF reader (no upfront per-page rasterization).
+    var pdfReaderPath by remember { mutableStateOf<String?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -111,18 +112,10 @@ fun HistoryScreen(
     fun openReaderForEntry(entry: HistoryEntry) {
         val file = File(entry.outputPath)
         if (file.name.endsWith(".pdf", ignoreCase = true)) {
-            isExtractingPdf = true
-            scope.launch(Dispatchers.IO) {
-                val cacheDir = File(context.cacheDir, "pdf_reader_cache")
-                val pages = com.kzkt.app.util.PdfImporter.extractPdfToImages(file, cacheDir, context = context)
-                kotlinx.coroutines.withContext(Dispatchers.Main) {
-                    isExtractingPdf = false
-                    if (pages.isNotEmpty()) {
-                        readerPages = pages
-                        readerInitialIndex = 0
-                    }
-                }
-            }
+            // Open instantly via the lazy in-app PDF reader (renders only the pages
+            // on screen) — the old flow rasterized every page to disk first, which
+            // made opening a translated PDF slow.
+            pdfReaderPath = entry.outputPath
         } else if (file.exists()) {
             // Group pages by "book" so the reader only shows sibling pages of the
             // same chapter instead of every image in history. Sibling detection +
@@ -347,24 +340,6 @@ fun HistoryScreen(
             modifier = Modifier.align(Alignment.BottomCenter),
         )
 
-        if (isExtractingPdf) {
-            androidx.compose.ui.window.Dialog(onDismissRequest = {}) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(24.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        Text("Preparing Manga Pages...", style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            }
-        }
-
         if (readerPages != null && readerPages!!.isNotEmpty()) {
             com.kzkt.app.ui.component.MangaReaderDialog(
                 pagePaths = readerPages!!,
@@ -372,6 +347,13 @@ fun HistoryScreen(
                 targetLanguage = viewModel.settings.value.targetLanguage,
                 customFontPath = viewModel.settings.value.customFontPath,
                 onDismiss = { readerPages = null }
+            )
+        }
+
+        pdfReaderPath?.let { path ->
+            com.kzkt.app.ui.component.PdfReaderDialog(
+                pdfPath = path,
+                onDismiss = { pdfReaderPath = null }
             )
         }
     }
@@ -711,9 +693,17 @@ private fun groupByDay(entries: List<HistoryEntry>): List<Pair<String, List<Hist
  */
 private fun bookGroupKey(path: String): String {
     val f = File(path)
-    val base = f.name.substringBeforeLast('.').trim()
+    var base = f.name.substringBeforeLast('.').trim()
+    // MediaStore appends " (1)", " (2)", ... when a display name collides on
+    // re-export — strip that suffix so re-exported pages still group with the
+    // rest of the batch instead of becoming their own "book".
+    base = base.replace(Regex("\\s+\\(\\d+\\)$"), "")
     val stripped = base.trimEnd { it.isDigit() || it == '_' || it == '-' || it == ' ' }
-    return "${f.parent ?: ""}|${stripped.ifEmpty { base }}"
+    // Pure-numbered page names ("001", "002", ...) strip to nothing. Fall back to
+    // a shared "numbered" token so all numbered pages in the same folder group
+    // into one reader session (previously every page got its own key → the reader
+    // showed only the tapped page, no swipe).
+    return "${f.parent ?: ""}|${stripped.ifEmpty { "numbered" }}"
 }
 
 /** Natural (numeric-aware) string comparison for page ordering. */
