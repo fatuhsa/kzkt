@@ -9,9 +9,12 @@
 ## 1. Project at a glance
 
 KZKT is a native Android (Kotlin + Jetpack Compose, Material 3) manga-translation
-app. It imports images/PDF/CBZ/ZIP folders, detects speech bubbles with a YOLO ONNX
-model, OCRs them (Google ML Kit local, or a vision LLM), translates via an
-LLM provider, and writes translated images back.
+app. It imports single images, whole folders, ZIP/CBZ/EPUB archives and PDFs,
+detects speech bubbles with a 3-stage YOLO ONNX cascade (optional Smart Image
+Upscaler + ML Kit OCR), translates via an LLM provider, and writes translated
+images back. It also ships an in-app reader (page / webtoon modes, bubble
+touch-up editor), an instant PDF reader for results, a glossary, and a built-in
+update checker.
 
 - **Package:** `com.kzkt.app` · **minSdk 26** · **targetSdk 36** · **compileSdk 37**
 - **Kotlin 2.x** with the built-in Compose compiler plugin (AGP 9.x style build)
@@ -178,8 +181,8 @@ docker cp <CID>:/app/app/build/outputs/apk/release/app-arm64-v8a-release.apk .
 
 ## 6. GitHub Actions (what's already wired)
 
-- **`.github/workflows/android.yml`** — CI on every push: builds via the Dockerfile,
-  runs unit tests, uploads the debug APK artifact.
+- **`.github/workflows/android.yml`** — CI on every push / PR to `main`: builds via
+  the Dockerfile, runs unit tests, uploads the per-ABI debug APK artifacts.
 - **`.github/workflows/kzkt.yml`** — **Auto Release** (manual dispatch): multi-job
   matrix (prepare → build 5 ABI variants in parallel → create GitHub Release +
   Telegram notification). Version comes from the workflow input or the git tag.
