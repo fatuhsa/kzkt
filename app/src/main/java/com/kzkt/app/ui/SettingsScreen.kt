@@ -379,6 +379,89 @@ fun SettingsScreen(
             }
         }
 
+        // ── Rendered Text (appearance of the translated bubbles) ──
+        item(key = "render_text") {
+            Column {
+                Text(
+                    "Rendered Text",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
+                )
+                val textColor by remember { derivedStateOf { viewModel.settings.value.renderTextColor } }
+                val fontScale by remember { derivedStateOf { viewModel.settings.value.renderFontScale } }
+                Material3SettingsGroup(
+                    items = listOf(
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.Palette) },
+                            title = { Text("Text color") },
+                            description = {
+                                Text(
+                                    when (textColor) {
+                                        "white" -> "Always white — best on dark bubbles"
+                                        "black" -> "Always black — best on light bubbles"
+                                        else -> "Auto: white on dark bubbles, black on light"
+                                    }
+                                )
+                            },
+                            trailingContent = {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    listOf("auto" to "Auto", "white" to "White", "black" to "Black").forEach { (key, label) ->
+                                        FilterChip(
+                                            selected = textColor == key,
+                                            onClick = { scope.launch { viewModel.settingsRepo.saveRenderTextColor(key) } },
+                                            label = { Text(label) },
+                                        )
+                                    }
+                                }
+                            },
+                        ),
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.TextFields) },
+                            title = {
+                                // Local slider state; DataStore write happens only on
+                                // onValueChangeFinished (same pattern as TweakSlider) so
+                                // dragging does not hammer the disk on every tick.
+                                var localScale by remember(fontScale) { mutableFloatStateOf(fontScale) }
+                                LaunchedEffect(fontScale) {
+                                    if (fontScale != localScale) localScale = fontScale
+                                }
+                                Column {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text("Font scale")
+                                        Text(
+                                            "%.0f%%".format(localScale * 100),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                    Text(
+                                        "Global size multiplier for rendered bubble text",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 2.dp),
+                                    )
+                                    Slider(
+                                        value = localScale,
+                                        onValueChange = { localScale = it },
+                                        onValueChangeFinished = {
+                                            scope.launch { viewModel.settingsRepo.saveRenderFontScale(localScale) }
+                                        },
+                                        valueRange = 0.8f..1.5f,
+                                        steps = 6,
+                                    )
+                                }
+                            },
+                        ),
+                    )
+                )
+            }
+        }
+
         // ── Data Management (Backup & Restore) ──
         item(key = "data") {
             Column {
@@ -975,6 +1058,13 @@ private fun TweakParamsSection(viewModel: MainViewModel) {
         "Minimum absolute pixel padding added around detected text bubbles",
         5f..100f
     )
+    TweakSlider(
+        viewModel,
+        "jpeg_quality",
+        "JPEG Output Quality",
+        "Compression quality for saved .jpg/.jpeg translations (higher = larger file)",
+        70f..100f
+    )
 }
 
 private fun saveTweakSliderValue(
@@ -984,10 +1074,10 @@ private fun saveTweakSliderValue(
     value: Float
 ) {
     scope.launch {
-        if (keyField == "custom_timeout") {
-            viewModel.settingsRepo.saveCustomTimeoutSec(value.toInt())
-        } else {
-            viewModel.settingsRepo.saveTweakParam(
+        when (keyField) {
+            "custom_timeout" -> viewModel.settingsRepo.saveCustomTimeoutSec(value.toInt())
+            "jpeg_quality" -> viewModel.settingsRepo.saveJpegQuality(value.toInt())
+            else -> viewModel.settingsRepo.saveTweakParam(
                 keyField,
                 when (keyField) {
                     "max_bubbles", "min_pad" -> value.toInt()
@@ -1019,6 +1109,7 @@ private fun TweakSlider(
             "pad_y" -> viewModel.settings.value.padYRatio
             "min_pad" -> viewModel.settings.value.minPad.toFloat()
             "custom_timeout" -> viewModel.settings.value.customTimeoutSec.toFloat()
+            "jpeg_quality" -> viewModel.settings.value.jpegQuality.toFloat()
             else -> 0f
         }
     } }
@@ -1028,6 +1119,7 @@ private fun TweakSlider(
         "custom_timeout" -> 5f
         "max_bubbles", "min_pad" -> 1f
         "request_delay" -> 0.5f
+        "jpeg_quality" -> 1f
         else -> 0.05f
     }
 
@@ -1044,7 +1136,7 @@ private fun TweakSlider(
                             Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                             val fmt = when (keyField) {
                                 "request_delay" -> "%.1fs".format(sliderValue)
-                                "min_pad", "max_bubbles" -> "${sliderValue.toInt()}"
+                                "min_pad", "max_bubbles", "jpeg_quality" -> "${sliderValue.toInt()}"
                                 "custom_timeout" -> "${sliderValue.toInt()}s"
                                 else -> "%.2f".format(sliderValue)
                             }

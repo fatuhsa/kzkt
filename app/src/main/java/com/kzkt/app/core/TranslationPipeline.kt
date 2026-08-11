@@ -236,6 +236,14 @@ class TranslationPipeline(
         imgWidth: Int,
         imgHeight: Int,
     ): Int {
+        // User-facing render settings: forced text colour ("auto"/"white"/"black")
+        // and a global font-size multiplier, applied to every bubble.
+        val textColorHex = when (params.renderTextColor.lowercase()) {
+            "white" -> "#FFFFFF"
+            "black" -> "#000000"
+            else -> null
+        }
+        val fontScale = params.renderFontScale.toFloat()
         var count = 0
         
         // Pass 1: Draw all background patches first
@@ -313,15 +321,15 @@ class TranslationPipeline(
             if (params.useInpainting) {
                 textRenderer.renderTextInBubble(canvas, coordinateMap[num]!!, text,
                     backgroundPatch = false, targetLanguage = targetLanguage, bgColor = bgColor,
-                    customFontPath = params.customFontPath)
+                    customFontPath = params.customFontPath, fontScale = fontScale, textColorHex = textColorHex)
             } else if (params.pakaiPatchUntukBoxGepeng && suspiciousFlat) {
                 textRenderer.renderTextInBubble(canvas, coordinateMap[num]!!, text,
                     backgroundPatch = true, targetLanguage = targetLanguage, bgColor = bgColor,
-                    customFontPath = params.customFontPath)
+                    customFontPath = params.customFontPath, fontScale = fontScale, textColorHex = textColorHex)
             } else {
                 textRenderer.renderTextInBubble(canvas, coordinateMap[num]!!, text,
                     backgroundPatch = false, targetLanguage = targetLanguage, bgColor = bgColor,
-                    customFontPath = params.customFontPath)
+                    customFontPath = params.customFontPath, fontScale = fontScale, textColorHex = textColorHex)
             }
             count++
         }
@@ -1241,18 +1249,19 @@ class TranslationPipeline(
     private fun saveBitmap(bitmap: Bitmap, path: String) {
         val file = File(path)
         file.parentFile?.mkdirs()
-        // Encode benchmark (JVM ImageIO, representative ratio): JPEG q92 encodes ~4x
+        // Encode benchmark (JVM ImageIO, representative ratio): JPEG encodes ~4x
         // faster and yields ~4x smaller files than PNG on scan-like content. JPEG is
         // used ONLY for .jpg/.jpeg outputs so the extension ↔ MIME type stays
         // consistent (MediaStore infers MIME from the filename — writing JPEG into a
-        // .png/.gif/extensionless name would mislabel the file in the gallery).
+        // .png/.gif/extensionless name would mislabel the file in the gallery). The
+        // quality is user-configurable (default 92).
         val lowerName = file.name.lowercase()
         val format = if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
             Bitmap.CompressFormat.JPEG
         } else {
             Bitmap.CompressFormat.PNG
         }
-        val quality = if (format == Bitmap.CompressFormat.JPEG) 92 else 100
+        val quality = if (format == Bitmap.CompressFormat.JPEG) params.jpegQuality else 100
         try {
             FileOutputStream(file).use { out ->
                 bitmap.compress(format, quality, out)

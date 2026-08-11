@@ -4,6 +4,23 @@ All notable changes to KZKT are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.35.0] - 2026-08-11
+
+### Added
+
+- **Retry failed pages from History**: failed translations are now recorded in the History tab with a "Failed" badge and a Retry button. Tapping it re-runs only that source file, and a successful retry replaces the failed entry instead of duplicating it. (The same cleanup applies to retried PDFs.)
+- **Retry failed pages from the Translate tab**: after a batch finishes, a "Retry Failed (n)" button appears when any file failed and re-enqueues only the failed pages, leaving the successful ones untouched.
+- **Per-file batch status**: every selected file in the Translate tab now shows a live status icon (processing / done / failed) as the batch runs.
+- **Reading-position bookmark**: the reader remembers the last-read page per book (grouped chapter/folder). Reopening a book from History or from a batch result resumes where you left off instead of always starting at page 1.
+- **Rendered text settings**: choose the translated bubble text color (Auto / White / Black) and a global font scale slider (80%–150%) in Settings — applied to all new translations.
+- **JPEG output quality setting**: a new slider in Advanced settings (70–100) controls the compression quality of saved .jpg/.jpeg translations, trading file size against image quality.
+- **Multi-select in History with ZIP/PDF export**: the History tab gains a Select mode. Pick several entries, then export them as a single ZIP or PDF (images only, ordered by page name) or delete them in bulk with one Undo action.
+- **Immersive fullscreen in the reader**: a new fullscreen toggle hides the system status/navigation bars for distraction-free reading (swipe from an edge to bring them back).
+
+### Changed
+
+- Failed History entries now keep their source input path so they can always be retried later.
+
 ## [v1.30.4] - 2026-08-11
 
 ### Changed

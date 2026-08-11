@@ -60,6 +60,10 @@ class SettingsRepository(private val context: Context) {
         private val KEY_USE_IMAGE_UPSCALER = booleanPreferencesKey("use_image_upscaler")
         private val KEY_TRANSLATE_SFX = booleanPreferencesKey("translate_sfx")
         private val KEY_AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
+        // Rendered-text output settings
+        private val KEY_JPEG_QUALITY = intPreferencesKey("jpeg_quality")
+        private val KEY_RENDER_TEXT_COLOR = stringPreferencesKey("render_text_color")
+        private val KEY_RENDER_FONT_SCALE = floatPreferencesKey("render_font_scale")
         // Theme (persisted so dark mode / pure black / accent survive app restarts)
         private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
         private val KEY_PURE_BLACK = booleanPreferencesKey("pure_black")
@@ -101,6 +105,12 @@ class SettingsRepository(private val context: Context) {
         val useImageUpscaler: Boolean = false,
         val translateSfx: Boolean = false,
         val autoCheckUpdates: Boolean = true,
+        // "auto" = white text on dark bubbles / black on light (current behaviour),
+        // "white" / "black" force the rendered text colour regardless of the bubble.
+        val renderTextColor: String = "auto",
+        val renderFontScale: Float = 1.0f,
+        // JPEG output quality used for .jpg/.jpeg translations.
+        val jpegQuality: Int = 92,
         // "system" = follow device theme, "light" / "dark" = explicit override.
         // 0xFFED5564 is the DefaultThemeColor ARGB (system Material You dynamic color).
         val themeMode: String = "system",
@@ -158,6 +168,9 @@ class SettingsRepository(private val context: Context) {
             useImageUpscaler = prefs[KEY_USE_IMAGE_UPSCALER] ?: Defaults.settings.useImageUpscaler,
             translateSfx = prefs[KEY_TRANSLATE_SFX] ?: Defaults.settings.translateSfx,
             autoCheckUpdates = prefs[KEY_AUTO_CHECK_UPDATES] ?: Defaults.settings.autoCheckUpdates,
+            renderTextColor = prefs[KEY_RENDER_TEXT_COLOR] ?: Defaults.settings.renderTextColor,
+            renderFontScale = prefs[KEY_RENDER_FONT_SCALE] ?: Defaults.settings.renderFontScale,
+            jpegQuality = prefs[KEY_JPEG_QUALITY] ?: Defaults.settings.jpegQuality,
             themeMode = prefs[KEY_THEME_MODE] ?: Defaults.settings.themeMode,
             pureBlack = prefs[KEY_PURE_BLACK] ?: Defaults.settings.pureBlack,
             accentColor = prefs[KEY_ACCENT_COLOR] ?: Defaults.settings.accentColor,
@@ -249,6 +262,18 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[KEY_AUTO_CHECK_UPDATES] = enabled }
     }
 
+    suspend fun saveRenderTextColor(color: String) {
+        context.dataStore.edit { it[KEY_RENDER_TEXT_COLOR] = color }
+    }
+
+    suspend fun saveRenderFontScale(scale: Float) {
+        context.dataStore.edit { it[KEY_RENDER_FONT_SCALE] = scale.coerceIn(0.8f, 1.5f) }
+    }
+
+    suspend fun saveJpegQuality(quality: Int) {
+        context.dataStore.edit { it[KEY_JPEG_QUALITY] = quality.coerceIn(70, 100) }
+    }
+
     suspend fun saveThemeMode(mode: String) {
         context.dataStore.edit { it[KEY_THEME_MODE] = mode }
     }
@@ -315,6 +340,7 @@ class SettingsRepository(private val context: Context) {
                 "pad_y" -> if (value is Float) prefs[KEY_PAD_Y] = value
                 "min_pad" -> if (value is Int) prefs[KEY_MIN_PAD] = value
                 "custom_timeout" -> if (value is Int) prefs[KEY_CUSTOM_TIMEOUT] = value.coerceIn(30, 600)
+                "jpeg_quality" -> if (value is Int) prefs[KEY_JPEG_QUALITY] = value.coerceIn(70, 100)
             }
         }
     }
@@ -335,6 +361,9 @@ class SettingsRepository(private val context: Context) {
             prefs.remove(KEY_USE_IMAGE_UPSCALER)
             prefs.remove(KEY_TRANSLATE_SFX)
             prefs.remove(KEY_AUTO_CHECK_UPDATES)
+            prefs.remove(KEY_JPEG_QUALITY)
+            prefs.remove(KEY_RENDER_TEXT_COLOR)
+            prefs.remove(KEY_RENDER_FONT_SCALE)
         }
     }
 }

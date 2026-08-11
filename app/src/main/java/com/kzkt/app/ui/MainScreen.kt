@@ -279,15 +279,36 @@ private fun QuickSettingsCard(viewModel: MainViewModel) {
                 )
                 // Show at most 4 names so the card stays bounded and the
                 // Translate button is never pushed off-screen by a big selection.
+                // Each row carries its per-file batch status (processing/done/failed).
                 val shown = files.take(4)
                 shown.forEach { path ->
-                    Text(
-                        path.substringAfterLast('/'),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val state = viewModel.pageStatus[path]
+                        if (state != null) {
+                            val (icon, tint) = when (state) {
+                                "failed" -> Icons.Default.Error to MaterialTheme.colorScheme.error
+                                "done" -> Icons.Default.CheckCircle to MaterialTheme.colorScheme.primary
+                                else -> Icons.Default.HourglassEmpty to MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = state,
+                                tint = tint,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(
+                            path.substringAfterLast('/'),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
                 }
                 val hidden = files.size - shown.size
                 if (hidden > 0) {
@@ -357,6 +378,25 @@ private fun ActionButtons(
                 Text("Cancel")
             }
         } else {
+            // Retry-Failed button: appears after a batch when at least one file
+            // failed, re-enqueuing ONLY the failed pages (1.35.0).
+            val failedCount by remember {
+                derivedStateOf {
+                    viewModel.pageStatus.values.count { it == "failed" }
+                }
+            }
+            if (failedCount > 0) {
+                OutlinedButton(
+                    onClick = { viewModel.retryFailedPages() },
+                    enabled = hasFiles && yoloReady,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Retry Failed ($failedCount)")
+                }
+            }
             val canRetry by remember { derivedStateOf { viewModel.canRetry.value } }
             if (canRetry) {
                 Button(
@@ -598,6 +638,9 @@ private fun ResultPreview(
                     pipelineResult = lastResult,
                     targetLanguage = viewModel.settings.value.targetLanguage,
                     customFontPath = viewModel.settings.value.customFontPath,
+                    // Bookmark key = output folder, so a batch result remembers the
+                    // last-read page across re-opens of the reader.
+                    bookKey = File(pagesToDisplay.first()).parent,
                     onDismiss = { showFullscreenViewer = false }
                 )
             }

@@ -46,6 +46,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val translationTotal = mutableStateOf(0)
     val translationDone = mutableStateOf(0)
     val canRetry = mutableStateOf(false)
+    // Per-file batch status: path -> "processing" / "done" / "failed" (feature 1.35.0).
+    val pageStatus = mutableStateMapOf<String, String>()
 
     // Result
     val resultPaths = mutableStateListOf<String>()
@@ -151,6 +153,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // scrolled History/Settings during an active background translation.
         viewModelScope.launch {
             val pendingLogs = mutableListOf<String>()
+            val pendingStatus = mutableMapOf<String, String>()
             var pendingProgress: com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Progress? = null
             // Keep a list (not a single latest value): a multi-file batch can emit
             // several ResultPath events within one coalesce window, and dropping all
@@ -185,6 +188,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     post {
                         if (logs.isNotEmpty()) translationLog.addAll(logs)
+                        if (pendingStatus.isNotEmpty()) pageStatus.putAll(pendingStatus)
                         if (progress != null) {
                             translationProgress.value = progress.done.toFloat() / maxOf(1, progress.total)
                             translationDone.value = progress.done
@@ -223,6 +227,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Log -> pendingLogs.add(event.message)
                     is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Progress -> pendingProgress = event
                     is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.ResultPath -> pendingResults.add(event)
+                    is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.PageStatus -> pendingStatus[event.path] = event.state
                     com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Completed -> pendingCompleted = true
                     is com.kzkt.app.core.TranslationProgressTracker.ProgressEvent.Error -> pendingError = event.error
                 }
@@ -268,6 +273,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         com.kzkt.app.core.TranslationProgressTracker.clearCache()
         translationLog.clear()
         resultPaths.clear()
+        pageStatus.clear()
         translationProgress.value = 0f
         translationTotal.value = selectedFiles.size
         translationDone.value = 0
@@ -278,6 +284,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         showInteractiveEditor.value = false
 
         com.kzkt.app.core.TranslationWorker.startTranslation(getApplication(), selectedFiles.toList())
+    }
+
+    /**
+     * Re-run ONLY the files that failed in the last batch (status "failed"),
+     * keeping the successfully translated ones untouched.
+     */
+    fun retryFailedPages() {
+        val failed = selectedFiles.filter { pageStatus[it] == "failed" }
+        if (failed.isEmpty() || translationActive.value) return
+
+        translationActive.value = true
+        canRetry.value = false
+        com.kzkt.app.core.TranslationProgressTracker.clearCache()
+        translationLog.clear()
+        resultPaths.clear()
+        pageStatus.clear()
+        translationProgress.value = 0f
+        translationTotal.value = failed.size
+        translationDone.value = 0
+        currentPreviewPath.value = null
+        lastResultForEditing.value = null
+        showInteractiveEditor.value = false
+        translationLog.add("[System] Retrying ${failed.size} failed page(s)...")
+
+        com.kzkt.app.core.TranslationWorker.startTranslation(getApplication(), failed)
+    }
+
+    /**
+     * Retry a single failed History entry: re-enqueues its original source file.
+     * The worker replaces the "failed" entry with a success entry when it lands.
+     */
+    fun retryHistoryEntry(entry: HistoryEntry) {
+        if (translationActive.value || entry.inputPath.isBlank()) return
+        val input = java.io.File(entry.inputPath)
+        if (!input.exists()) {
+            translationLog.add("[!] Cannot retry — source file is gone: ${input.name}")
+            return
+        }
+        translationActive.value = true
+        canRetry.value = false
+        com.kzkt.app.core.TranslationProgressTracker.clearCache()
+        translationLog.clear()
+        resultPaths.clear()
+        pageStatus.clear()
+        translationProgress.value = 0f
+        translationTotal.value = 1
+        translationDone.value = 0
+        currentPreviewPath.value = null
+        lastResultForEditing.value = null
+        showInteractiveEditor.value = false
+        translationLog.add("[System] Retrying \"${entry.fileName}\" from History...")
+
+        com.kzkt.app.core.TranslationWorker.startTranslation(getApplication(), listOf(entry.inputPath))
     }
 
     fun retryTranslation() {
@@ -298,6 +357,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         selectedFiles.clear()
         selectedFiles.addAll(paths)
         canRetry.value = false
+        pageStatus.clear()
         com.kzkt.app.core.TranslationProgressTracker.clearCache()
     }
 

@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Compare
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -102,6 +104,7 @@ fun MangaReaderDialog(
     pipelineResult: com.kzkt.app.core.TranslationPipeline.PipelineResult? = null,
     targetLanguage: String = "Indonesian",
     customFontPath: String = "",
+    bookKey: String? = null,
     onDismiss: () -> Unit,
 ) {
     if (pagePaths.isEmpty()) return
@@ -119,6 +122,45 @@ fun MangaReaderDialog(
     var isZoomed by remember { mutableStateOf(false) }
     var isWebtoonMode by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var isSideBySide by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var isImmersive by remember { mutableStateOf(false) }
+
+    // ── Bookmark (per-book last-read page) ──
+    val positionRepo = remember(context) { com.kzkt.app.data.ReadingPositionRepository(context) }
+    // The restore effect owns this flag: saves are suppressed until it finishes,
+    // otherwise opening at page 0 would overwrite the stored position with 0.
+    var resumed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (bookKey != null && initialIndex == 0) {
+            val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                positionRepo.get(bookKey)
+            }
+            if (saved != null && saved > 0 && saved < pagePaths.size) {
+                pagerState.scrollToPage(saved)
+            }
+        }
+        resumed = true
+    }
+    // ── Immersive fullscreen (hide system bars) ──
+    val dialogView = androidx.compose.ui.platform.LocalView.current
+    val activityWindow = remember(context) { context.findActivity()?.window }
+    LaunchedEffect(isImmersive) {
+        val w = activityWindow ?: return@LaunchedEffect
+        val controller = androidx.core.view.WindowCompat.getInsetsController(w, dialogView)
+        if (isImmersive) {
+            controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        } else {
+            controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            activityWindow?.let { w ->
+                androidx.core.view.WindowCompat.getInsetsController(w, dialogView)
+                    .show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
 
     var activeEditorBmp by remember { mutableStateOf<Bitmap?>(null) }
     var activeTranslations by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -132,6 +174,17 @@ fun MangaReaderDialog(
     val webtoonListState = rememberLazyListState()
     val visibleWebtoonPage by remember { derivedStateOf { webtoonListState.firstVisibleItemIndex } }
     val currentPageIndex = if (isWebtoonMode) visibleWebtoonPage.coerceIn(0, pagePaths.size - 1) else pagerState.currentPage
+
+    // Save the current page (debounced — rapid flings cancel the pending write).
+    LaunchedEffect(currentPageIndex, bookKey) {
+        if (bookKey != null && resumed) {
+            kotlinx.coroutines.delay(250)
+            val index = currentPageIndex
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                positionRepo.save(bookKey, index)
+            }
+        }
+    }
 
     // Switching to webtoon mode continues from the page the pager was showing.
     LaunchedEffect(isWebtoonMode) {
@@ -252,6 +305,13 @@ fun MangaReaderDialog(
                                     if (isWebtoonMode) Icons.Default.ViewAgenda else Icons.Default.ViewCarousel,
                                     contentDescription = "Toggle Webtoon Mode",
                                     tint = Color.White
+                                )
+                            }
+                            IconButton(onClick = { isImmersive = !isImmersive }) {
+                                Icon(
+                                    if (isImmersive) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+                                    contentDescription = "Toggle Fullscreen",
+                                    tint = if (isImmersive) MaterialTheme.colorScheme.primary else Color.White
                                 )
                             }
                         },
@@ -498,6 +558,13 @@ private fun ZoomablePageViewer(
             contentScale = ContentScale.Fit
         )
     }
+}
+
+/** Unwrap a (dialog/theme-wrapped) Context to the owning Activity, if any. */
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 /**

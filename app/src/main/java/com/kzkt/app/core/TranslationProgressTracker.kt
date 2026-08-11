@@ -27,6 +27,8 @@ object TranslationProgressTracker {
         data class Log(val message: String) : ProgressEvent()
         data class Progress(val done: Int, val total: Int) : ProgressEvent()
         data class ResultPath(val path: String) : ProgressEvent()
+        /** Per-file batch status: [state] is "processing", "done", or "failed". */
+        data class PageStatus(val path: String, val state: String) : ProgressEvent()
         object Completed : ProgressEvent()
         data class Error(val error: String) : ProgressEvent()
     }

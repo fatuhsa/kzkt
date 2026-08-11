@@ -124,6 +124,49 @@ object ArchiveExtractor {
         return common
     }
 
+    /**
+     * Creates a PDF from a list of image files (one image per page, aspect ratio
+     * preserved, downsampled to at most ~1600px so big scans stay memory-friendly).
+     * Written next to [createCbz] outputs in Download/KZKT. Returns null on failure.
+     */
+    fun createPdf(context: Context, imagePaths: List<String>, outputFileName: String): File? {
+        if (imagePaths.isEmpty()) return null
+        val outputDir = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), "KZKT")
+        outputDir.mkdirs()
+        val pdfFile = File(outputDir, outputFileName)
+        val document = android.graphics.pdf.PdfDocument()
+        try {
+            imagePaths.forEach { path ->
+                val file = File(path)
+                if (!file.exists()) return@forEach
+                // Downsample so a 4000px scan does not decode at full size.
+                val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeFile(path, bounds)
+                var sample = 1
+                while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 1600) sample *= 2
+                val bmp = android.graphics.BitmapFactory.decodeFile(path, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }) ?: return@forEach
+                // Page sized to the image's aspect ratio, scaled to fit A4-ish bounds.
+                val maxW = 595
+                val maxH = 842
+                val scale = minOf(maxW.toFloat() / bmp.width, maxH.toFloat() / bmp.height)
+                val pageW = (bmp.width * scale).toInt().coerceAtLeast(1)
+                val pageH = (bmp.height * scale).toInt().coerceAtLeast(1)
+                val pageInfo = android.graphics.pdf.PdfDocument.PageInfo.Builder(pageW, pageH, imagePaths.indexOf(path)).create()
+                val page = document.startPage(pageInfo)
+                page.canvas.drawBitmap(bmp, null, android.graphics.Rect(0, 0, pageW, pageH), null)
+                document.finishPage(page)
+                bmp.recycle()
+            }
+            FileOutputStream(pdfFile).use { document.writeTo(it) }
+            return pdfFile
+        } catch (e: Exception) {
+            android.util.Log.e("KZKT", "Failed to create PDF: ${e.message}")
+            return null
+        } finally {
+            document.close()
+        }
+    }
+
     private fun isImageFile(fileName: String): Boolean {
         val lower = fileName.lowercase()
         return lower.endsWith(".jpg") || lower.endsWith(".jpeg") || 

@@ -20,6 +20,11 @@ data class HistoryEntry(
     val pageCount: Int,
     val provider: String,
     val targetLanguage: String,
+    // Original source path — enables retry-from-history of failed pages. Empty for
+    // entries recorded before this field existed (Gson defaults keep them loadable).
+    val inputPath: String = "",
+    // "ok" = translated, "failed" = the page failed and is retryable from History.
+    val status: String = "ok",
 )
 
 /**
@@ -64,6 +69,22 @@ class HistoryRepository(private val context: Context) {
             }
             val updated = (listOf(entry) + existing).sortedByDescending { it.timestamp }
             prefs[KEY_ENTRIES] = gson.toJson(updated)
+        }
+    }
+
+    /** Remove every entry whose source input path matches (used after a retry succeeds). */
+    suspend fun deleteByInputPath(inputPath: String) {
+        if (inputPath.isBlank()) return
+        context.historyDataStore.edit { prefs ->
+            val json = prefs[KEY_ENTRIES]
+            if (json.isNullOrBlank()) return@edit
+            try {
+                val updated = gson.fromJson(json, Array<HistoryEntry>::class.java)
+                    .filterNot { it.inputPath == inputPath }
+                prefs[KEY_ENTRIES] = gson.toJson(updated)
+            } catch (_: Exception) {
+                // corrupt entry list — leave as is
+            }
         }
     }
 

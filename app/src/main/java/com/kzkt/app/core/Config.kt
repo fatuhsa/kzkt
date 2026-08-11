@@ -105,6 +105,9 @@ object Config {
         var enableDevLogs: Boolean = false,
         var useImageUpscaler: Boolean = false,
         var translateSfx: Boolean = false,
+        var renderTextColor: String = "auto",
+        var renderFontScale: Double = 1.0,
+        var jpegQuality: Int = 92,
     )
 
     fun getLangCode(targetLanguage: String): String {

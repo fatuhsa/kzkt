@@ -195,6 +195,9 @@ class TranslationWorker(
                     enableDevLogs = s.enableDevLogs,
                     useImageUpscaler = s.useImageUpscaler,
                     translateSfx = s.translateSfx,
+                    renderTextColor = s.renderTextColor,
+                    renderFontScale = s.renderFontScale.toDouble(),
+                    jpegQuality = s.jpegQuality,
                 )
 
                 val cacheRepo = TranslationCacheRepository(applicationContext)
@@ -253,11 +256,29 @@ class TranslationWorker(
                     if (path.endsWith(".pdf", ignoreCase = true)) {
                         emitLog("[${idx + 1}/${files.size}] Opening PDF $fileName...")
                         updateNotificationProgress("Processing $fileName...", completed, totalSteps)
+                        emitPageStatus(path, "processing")
 
                         val tempDir = java.io.File(applicationContext.cacheDir, "pdf_input")
                         val pages = PdfImporter.extractPdfToImages(file, tempDir)
                         if (pages.isEmpty()) {
                             emitLog("[!] Could not read PDF: $fileName")
+                            emitPageStatus(path, "failed")
+                            try {
+                                com.kzkt.app.data.HistoryRepository(applicationContext).record(
+                                    com.kzkt.app.data.HistoryEntry(
+                                        timestamp = System.currentTimeMillis(),
+                                        fileName = fileName,
+                                        outputPath = "",
+                                        pageCount = 0,
+                                        provider = s.llmProvider,
+                                        targetLanguage = s.targetLanguage,
+                                        inputPath = path,
+                                        status = "failed"
+                                    )
+                                )
+                            } catch (e: Exception) {
+                                emitLog("[!] Failed to record failed history: ${e.message}")
+                            }
                             completed += 3
                             emitProgress(completed, totalSteps)
                             continue
@@ -317,25 +338,33 @@ class TranslationWorker(
                         updateNotificationProgress("Reassembling PDF $fileName...", completed, totalSteps)
 
                         val outputPdf = java.io.File(outputDir, "translated_$fileName")
+                        var pdfSaved = false
                         try {
                             PdfExporter.createPdfFromImages(translatedList, outputPdf)
                             if (outputPdf.exists()) {
                                 val publicPath = com.kzkt.app.ui.FileUtils.saveToMediaStore(applicationContext, outputPdf.absolutePath)
                                 if (publicPath != null) {
+                                    pdfSaved = true
                                     emitLog("[+] PDF Reassembled and saved to public folder: $publicPath")
                                     emitResultPath(publicPath)
                                     // PDF results must be recorded in History too — the image
                                     // branch below already records, but the PDF branch did not,
                                     // so translated PDFs never appeared in the History tab.
                                     try {
-                                        com.kzkt.app.data.HistoryRepository(applicationContext).record(
+                                        val historyRepo = com.kzkt.app.data.HistoryRepository(applicationContext)
+                                        // Same as the image branch: a retry that finally
+                                        // succeeded replaces the old "failed" entry.
+                                        historyRepo.deleteByInputPath(path)
+                                        historyRepo.record(
                                             com.kzkt.app.data.HistoryEntry(
                                                 timestamp = System.currentTimeMillis(),
                                                 fileName = fileName,
                                                 outputPath = publicPath,
                                                 pageCount = pages.size,
                                                 provider = s.llmProvider,
-                                                targetLanguage = s.targetLanguage
+                                                targetLanguage = s.targetLanguage,
+                                                inputPath = path,
+                                                status = "ok"
                                             )
                                         )
                                     } catch (e: Exception) {
@@ -352,14 +381,36 @@ class TranslationWorker(
                             emitLog("[!] Error reassembling PDF: ${e.message}")
                         }
 
+                        emitPageStatus(path, if (pdfSaved) "done" else "failed")
+                        if (!pdfSaved) {
+                            try {
+                                com.kzkt.app.data.HistoryRepository(applicationContext).record(
+                                    com.kzkt.app.data.HistoryEntry(
+                                        timestamp = System.currentTimeMillis(),
+                                        fileName = fileName,
+                                        outputPath = "",
+                                        pageCount = pages.size,
+                                        provider = s.llmProvider,
+                                        targetLanguage = s.targetLanguage,
+                                        inputPath = path,
+                                        status = "failed"
+                                    )
+                                )
+                            } catch (e: Exception) {
+                                emitLog("[!] Failed to record failed history: ${e.message}")
+                            }
+                        }
+
                         completed++
                         emitProgress(completed, totalSteps)
                     } else {
                         emitLog("[${idx + 1}/${files.size}] Translating image $fileName...")
                         updateNotificationProgress("Translating $fileName...", completed, totalSteps)
+                        emitPageStatus(path, "processing")
 
                         val result = pipeline.processSingleImage(path, outputDir)
                         if (result.outputPath != null) {
+                            emitPageStatus(path, "done")
                             val publicPath = com.kzkt.app.ui.FileUtils.saveToMediaStore(applicationContext, result.outputPath)
                             if (publicPath != null) {
                                 emitLog("[+] Image translated and saved to public folder: $publicPath")
@@ -372,6 +423,9 @@ class TranslationWorker(
                                 } catch (_: Exception) {}
                                 try {
                                     val historyRepo = com.kzkt.app.data.HistoryRepository(applicationContext)
+                                    // A retry that finally succeeded must not leave the old
+                                    // "failed" entry behind — replace it with the success.
+                                    historyRepo.deleteByInputPath(path)
                                     historyRepo.record(
                                         com.kzkt.app.data.HistoryEntry(
                                             timestamp = System.currentTimeMillis(),
@@ -379,7 +433,9 @@ class TranslationWorker(
                                             outputPath = publicPath,
                                             pageCount = 1,
                                             provider = s.llmProvider,
-                                            targetLanguage = s.targetLanguage
+                                            targetLanguage = s.targetLanguage,
+                                            inputPath = path,
+                                            status = "ok"
                                         )
                                     )
                                 } catch (e: Exception) {
@@ -391,6 +447,25 @@ class TranslationWorker(
                             java.io.File(result.outputPath).delete()
                         } else {
                             emitLog("[!] Failed translation for $fileName")
+                            emitPageStatus(path, "failed")
+                            // Failed pages stay visible in History so they can be retried
+                            // later (only the source input path is needed to re-run them).
+                            try {
+                                com.kzkt.app.data.HistoryRepository(applicationContext).record(
+                                    com.kzkt.app.data.HistoryEntry(
+                                        timestamp = System.currentTimeMillis(),
+                                        fileName = fileName,
+                                        outputPath = "",
+                                        pageCount = 1,
+                                        provider = s.llmProvider,
+                                        targetLanguage = s.targetLanguage,
+                                        inputPath = path,
+                                        status = "failed"
+                                    )
+                                )
+                            } catch (e: Exception) {
+                                emitLog("[!] Failed to record failed history: ${e.message}")
+                            }
                         }
 
                         completed++
@@ -438,6 +513,10 @@ class TranslationWorker(
 
     private suspend fun emitResultPath(path: String) {
         TranslationProgressTracker.progressFlow.emit(TranslationProgressTracker.ProgressEvent.ResultPath(path))
+    }
+
+    private suspend fun emitPageStatus(path: String, state: String) {
+        TranslationProgressTracker.progressFlow.emit(TranslationProgressTracker.ProgressEvent.PageStatus(path, state))
     }
 
     private suspend fun emitError(err: String) {

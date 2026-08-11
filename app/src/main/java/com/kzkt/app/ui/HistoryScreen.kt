@@ -1,7 +1,9 @@
 package com.kzkt.app.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -14,8 +16,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.History
@@ -25,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -70,6 +75,11 @@ fun HistoryScreen(
     var readerInitialIndex by remember { mutableIntStateOf(0) }
     // Translated PDFs open in the lazy in-app PDF reader (no upfront per-page rasterization).
     var pdfReaderPath by remember { mutableStateOf<String?>(null) }
+
+    // Multi-select mode for exporting/deleting several entries at once.
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedTimestamps by remember { mutableStateOf(setOf<Long>()) }
+    var exporting by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -175,6 +185,80 @@ fun HistoryScreen(
         }
     }
 
+    fun exitSelectionMode() {
+        selectionMode = false
+        selectedTimestamps = emptySet()
+    }
+
+    fun toggleSelect(entry: HistoryEntry) {
+        selectedTimestamps = if (entry.timestamp in selectedTimestamps) {
+            selectedTimestamps - entry.timestamp
+        } else {
+            selectedTimestamps + entry.timestamp
+        }
+    }
+
+    fun deleteSelected() {
+        val doomed = entries.filter { it.timestamp in selectedTimestamps }
+        // Batch delete must NOT go through deleteEntry(): that shows a per-item
+        // Undo snackbar (N snackbars queued for N items). Remove silently from the
+        // list + repo in one pass, and offer one bulk Undo like clearAll.
+        removedIds = removedIds + doomed.map { it.timestamp }
+        doomed.forEach { viewModel.deleteHistoryEntry(it.timestamp) }
+        exitSelectionMode()
+        scope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = "Deleted ${doomed.size} entr${if (doomed.size == 1) "y" else "ies"}",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                removedIds = removedIds - doomed.map { it.timestamp }.toSet()
+                viewModel.restoreHistoryEntries(doomed)
+            }
+        }
+    }
+
+    /**
+     * Export the selected entries as one ZIP (reuses the CBZ writer — same format,
+     * .zip extension) or one PDF. Runs off the main thread, then shares the file.
+     */
+    fun exportSelected(asPdf: Boolean) {
+        val selected = entries.filter { it.timestamp in selectedTimestamps }
+        // Only image outputs can be packed — PDF entries stay out of the archive.
+        val paths = selected.mapNotNull { e ->
+            val p = e.outputPath
+            if (!p.endsWith(".pdf", ignoreCase = true) && File(p).exists()) p else null
+        }
+        if (paths.isEmpty()) {
+            android.widget.Toast.makeText(context, "No image files selected to export", android.widget.Toast.LENGTH_SHORT).show()
+            exitSelectionMode()
+            return
+        }
+        exporting = true
+        val toastContext = context
+        scope.launch(Dispatchers.IO) {
+            val stamp = System.currentTimeMillis()
+            val out = if (asPdf) {
+                com.kzkt.app.util.ArchiveExtractor.createPdf(toastContext, paths, "KZKT_Export_$stamp.pdf")
+            } else {
+                com.kzkt.app.util.ArchiveExtractor.createCbz(toastContext, paths, "KZKT_Export_$stamp.zip")
+            }
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                exporting = false
+                if (out != null) {
+                    com.kzkt.app.ui.FileUtils.shareAnyFile(
+                        toastContext, out.absolutePath,
+                        if (asPdf) "application/pdf" else "application/zip"
+                    )
+                    exitSelectionMode()
+                } else {
+                    android.widget.Toast.makeText(toastContext, "Export failed", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         if (entries.isEmpty()) {
             EmptyHistoryPlaceholder()
@@ -191,13 +275,22 @@ fun HistoryScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                "History",
+                                if (selectionMode) "Select (${selectedTimestamps.size})" else "History",
                                 style = MaterialTheme.typography.headlineMedium,
                                 modifier = Modifier
                                     .weight(1f)
                                     .padding(vertical = 8.dp),
                             )
-                            IconButton(onClick = { confirmClearAll = true }) {
+                            if (selectionMode) {
+                                TextButton(onClick = { exitSelectionMode() }) {
+                                    Text("Done")
+                                }
+                            } else {
+                                TextButton(onClick = { selectionMode = true }) {
+                                    Text("Select")
+                                }
+                            }
+                            IconButton(onClick = { confirmClearAll = true }, enabled = !selectionMode) {
                                 Icon(
                                     Icons.Filled.DeleteSweep,
                                     contentDescription = "Clear all history",
@@ -325,9 +418,15 @@ fun HistoryScreen(
                         ) { entry ->
                             SwipeToDismissHistoryItem(
                                 entry = entry,
-                                onClick = { openReaderForEntry(entry) },
-                                onLongClick = { confirmDelete = entry },
+                                onClick = {
+                                    if (selectionMode) toggleSelect(entry) else openReaderForEntry(entry)
+                                },
+                                onLongClick = { if (selectionMode) toggleSelect(entry) else confirmDelete = entry },
                                 onDelete = { deleteEntry(entry) },
+                                selectionMode = selectionMode,
+                                isSelected = entry.timestamp in selectedTimestamps,
+                                onToggleSelect = { toggleSelect(entry) },
+                                onRetry = { viewModel.retryHistoryEntry(entry) },
                             )
                         }
                     }
@@ -340,10 +439,57 @@ fun HistoryScreen(
             modifier = Modifier.align(Alignment.BottomCenter),
         )
 
+        // ── Selection-mode action bar (export / delete / cancel) ──
+        if (selectionMode && selectedTimestamps.isNotEmpty()) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shadowElevation = 8.dp,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SelectionActionButton(
+                        icon = Icons.Filled.Refresh,
+                        label = "ZIP",
+                        enabled = !exporting,
+                        onClick = { exportSelected(asPdf = false) },
+                    )
+                    SelectionActionButton(
+                        icon = Icons.Filled.PictureAsPdf,
+                        label = "PDF",
+                        enabled = !exporting,
+                        onClick = { exportSelected(asPdf = true) },
+                    )
+                    SelectionActionButton(
+                        icon = Icons.Filled.Delete,
+                        label = "Delete",
+                        enabled = !exporting,
+                        tint = MaterialTheme.colorScheme.error,
+                        onClick = { deleteSelected() },
+                    )
+                    SelectionActionButton(
+                        icon = Icons.Filled.Close,
+                        label = "Cancel",
+                        enabled = !exporting,
+                        onClick = { exitSelectionMode() },
+                    )
+                }
+            }
+        }
+
         if (readerPages != null && readerPages!!.isNotEmpty()) {
             com.kzkt.app.ui.component.MangaReaderDialog(
                 pagePaths = readerPages!!,
                 initialIndex = readerInitialIndex,
+                bookKey = bookGroupKey(readerPages!!.first()),
                 targetLanguage = viewModel.settings.value.targetLanguage,
                 customFontPath = viewModel.settings.value.customFontPath,
                 onDismiss = { readerPages = null }
@@ -506,6 +652,10 @@ private fun SwipeToDismissHistoryItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onDelete: () -> Unit,
+    selectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: () -> Unit = {},
+    onRetry: () -> Unit = {},
 ) {
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
@@ -522,6 +672,8 @@ private fun SwipeToDismissHistoryItem(
     SwipeToDismissBox(
         state = dismissState,
         enableDismissFromStartToEnd = false,
+        // Swipe-to-delete stays disabled in selection mode (taps select instead).
+        gesturesEnabled = !selectionMode,
         backgroundContent = {
             Box(
                 modifier = Modifier
@@ -543,6 +695,10 @@ private fun SwipeToDismissHistoryItem(
             entry = entry,
             onClick = onClick,
             onLongClick = onLongClick,
+            selectionMode = selectionMode,
+            isSelected = isSelected,
+            onToggleSelect = onToggleSelect,
+            onRetry = onRetry,
         )
     }
 }
@@ -553,21 +709,39 @@ private fun HistoryItem(
     entry: HistoryEntry,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    selectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: () -> Unit = {},
+    onRetry: () -> Unit = {},
 ) {
     val isPdf = entry.outputPath.endsWith(".pdf", ignoreCase = true)
+    val isFailed = entry.status == "failed"
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            containerColor = if (isSelected)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            else
+                MaterialTheme.colorScheme.surfaceContainerLow,
         ),
+        border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Selection checkbox (only in selection mode).
+            if (selectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelect() },
+                    modifier = Modifier.size(40.dp),
+                )
+            }
+
             HistoryThumbnail(entry = entry, isPdf = isPdf)
 
             Spacer(Modifier.width(12.dp))
@@ -585,24 +759,66 @@ private fun HistoryItem(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    TIME_FORMATTER.format(Date(entry.timestamp)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                )
+                if (isFailed) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.errorContainer,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Filled.Error,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(12.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    "Failed",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(
+                            onClick = onRetry,
+                            enabled = !entry.inputPath.isNullOrBlank(),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            modifier = Modifier.height(28.dp),
+                        ) {
+                            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Retry", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                } else {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        TIME_FORMATTER.format(Date(entry.timestamp)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
+                }
             }
 
             Spacer(Modifier.width(8.dp))
 
-            // IconButton gives a proper 48dp minimum touch target.
-            IconButton(onClick = onLongClick) {
-                Icon(
-                    Icons.Filled.Delete,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.size(20.dp),
-                )
+            // IconButton gives a proper 48dp minimum touch target. Hidden in
+            // selection mode — the checkbox + swipe are the delete/select paths.
+            if (!selectionMode) {
+                IconButton(onClick = onLongClick) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
         }
     }
@@ -654,6 +870,28 @@ private fun TypeBadgeIcon(isPdf: Boolean) {
         tint = MaterialTheme.colorScheme.primary,
         modifier = Modifier.size(22.dp),
     )
+}
+
+/** One compact icon+label button in the selection-mode action bar. */
+@Composable
+private fun SelectionActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Icon(icon, contentDescription = label, tint = if (enabled) tint else tint.copy(alpha = 0.4f), modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(2.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = if (enabled) tint else tint.copy(alpha = 0.4f))
+    }
 }
 
 // ── Helpers ────────────────────────────────────────────────────────

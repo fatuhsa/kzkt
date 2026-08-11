@@ -169,7 +169,8 @@ class TextRenderer(private val context: Context) {
         textAlign: Paint.Align = Paint.Align.CENTER,
         fontPreset: String = "Default",
         fontScale: Float = 1.0f,
-        strokeColorHex: String? = null
+        strokeColorHex: String? = null,
+        textColorHex: String? = null
     ) {
         val (x1, y1, x2, y2) = bubbleRect
         val boxWidth = maxOf(1, x2 - x1)
@@ -180,7 +181,7 @@ class TextRenderer(private val context: Context) {
         val isJapanese = langKey == "japanese" || langKey == "jepang"
 
         if (isJapanese) {
-            renderJapaneseVertical(canvas, text, x1, y1, x2, y2, settings, backgroundPatch, bgColor, customFontPath, isBold, isItalic, fontPreset, fontScale, strokeColorHex)
+            renderJapaneseVertical(canvas, text, x1, y1, x2, y2, settings, backgroundPatch, bgColor, customFontPath, isBold, isItalic, fontPreset, fontScale, strokeColorHex, textColorHex)
             return
         }
 
@@ -256,12 +257,16 @@ class TextRenderer(private val context: Context) {
 
         val strokeW = maxOf(1f, bestFontSize / 11f)
         val isDarkBg = isDarkColor(bgColor)
-        val defaultStrokeColor = if (isDarkBg) Color.BLACK else Color.WHITE
-        val textColor = if (isDarkBg) Color.WHITE else Color.BLACK
-        
+        val autoTextColor = if (isDarkBg) Color.WHITE else Color.BLACK
+        val textColor = textColorHex?.let {
+            try { android.graphics.Color.parseColor(it) } catch (e: Exception) { autoTextColor }
+        } ?: autoTextColor
+        // Outline always contrasts with the chosen text colour so a forced colour
+        // stays legible on any bubble background.
+        val autoStrokeColor = if (textColor == Color.WHITE) Color.BLACK else Color.WHITE
         val strokeColor = strokeColorHex?.let {
-            try { android.graphics.Color.parseColor(it) } catch (e: Exception) { defaultStrokeColor }
-        } ?: defaultStrokeColor
+            try { android.graphics.Color.parseColor(it) } catch (e: Exception) { autoStrokeColor }
+        } ?: autoStrokeColor
 
         // Background patch
         if (backgroundPatch) {
@@ -328,7 +333,8 @@ class TextRenderer(private val context: Context) {
         isItalic: Boolean,
         fontPreset: String,
         fontScale: Float = 1.0f,
-        strokeColorHex: String? = null
+        strokeColorHex: String? = null,
+        textColorHex: String? = null
     ) {
         val cleanText = text.replace(" ", "").replace("\n", "")
         val boxWidth = maxOf(1, x2 - x1)
@@ -387,12 +393,14 @@ class TextRenderer(private val context: Context) {
         val startY = y1 + (boxHeight - actualH) / 2f
 
         val isDarkBg = isDarkColor(bgColor)
-        val defaultStrokeColor = if (isDarkBg) Color.BLACK else Color.WHITE
-        val textColor = if (isDarkBg) Color.WHITE else Color.BLACK
-        
+        val autoTextColor = if (isDarkBg) Color.WHITE else Color.BLACK
+        val textColor = textColorHex?.let {
+            try { android.graphics.Color.parseColor(it) } catch (e: Exception) { autoTextColor }
+        } ?: autoTextColor
+        val autoStrokeColor = if (textColor == Color.WHITE) Color.BLACK else Color.WHITE
         val strokeColor = strokeColorHex?.let {
-            try { android.graphics.Color.parseColor(it) } catch (e: Exception) { defaultStrokeColor }
-        } ?: defaultStrokeColor
+            try { android.graphics.Color.parseColor(it) } catch (e: Exception) { autoStrokeColor }
+        } ?: autoStrokeColor
 
         val strokeW = maxOf(1f, bestFontSize / 11f)
         val strokePaint = Paint(paint).apply {
