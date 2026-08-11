@@ -89,6 +89,11 @@ files are named per ABI, e.g. `app-arm64-v8a-debug.apk` / `app-universal-debug.a
 > The resulting APK (`com.kzkt.app.debug`) installs ALONGSIDE the release app — a
 > debug-signed APK can no longer clash with the release-signed one. Local debug
 > builds without the flag keep the plain `com.kzkt.app` id.
+>
+> Every debug build (local or CI) also gets a distinct launcher identity from the
+> `app/src/debug` resource source set: label `KZKT Debug` and a teal adaptive-icon
+> background (`#134E4A`) instead of the release's `#17171F`. Never delete that
+> source set — it is what makes debug and release distinguishable on the device.
 
 ### 3.3 Release APK — all ABIs (what CI distributes)
 

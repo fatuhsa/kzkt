@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Debug builds (local + CI) get a distinct launcher label so they are easy
+         to tell apart from the release app on the same device. -->
+    <string name="app_name">KZKT Debug</string>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Distinct adaptive-icon background for debug builds (release uses #17171F).
+         Kept dark so the white "KzT" foreground stays legible. -->
+    <color name="ic_launcher_background">#134E4A</color>
+</resources>

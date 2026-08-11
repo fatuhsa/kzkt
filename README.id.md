@@ -199,7 +199,8 @@ Ada dua workflow di `.github/workflows/`:
 - **KZKT Trigger Debug** (`kzkt-trigger-debug.yml`) — setiap push / pull request ke `main`,
   unit test dan `assembleDebug` dijalankan di image Docker yang sama, lalu APK debug-nya
   diunggah sebagai **artifact** yang bisa diunduh (`kzkt-app-debug`). APK debug ini pakai
-  applicationId sendiri (`com.kzkt.app.debug`), jadi bisa diinstall berdampingan dengan release.
+  applicationId sendiri (`com.kzkt.app.debug`) plus label dan warna ikon launcher berbeda
+  (`KZKT Debug`), jadi bisa diinstall berdampingan dengan release dan gampang dibedain.
 - **KZKT Auto Release** (`kzkt-auto-release.yml`) — build **APK release signed** untuk empat ABI
   (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) plus satu universal secara paralel, lalu bikin
   GitHub Release bernama `KZKT vX.Y.Z` berisi semua APK + file `sha256sums.txt`, dan kirim
