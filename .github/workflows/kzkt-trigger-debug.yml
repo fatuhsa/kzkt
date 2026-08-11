@@ -52,3 +52,25 @@ jobs:
           # Splits menghasilkan 1 APK per ABI + universal (tidak ada app-debug.apk lagi)
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      # Notify Telegram with the artifact download links. Workflow artifacts have
+      # no public URL on GitHub itself (login required), so also include a
+      # nightly.link direct link — it serves artifacts of public repos without
+      # authentication. Skipped when the Telegram secrets are unset.
+      - name: Send debug APK link to Telegram
+        env:
+          TG_BOT: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$TG_BOT" ] || [ -z "$TG_CHAT" ]; then
+            echo "Telegram secrets belum diisi — lewati."
+            exit 0
+          fi
+          RUN_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          DIRECT_URL="https://nightly.link/${GITHUB_REPOSITORY}/workflows/kzkt-trigger-debug.yml/${GITHUB_RUN_ID}/kzkt-app-debug.zip"
+          # printf menerjemahkan \n jadi baris baru sungguhan (bukan teks literal)
+          MSG=$(printf 'KZKT Debug build selesai!\n\nDownload artifact (perlu login GitHub):\n%s\n\nDownload langsung tanpa login (nightly.link):\n%s\n\nPilih KZKT-arm64-v8a (file app-arm64-v8a-debug.apk di dalam zip) untuk HP modern.' "$RUN_URL" "$DIRECT_URL")
+          curl -s -F "chat_id=$TG_CHAT" \
+            -F "text=$MSG" \
+            "https://api.telegram.org/bot$TG_BOT/sendMessage" \
+            | grep -q '"ok":true' && echo "Notifikasi terkirim ke Telegram" || echo "Gagal kirim ke Telegram"
