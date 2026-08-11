@@ -10,9 +10,11 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,10 +26,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material.icons.filled.ViewCarousel
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
@@ -40,7 +42,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -421,7 +425,7 @@ fun MangaReaderDialog(
                                     }
                                 ) {
                                     Icon(
-                                        Icons.Default.CheckCircle,
+                                        Icons.Filled.FolderZip,
                                         contentDescription = "Export CBZ",
                                         tint = MaterialTheme.colorScheme.onSurface
                                     )
@@ -506,6 +510,12 @@ private fun ZoomablePageViewer(
 
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    // Viewport size (from layout) is used to clamp pan so the image can never be
+    // pushed fully off-screen while zoomed.
+    var viewportSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    // Pan multiplier: while zoomed, the image follows the finger more eagerly than
+    // 1:1 so small drags cover more ground (previous feel was sluggish).
+    val panSensitivity = 1.8f
 
     LaunchedEffect(bitmap) {
         scale = 1f
@@ -513,20 +523,10 @@ private fun ZoomablePageViewer(
         onZoomStateChanged(false)
     }
 
-    val state = rememberTransformableState { zoomChange, offsetChange, _ ->
-        val newScale = (scale * zoomChange).coerceIn(1f, 4f)
-        scale = newScale
-        onZoomStateChanged(newScale > 1f)
-        if (newScale > 1f) {
-            offset += offsetChange
-        } else {
-            offset = Offset.Zero
-        }
-    }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .onSizeChanged { viewportSize = it }
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -548,7 +548,45 @@ private fun ZoomablePageViewer(
                 translationX = offset.x,
                 translationY = offset.y
             )
-            .transformable(state = state, enabled = scale > 1f),
+            // Custom gesture handling replaces Modifier.transformable, which had
+            // `enabled = scale > 1f` — that made pinch-zoom dead at 1x (only the
+            // double-tap could zoom in). This handler:
+            //  - pinches (2+ fingers) always, even from 1x;
+            //  - pans with a single finger only once zoomed;
+            //  - leaves 1x single-finger swipes unconsumed so the pager still pages.
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        val pointerCount = event.changes.count { it.pressed }
+                        if (pointerCount >= 2 || scale > 1f) {
+                            val zoomChange = event.calculateZoom()
+                            val panChange = event.calculatePan()
+                            event.changes.forEach { if (it.positionChanged()) it.consume() }
+
+                            val newScale = (scale * zoomChange).coerceIn(1f, 4f)
+                            scale = newScale
+                            onZoomStateChanged(newScale > 1f)
+                            if (newScale > 1f) {
+                                offset += panChange * panSensitivity
+                                // Keep the image on screen: limit pan to the extra
+                                // space the zoom reveals around the viewport center.
+                                if (viewportSize.width > 0 && viewportSize.height > 0) {
+                                    val maxX = viewportSize.width * (newScale - 1f) / 2f
+                                    val maxY = viewportSize.height * (newScale - 1f) / 2f
+                                    offset = Offset(
+                                        offset.x.coerceIn(-maxX, maxX),
+                                        offset.y.coerceIn(-maxY, maxY)
+                                    )
+                                }
+                            } else {
+                                offset = Offset.Zero
+                            }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         androidx.compose.foundation.Image(

@@ -207,6 +207,7 @@ object FileUtils {
             val lowerName = fileName.lowercase()
             val mimeType = when {
                 lowerName.endsWith(".pdf") -> "application/pdf"
+                lowerName.endsWith(".zip") || lowerName.endsWith(".cbz") -> "application/zip"
                 lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") -> "image/jpeg"
                 lowerName.endsWith(".webp") -> "image/webp"
                 else -> "image/png"

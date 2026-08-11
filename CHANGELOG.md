@@ -19,6 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Real pinch-to-zoom in the reader**: pinch gestures now zoom in/out from any level, not just double-tap — the previous gesture handler only enabled zoom after a double-tap had already zoomed in.
+- **More responsive panning while zoomed**: single-finger drags move the page 1.8x faster than the finger, and the pan is clamped so the page can never be pushed fully off-screen.
+- **History export saves straight to Downloads/KZKT**: exporting selected pages as ZIP or PDF copies the file into the public Downloads/KZKT folder and shows a confirmation toast — no share sheet anymore (ZIP/CBZ files now get the correct `application/zip` MIME type in MediaStore).
+- **Better selection-mode icons**: the History action bar now shows a proper folder-zip icon for ZIP export and an outline delete icon, matching the PDF/file icons used elsewhere.
 - Failed History entries now keep their source input path so they can always be retried later.
 
 ## [v1.30.4] - 2026-08-11

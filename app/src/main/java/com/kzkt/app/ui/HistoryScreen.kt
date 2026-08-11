@@ -17,8 +17,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.DateRange
@@ -221,7 +223,8 @@ fun HistoryScreen(
 
     /**
      * Export the selected entries as one ZIP (reuses the CBZ writer — same format,
-     * .zip extension) or one PDF. Runs off the main thread, then shares the file.
+     * .zip extension) or one PDF. Runs off the main thread, then copies the result
+     * into the public Downloads/KZKT folder (no share sheet — it just lands there).
      */
     fun exportSelected(asPdf: Boolean) {
         val selected = entries.filter { it.timestamp in selectedTimestamps }
@@ -247,10 +250,24 @@ fun HistoryScreen(
             kotlinx.coroutines.withContext(Dispatchers.Main) {
                 exporting = false
                 if (out != null) {
-                    com.kzkt.app.ui.FileUtils.shareAnyFile(
-                        toastContext, out.absolutePath,
-                        if (asPdf) "application/pdf" else "application/zip"
-                    )
+                    // Copy into the public Downloads/KZKT folder. The private temp copy
+                    // is only deleted when the public copy actually landed (otherwise
+                    // the fallback path in the toast would point at a missing file).
+                    val publicPath = com.kzkt.app.ui.FileUtils.saveToMediaStore(toastContext, out.absolutePath)
+                    if (publicPath != null) {
+                        out.delete()
+                        android.widget.Toast.makeText(
+                            toastContext,
+                            "Saved to Downloads/KZKT: ${File(publicPath).name}",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        android.widget.Toast.makeText(
+                            toastContext,
+                            "Saved: ${out.absolutePath}",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
                     exitSelectionMode()
                 } else {
                     android.widget.Toast.makeText(toastContext, "Export failed", android.widget.Toast.LENGTH_SHORT).show()
@@ -457,7 +474,7 @@ fun HistoryScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     SelectionActionButton(
-                        icon = Icons.Filled.Refresh,
+                        icon = Icons.Filled.FolderZip,
                         label = "ZIP",
                         enabled = !exporting,
                         onClick = { exportSelected(asPdf = false) },
@@ -469,7 +486,7 @@ fun HistoryScreen(
                         onClick = { exportSelected(asPdf = true) },
                     )
                     SelectionActionButton(
-                        icon = Icons.Filled.Delete,
+                        icon = Icons.Outlined.DeleteOutline,
                         label = "Delete",
                         enabled = !exporting,
                         tint = MaterialTheme.colorScheme.error,
