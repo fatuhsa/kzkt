@@ -13,7 +13,7 @@
   <p><b>English</b> · <a href="README.id.md">Bahasa Indonesia</a></p>
 </div>
 
-KZKT is a native Android application for automatic manga and comic translation. It detects speech bubbles on-page with on-device AI, sends the text to the vision LLM of your choice, and renders the translated text back into the page — all locally, with no root access required.
+KZKT is a native Android application for automatic manga and comic translation. It detects speech bubbles on-page with on-device AI, sends the text to the LLM of your choice, and renders the translated text back into the page — all locally, with no root access required.
 
 <div align="center">
   <table>
@@ -34,12 +34,14 @@ KZKT is a native Android application for automatic manga and comic translation. 
 
 ## Highlights
 
-- **Wide input support** - single images, whole folders, multi-image share, archives (ZIP / CBZ / EPUB), and PDF files.
+- **Wide input support** - single images, whole folders, multi-image share, archives (ZIP / CBZ / EPUB), and PDF files — with **PDF in → translated PDF out**.
 - **Translate to 14 languages** - English, Indonesian, Japanese, Korean, Mandarin, Spanish, French, German, and more.
-- **Multi-provider LLM** - Google Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, or any OpenAI-compatible local endpoint (Ollama, LM Studio, LocalAI, vLLM).
-- **On-device detection** - YOLO (ONNX Runtime) finds speech bubbles locally, with optional ML Kit OCR for non-vision models.
-- **PDF in, PDF out** - render PDF pages, translate, and reassemble the translated pages back into a PDF.
-- **Background translation** - keeps translating even when the app is closed, then saves results to `/Download/KZKT/`.
+- **Multi-provider LLM** - Google Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, or any OpenAI-compatible endpoint (Ollama, LM Studio, LocalAI, vLLM), with automatic fallback between providers.
+- **On-device AI pipeline** - a 3-stage YOLO cascade (ONNX Runtime) detects speech bubbles locally, optional ML Kit OCR (Japanese + Latin) supports non-vision models, and a **Smart Image Upscaler** doubles page resolution for sharper results.
+- **Built-in reader** - view results page-by-page or as a scrollable **webtoon**, pinch-to-zoom up to 4x, and a **pencil editor** to touch up any bubble's text right in the app.
+- **Instant PDF reader** - translated PDFs open lazily, page by page, without waiting for the whole document to be rasterized.
+- **Glossary & translation memory** - keep your own term dictionary and avoid re-translating repeated bubbles.
+- **Background translation & auto-update** - work continues after the app is closed (results land in `/Download/KZKT/`), and the app checks for new releases on launch, downloading them with a resumable foreground-service download.
 
 ---
 
@@ -47,13 +49,14 @@ KZKT is a native Android application for automatic manga and comic translation. 
 
 | Layer | Technologies |
 | :--- | :--- |
-| Language & Core | Kotlin, Java 17 |
-| UI | Jetpack Compose, Material 3, Navigation Compose, Coil |
-| Concurrency & State | Coroutines, Flow, ViewModel, DataStore Preferences |
-| Machine Learning | ONNX Runtime Android (`com.microsoft.onnxruntime:onnxruntime-android:1.21.0`) |
+| Language & Core | Kotlin 2.4, Java 17, AGP 9.3 |
+| UI | Jetpack Compose (BOM 2026.01.01), Material 3 1.5.0-alpha25, MaterialKolor (dynamic Material You theming), Navigation Compose 2.8.5, Coil 2.7 |
+| Concurrency & State | Coroutines 1.9, Flow, ViewModel, DataStore Preferences 1.1.2 |
+| Machine Learning | ONNX Runtime 1.21 (YOLO), ML Kit Text Recognition 16.0.1 (Latin + Japanese) |
 | Computer Vision | OpenCV 4.10.0 Android SDK (`libopencv_java4.so` C++ JNI) |
-| Networking & JSON | OkHttp 4.12, Gson (lenient mode) |
-| Target API | `minSdk = 26` (Android 8.0), `targetSdk = 36` (Android 15+) |
+| Networking & JSON | OkHttp 4.12, Gson 2.11 |
+| Persistence & Background | DataStore Preferences, WorkManager 2.10, MediaStore |
+| Target API | `minSdk = 26` (Android 8.0), `compileSdk = 37`, `targetSdk = 36` |
 
 ---
 
@@ -63,17 +66,20 @@ KZKT is a native Android application for automatic manga and comic translation. 
 [ Input image / manga page ]
            |
            v
-[ 1. YOLO ONNX bubble detection ] --> bounding boxes
+[ 0. Smart upscaler ] --> optional 2x enhancement
            |
            v
-[ 2. OpenCV filtering & smart crop ] --> remove SFX, merge overlaps
+[ 1. YOLO cascade (3 stages) ] --> speech-bubble boxes (on-device, ONNX)
+           |
+           v
+[ 2. OpenCV filtering & crop ] --> remove SFX, merge overlaps, mask outside bubbles
            |
            v
 [ 3. Mosaic builder ] --> pack crops into vertical RTL mosaic + red ID labels
            |
            v
-[ 4. Vision LLM provider ] --> Gemini / OpenAI / OpenRouter / custom local
-           |
+[ 4. Vision LLM ] --> Gemini / OpenAI / OpenRouter / local
+           |            (or ML Kit OCR + text-only LLM when OCR is enabled)
            v
 [ 5. Text renderer & masking ] --> in-bubble mask + auto-scaled wrapped text
            |
@@ -89,18 +95,21 @@ KZKT is a native Android application for automatic manga and comic translation. 
 ├── app/
 │   └── src/main/
 │       ├── java/com/kzkt/app/
-│       │   ├── core/           # pipeline, YOLO ONNX engine, OpenCV, text renderer
-│       │   ├── core/providers/ # Gemini, OpenAI, OpenRouter, custom providers
-│       │   ├── data/           # settings & history (DataStore persistence)
+│       │   ├── core/           # translation pipeline, YOLO ONNX engine, OpenCV, OCR, updater
+│       │   ├── core/providers/ # Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, custom
+│       │   ├── data/           # settings, history, glossary & caches (persistence)
 │       │   ├── ui/             # Compose screens (Translate, History, Settings)
 │       │   ├── ui/component/   # reusable Material 3 components
 │       │   └── util/           # helpers
 │       ├── assets/             # encrypted YOLO model (kzkt.dat) & fonts
 │       └── AndroidManifest.xml
 ├── opencv/                     # OpenCV 4.x Android SDK module (native JNI)
+├── .github/workflows/          # Android CI + Auto Release (per-ABI APKs)
 ├── build.gradle.kts
 ├── settings.gradle.kts
 ├── Dockerfile                  # self-contained Android build image (JDK 17 + SDK)
+├── BUILD_RELEASE.md            # guide: custom keystore + publishing signed releases
+├── CHANGELOG.md
 └── README.md
 ```
 
@@ -128,13 +137,24 @@ KZKT is a native Android application for automatic manga and comic translation. 
 
 2. Open in Android Studio, let Gradle sync, then build:
    ```bash
+   # Debug APKs — one per ABI + a universal APK
    ./gradlew assembleDebug
+   #   → app/build/outputs/apk/debug/app-<abi>-debug.apk (+ app-universal-debug.apk)
+
+   # Faster: only the ABI of your phone (arm64-v8a for most modern devices)
+   ./gradlew assembleDebug -PabiFilter=arm64-v8a
+   #   → app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
    ```
 
-3. Install the APK:
-   ```text
-   app/build/outputs/apk/debug/app-debug.apk
+3. Build a **signed release APK** (R8 minified):
+   ```bash
+   ./gradlew assembleRelease -PabiFilter=arm64-v8a
+   #   → app/build/outputs/apk/release/app-arm64-v8a-release.apk
    ```
+   Release builds are signed automatically: if a `keystore.properties` file exists it is
+   used, otherwise it falls back to your local debug keystore. See
+   [BUILD_RELEASE.md](BUILD_RELEASE.md) for the full guide on creating and publishing
+   with your own keystore (`keystore.properties.example` is provided as a template).
 
 ### Build with Docker
 
@@ -152,14 +172,14 @@ docker run --rm -v kzkt-gradle:/root/.gradle \
 #    (mount ~/.android so the keystore is available in the container)
 docker run --rm -v kzkt-gradle:/root/.gradle \
   -v "$HOME/.android:/root/.android" \
-  kzkt-builder ./gradlew assembleRelease
+  kzkt-builder ./gradlew assembleRelease -PabiFilter=arm64-v8a
 
 # 4. Copy the APK out of the container
 CID=$(docker run -d -v kzkt-gradle:/root/.gradle \
   -v "$HOME/.android:/root/.android" \
-  kzkt-builder ./gradlew assembleRelease)
+  kzkt-builder ./gradlew assembleRelease -PabiFilter=arm64-v8a)
 docker wait "$CID"
-docker cp "$CID:/app/app/build/outputs/apk/release/app-release.apk" .
+docker cp "$CID:/app/app/build/outputs/apk/release/app-arm64-v8a-release.apk" .
 docker rm "$CID"
 ```
 
@@ -169,12 +189,24 @@ For publishing, mount your own keystore read-only:
 docker run --rm -v kzkt-gradle:/root/.gradle \
   -v "$PWD/keystore.properties:/app/keystore.properties:ro" \
   -v "$PWD/release.keystore:/app/release.keystore:ro" \
-  kzkt-builder ./gradlew assembleRelease
+  kzkt-builder ./gradlew assembleRelease -PabiFilter=arm64-v8a
 ```
 
 ### Continuous Integration (GitHub Actions)
 
-Every push / pull request to `main` is built automatically by [GitHub Actions](.github/workflows/android.yml) using the **same Dockerfile**: unit tests + `assembleDebug` run in a container, and the debug APK is uploaded as a downloadable **artifact** (`kzkt-app-debug`) on the run page. Gradle dependencies are cached between runs, so follow-up builds are much faster.
+Two workflows live in `.github/workflows/`:
+
+- **Android CI** (`android.yml`) — on every push / pull request to `main`, unit tests and
+  `assembleDebug` run inside the same Docker builder image, and the debug APKs are uploaded
+  as a downloadable artifact (`kzkt-app-debug`).
+- **Auto Release** (`kzkt.yml`) — builds **signed release APKs** for all four ABIs
+  (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) plus a universal APK in parallel, then creates
+  a GitHub Release named `KZKT vX.Y.Z` containing every APK and a `sha256sums.txt` file, and
+  posts a Telegram notification. The release description is taken from the matching section
+  of `CHANGELOG.md`. Trigger it by pushing a `v*` tag, or run it manually from the Actions tab
+  with a version input (e.g. `1.30.4`). The signing keystore is restored from repository
+  secrets (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`) — see
+  [BUILD_RELEASE.md](BUILD_RELEASE.md).
 
 ---
 
