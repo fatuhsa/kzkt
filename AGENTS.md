@@ -83,6 +83,12 @@ Everything below runs on Linux with `./gradlew` (Windows: `gradlew.bat`).
 Output: `app/build/outputs/apk/debug/app-<abi>-debug.apk` (with per-ABI splits, the
 files are named per ABI, e.g. `app-arm64-v8a-debug.apk` / `app-universal-debug.apk`).
 
+> CI passes `-PciDebug=true`, which suffixes the applicationId with `.debug` and the
+> versionName with `-debug` (see the debug buildType in `app/build.gradle.kts`).
+> The resulting APK (`com.kzkt.app.debug`) installs ALONGSIDE the release app — a
+> debug-signed APK can no longer clash with the release-signed one. Local debug
+> builds without the flag keep the plain `com.kzkt.app` id.
+
 ### 3.3 Release APK — all ABIs (what CI distributes)
 
 ```bash
@@ -182,7 +188,9 @@ docker cp <CID>:/app/app/build/outputs/apk/release/app-arm64-v8a-release.apk .
 ## 6. GitHub Actions (what's already wired)
 
 - **`.github/workflows/android.yml`** — CI on every push / PR to `main`: builds via
-  the Dockerfile, runs unit tests, uploads the per-ABI debug APK artifacts.
+  the Dockerfile, runs unit tests, uploads the per-ABI debug APK artifacts. It
+  passes `-PciDebug=true`, so the debug APK has applicationId `com.kzkt.app.debug`
+  and installs alongside the release app instead of requiring an uninstall.
 - **`.github/workflows/kzkt.yml`** — **Auto Release** (manual dispatch): multi-job
   matrix (prepare → build 5 ABI variants in parallel → create GitHub Release +
   Telegram notification). Version comes from the workflow input or the git tag.

@@ -97,6 +97,16 @@ android {
     buildTypes {
         debug {
             isMinifyEnabled = false
+            // CI debug builds (android.yml passes -PciDebug=true) get a separate
+            // applicationId so the debug APK can be installed ALONGSIDE the release
+            // app (no "uninstall release first" needed). The FileProvider authority
+            // follows ${applicationId} in the manifest, so it stays unique per app
+            // and never triggers a provider conflict. The versionName suffix "-debug"
+            // is parse-safe for the update checker (UpdateManager.parseVersion).
+            if (project.findProperty("ciDebug") == "true") {
+                applicationIdSuffix = ".debug"
+                versionNameSuffix = "-debug"
+            }
         }
         release {
             isMinifyEnabled = true
