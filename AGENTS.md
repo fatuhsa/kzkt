@@ -197,9 +197,10 @@ docker cp <CID>:/app/app/build/outputs/apk/release/app-arm64-v8a-release.apk .
   every push / PR to `main`): builds via the Dockerfile, runs unit tests, uploads
   the per-ABI debug APK artifacts. It passes `-PciDebug=true`, so the debug APK
   has applicationId `com.kzkt.app.debug` and installs alongside the release app
-  instead of requiring an uninstall. After the upload it posts the artifact
-  download links (GitHub run page + nightly.link direct URL) to Telegram when
-  `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` secrets are set.
+  instead of requiring an uninstall. Debug APKs are uploaded as ONE artifact per
+  ABI (`kzkt-app-debug-<abi>`, no universal build — it is ~500 MB unminified),
+  and after the upload it posts one nightly.link download link per ABI to
+  Telegram when `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` secrets are set.
 - **`.github/workflows/kzkt-auto-release.yml`** — **KZKT Auto Release** (manual
   dispatch): multi-job matrix (prepare → build 5 ABI variants in parallel → create
   GitHub Release + Telegram notification). Version comes from the workflow input

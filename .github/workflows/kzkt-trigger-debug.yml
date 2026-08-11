@@ -45,19 +45,43 @@ jobs:
           # (and to be safe, also fix app/build before artifact upload).
           sudo chown -R "$(id -u):$(id -g)" gradle-cache app/build
 
-      - name: Upload debug APKs
+      # One artifact per ABI (like the release workflow) so each download is a
+      # single APK — not one giant zip containing every variant. The universal
+      # debug APK is deliberately skipped: unminified it is ~500 MB and debug
+      # builds only target the developer's own device.
+      - name: Upload debug APK (arm64-v8a)
         uses: actions/upload-artifact@v5
         with:
-          name: kzkt-app-debug
-          # Splits menghasilkan 1 APK per ABI + universal (tidak ada app-debug.apk lagi)
-          path: app/build/outputs/apk/debug/*.apk
+          name: kzkt-app-debug-arm64-v8a
+          path: app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
           if-no-files-found: error
 
-      # Notify Telegram with the artifact download links. Workflow artifacts have
-      # no public URL on GitHub itself (login required), so also include a
-      # nightly.link direct link — it serves artifacts of public repos without
-      # authentication. Skipped when the Telegram secrets are unset.
-      - name: Send debug APK link to Telegram
+      - name: Upload debug APK (armeabi-v7a)
+        uses: actions/upload-artifact@v5
+        with:
+          name: kzkt-app-debug-armeabi-v7a
+          path: app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk
+          if-no-files-found: error
+
+      - name: Upload debug APK (x86)
+        uses: actions/upload-artifact@v5
+        with:
+          name: kzkt-app-debug-x86
+          path: app/build/outputs/apk/debug/app-x86-debug.apk
+          if-no-files-found: error
+
+      - name: Upload debug APK (x86_64)
+        uses: actions/upload-artifact@v5
+        with:
+          name: kzkt-app-debug-x86_64
+          path: app/build/outputs/apk/debug/app-x86_64-debug.apk
+          if-no-files-found: error
+
+      # Notify Telegram with one download link per ABI. Workflow artifacts have
+      # no public URL on GitHub itself (login required), so each link points to
+      # nightly.link, which serves artifacts of public repos without auth.
+      # Skipped when the Telegram secrets are unset.
+      - name: Send debug APK links to Telegram
         env:
           TG_BOT: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -66,10 +90,10 @@ jobs:
             echo "Telegram secrets belum diisi — lewati."
             exit 0
           fi
+          BASE="https://nightly.link/${GITHUB_REPOSITORY}/workflows/kzkt-trigger-debug.yml/${GITHUB_RUN_ID}"
           RUN_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          DIRECT_URL="https://nightly.link/${GITHUB_REPOSITORY}/workflows/kzkt-trigger-debug.yml/${GITHUB_RUN_ID}/kzkt-app-debug.zip"
           # printf menerjemahkan \n jadi baris baru sungguhan (bukan teks literal)
-          MSG=$(printf 'KZKT Debug build selesai!\n\nDownload artifact (perlu login GitHub):\n%s\n\nDownload langsung tanpa login (nightly.link):\n%s\n\nPilih KZKT-arm64-v8a (file app-arm64-v8a-debug.apk di dalam zip) untuk HP modern.' "$RUN_URL" "$DIRECT_URL")
+          MSG=$(printf 'KZKT Debug build selesai!\n\nDownload per ABI (tanpa login, via nightly.link):\n- arm64-v8a: %s/kzkt-app-debug-arm64-v8a.zip\n- armeabi-v7a: %s/kzkt-app-debug-armeabi-v7a.zip\n- x86: %s/kzkt-app-debug-x86.zip\n- x86_64: %s/kzkt-app-debug-x86_64.zip\n\nPilih arm64-v8a untuk HP modern (POCO F5).\nAlternatif (perlu login GitHub): %s' "$BASE" "$BASE" "$BASE" "$BASE" "$RUN_URL")
           curl -s -F "chat_id=$TG_CHAT" \
             -F "text=$MSG" \
             "https://api.telegram.org/bot$TG_BOT/sendMessage" \
