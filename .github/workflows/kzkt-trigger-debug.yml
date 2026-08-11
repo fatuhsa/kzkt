@@ -1,4 +1,4 @@
-name: Android CI
+name: KZKT Trigger Debug
 
 on:
   push:

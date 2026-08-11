@@ -50,14 +50,15 @@ update checker.
    `workDataOf`; write it to a JSON file in `cacheDir` and pass only the file path
    (see `TranslationWorker.startTranslation`).
 9. **Release descriptions ALWAYS come from `CHANGELOG.md` — never from git commit
-   history.** The CI workflow (`kzkt.yml`) extracts the section matching the
-   version (`## [v1.30.0]`) as the release body; `generate_release_notes` is
+   history.** The CI workflow (`kzkt-auto-release.yml`) extracts the section
+   matching the version (`## [v1.30.0]`) as the release body;
+   `generate_release_notes` is
    intentionally off. Keep the changelog as the single source of truth for what
    users see on the release page.
 10. **Before every release, add a `CHANGELOG.md` section first.** Without
     `## [vX.Y.Z] - YYYY-MM-DD` the release body has no notes (the CI prints a
     warning and ships only the APK list). Write the section, commit + push it,
-    THEN trigger the Auto Release workflow — never release without changelog.
+    THEN trigger the KZKT Auto Release workflow — never release without changelog.
 
 ---
 
@@ -187,13 +188,15 @@ docker cp <CID>:/app/app/build/outputs/apk/release/app-arm64-v8a-release.apk .
 
 ## 6. GitHub Actions (what's already wired)
 
-- **`.github/workflows/android.yml`** — CI on every push / PR to `main`: builds via
-  the Dockerfile, runs unit tests, uploads the per-ABI debug APK artifacts. It
-  passes `-PciDebug=true`, so the debug APK has applicationId `com.kzkt.app.debug`
-  and installs alongside the release app instead of requiring an uninstall.
-- **`.github/workflows/kzkt.yml`** — **Auto Release** (manual dispatch): multi-job
-  matrix (prepare → build 5 ABI variants in parallel → create GitHub Release +
-  Telegram notification). Version comes from the workflow input or the git tag.
+- **`.github/workflows/kzkt-trigger-debug.yml`** — **KZKT Trigger Debug** (CI on
+  every push / PR to `main`): builds via the Dockerfile, runs unit tests, uploads
+  the per-ABI debug APK artifacts. It passes `-PciDebug=true`, so the debug APK
+  has applicationId `com.kzkt.app.debug` and installs alongside the release app
+  instead of requiring an uninstall.
+- **`.github/workflows/kzkt-auto-release.yml`** — **KZKT Auto Release** (manual
+  dispatch): multi-job matrix (prepare → build 5 ABI variants in parallel → create
+  GitHub Release + Telegram notification). Version comes from the workflow input
+  or the git tag.
   Uses `-PabiFilter` per job and `-PversionName` from the input. The release body
   is **extracted from `CHANGELOG.md`** (the `## [vX.Y.Z]` section for the version
   being released) — commit history is NOT used (`generate_release_notes` is off).
@@ -210,9 +213,9 @@ release`, and always pass `-PabiFilter` + `-PversionName` to Gradle.
    from the checked-out repo, so it must already be on the branch.
 3. **Trigger the release**:
    ```bash
-   gh workflow run kzkt.yml -f version=1.30.0
+   gh workflow run kzkt-auto-release.yml -f version=1.30.0
    ```
-   or via the GitHub UI: **Actions → Auto Release → Run workflow → version**.
+   or via the GitHub UI: **Actions → KZKT Auto Release → Run workflow → version**.
 4. **Verify after it finishes**: the release body starts with the changelog
    section (not commit history) and all 5 APKs + `sha256sums.txt` are attached.
 

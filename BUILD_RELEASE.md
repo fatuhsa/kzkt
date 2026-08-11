@@ -175,7 +175,7 @@ docker rm "$CID"
 | **Proguard** | Rules already cover ONNX Runtime, OpenCV, OkHttp, Gson, Room/WorkManager, ML Kit, and app model classes. |
 | **Versioning** | Bump `versionCode`/`versionName` in `app/build.gradle.kts` for every release. |
 | **Keystore** | NEVER commit `.jks` / `keystore.properties`. Back them up offline. |
-| **CI** | `.github/workflows/android.yml` builds via the same `Dockerfile`, runs unit tests, and uploads the debug APK as a workflow artifact. |
+| **CI** | `.github/workflows/kzkt-trigger-debug.yml` builds via the same `Dockerfile`, runs unit tests, and uploads the debug APK as a workflow artifact. |
 | **Model assets** | `app/src/main/assets/models/kzkt.dat` (YOLO) is required at runtime and must stay in the repo. |
 
 ---

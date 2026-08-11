@@ -104,7 +104,7 @@ KZKT is a native Android application for automatic manga and comic translation. 
 │       ├── assets/             # encrypted YOLO model (kzkt.dat) & fonts
 │       └── AndroidManifest.xml
 ├── opencv/                     # OpenCV 4.x Android SDK module (native JNI)
-├── .github/workflows/          # Android CI + Auto Release (per-ABI APKs)
+├── .github/workflows/          # KZKT Trigger Debug + KZKT Auto Release (per-ABI APKs)
 ├── build.gradle.kts
 ├── settings.gradle.kts
 ├── Dockerfile                  # self-contained Android build image (JDK 17 + SDK)
@@ -196,10 +196,11 @@ docker run --rm -v kzkt-gradle:/root/.gradle \
 
 Two workflows live in `.github/workflows/`:
 
-- **Android CI** (`android.yml`) — on every push / pull request to `main`, unit tests and
-  `assembleDebug` run inside the same Docker builder image, and the debug APKs are uploaded
-  as a downloadable artifact (`kzkt-app-debug`).
-- **Auto Release** (`kzkt.yml`) — builds **signed release APKs** for all four ABIs
+- **KZKT Trigger Debug** (`kzkt-trigger-debug.yml`) — on every push / pull request to
+  `main`, unit tests and `assembleDebug` run inside the same Docker builder image, and the
+  debug APKs are uploaded as a downloadable artifact (`kzkt-app-debug`). The debug APK uses
+  its own applicationId (`com.kzkt.app.debug`), so it installs alongside the release app.
+- **KZKT Auto Release** (`kzkt-auto-release.yml`) — builds **signed release APKs** for all four ABIs
   (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) plus a universal APK in parallel, then creates
   a GitHub Release named `KZKT vX.Y.Z` containing every APK and a `sha256sums.txt` file, and
   posts a Telegram notification. The release description is taken from the matching section
