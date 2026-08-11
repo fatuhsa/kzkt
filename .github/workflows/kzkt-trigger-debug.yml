@@ -49,12 +49,16 @@ jobs:
       # single APK — not one giant zip containing every variant. The universal
       # debug APK is deliberately skipped: unminified it is ~500 MB and debug
       # builds only target the developer's own device.
+      # Short retention bounds the artifact storage: every push adds ~550 MB of
+      # debug APKs, and with the default 90-day retention the account quota (500 MB
+      # free / 1 GB Pro / 10 GB Team / 50 GB Enterprise) would fill quickly.
       - name: Upload debug APK (arm64-v8a)
         uses: actions/upload-artifact@v5
         with:
           name: kzkt-app-debug-arm64-v8a
           path: app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
           if-no-files-found: error
+          retention-days: 7
 
       - name: Upload debug APK (armeabi-v7a)
         uses: actions/upload-artifact@v5
@@ -62,6 +66,7 @@ jobs:
           name: kzkt-app-debug-armeabi-v7a
           path: app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk
           if-no-files-found: error
+          retention-days: 7
 
       - name: Upload debug APK (x86)
         uses: actions/upload-artifact@v5
@@ -69,6 +74,7 @@ jobs:
           name: kzkt-app-debug-x86
           path: app/build/outputs/apk/debug/app-x86-debug.apk
           if-no-files-found: error
+          retention-days: 7
 
       - name: Upload debug APK (x86_64)
         uses: actions/upload-artifact@v5
@@ -76,6 +82,7 @@ jobs:
           name: kzkt-app-debug-x86_64
           path: app/build/outputs/apk/debug/app-x86_64-debug.apk
           if-no-files-found: error
+          retention-days: 7
 
       # Notify Telegram with one download link per ABI. Workflow artifacts have
       # no public URL on GitHub itself (login required), so each link points to
