@@ -198,10 +198,13 @@ docker cp <CID>:/app/app/build/outputs/apk/release/app-arm64-v8a-release.apk .
   the per-ABI debug APK artifacts. It passes `-PciDebug=true`, so the debug APK
   has applicationId `com.kzkt.app.debug` and installs alongside the release app
   instead of requiring an uninstall. Debug APKs are uploaded as ONE artifact per
-  ABI (`kzkt-app-debug-<abi>`, no universal build — it is ~500 MB unminified,
-  retention-days: 7 to bound artifact storage), and after the upload it posts one
-  nightly.link download link per ABI to Telegram when `TELEGRAM_BOT_TOKEN` /
-  `TELEGRAM_CHAT_ID` secrets are set.
+  ABI (`kzkt-app-debug-<abi>`, no universal build — it is ~500 MB unminified).
+  Before uploading, the workflow DELETES every artifact from previous runs whose
+  name starts with `kzkt-app-debug` (via the actions API, `actions: write`
+  permission), so only the latest build is ever stored and same-name re-uploads
+  never collide; `retention-days: 7` is kept as a backstop. After the upload it
+  posts one nightly.link download link per ABI to Telegram when
+  `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` secrets are set.
 - **`.github/workflows/kzkt-auto-release.yml`** — **KZKT Auto Release** (manual
   dispatch): multi-job matrix (prepare → build 5 ABI variants in parallel → create
   GitHub Release + Telegram notification). Version comes from the workflow input

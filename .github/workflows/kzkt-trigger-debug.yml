@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: ["main"]
 
+permissions:
+  contents: read
+  actions: write   # needed to delete stale debug artifacts via the API
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -44,6 +48,26 @@ jobs:
           # user — otherwise the actions/cache post-step can't read gradle-cache
           # (and to be safe, also fix app/build before artifact upload).
           sudo chown -R "$(id -u):$(id -g)" gradle-cache app/build
+
+      # Keep only the latest debug build: delete artifacts from every previous run
+      # (old single-zip kzkt-app-debug and stale per-ABI artifacts) so re-uploading
+      # the same artifact names never collides and storage stays bounded to one run.
+      # Placed AFTER the build so a failed build never destroys the previous good
+      # artifacts.
+      - name: Delete previous debug artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          IDS=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.name | startswith("kzkt-app-debug")) | .id')
+          if [ -z "$IDS" ]; then
+            echo "Tidak ada artifact debug lama."
+            exit 0
+          fi
+          for id in $IDS; do
+            echo "Menghapus artifact id=$id"
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/$id" || echo "Gagal hapus $id"
+          done
 
       # One artifact per ABI (like the release workflow) so each download is a
       # single APK — not one giant zip containing every variant. The universal
