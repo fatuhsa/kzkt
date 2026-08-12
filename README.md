@@ -10,7 +10,10 @@
     <a href="https://opencv.org/"><img src="https://img.shields.io/badge/OpenCV-v4.10.0-5C3EE8.svg?style=for-the-badge&logo=opencv&logoColor=white" alt="OpenCV"></a>
   </p>
 
-  <p><b>English</b> · <a href="README.id.md">Bahasa Indonesia</a></p>
+  <p>
+    <a href="README.md"><img src="https://img.shields.io/badge/EN-0078D4.svg?style=for-the-badge" alt="English"></a>
+    <a href="README.id.md"><img src="https://img.shields.io/badge/ID-6e7681.svg?style=for-the-badge" alt="Bahasa Indonesia"></a>
+  </p>
 </div>
 
 KZKT is a native Android application for automatic manga and comic translation. It detects speech bubbles on-page with on-device AI, sends the text to the LLM of your choice, and renders the translated text back into the page — all locally, with no root access required.
