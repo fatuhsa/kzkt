@@ -26,16 +26,19 @@ automatically with the debug keystore:
 ./gradlew assembleDebug
 ```
 
-Output:
+Output (per-ABI split — one APK per architecture):
 
 ```
-app/build/outputs/apk/debug/app-debug.apk
+app/build/outputs/apk/debug/app-<abi>-debug.apk   e.g. app-arm64-v8a-debug.apk
 ```
+
+plus a universal `app-universal-debug.apk`. Pick the ABI matching your device — most
+modern phones are `arm64-v8a`.
 
 Install on a connected device/emulator:
 
 ```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
 ```
 
 > The debug APK shares the debug-keystore signature with the release fallback
@@ -52,10 +55,20 @@ keystore (`~/.android/debug.keystore`):
 ./gradlew assembleRelease
 ```
 
-Output (already signed, R8-minified + resource-shrunk):
+Output — five APKs, one per ABI (already signed, R8-minified + resource-shrunk):
 
 ```
-app/build/outputs/apk/release/app-release.apk
+app/build/outputs/apk/release/app-arm64-v8a-release.apk      (arm64-v8a)
+app/build/outputs/apk/release/app-armeabi-v7a-release.apk    (armeabi-v7a)
+app/build/outputs/apk/release/app-x86-release.apk            (x86)
+app/build/outputs/apk/release/app-x86_64-release.apk         (x86_64)
+app/build/outputs/apk/release/app-universal-release.apk      (universal)
+```
+
+To build only the variant your device needs (faster, smaller):
+
+```bash
+./gradlew assembleRelease -PabiFilter=arm64-v8a
 ```
 
 > **Debug-signing must NOT be published** to the Play Store. Use it only for
@@ -110,7 +123,7 @@ keyPassword=your-key-password
 ```bash
 # Replace <BT> with your build-tools version, e.g. /home/username/Android/Sdk/build-tools/36.0.0
 <BT>/apksigner verify --verbose \
-  app/build/outputs/apk/release/app-release.apk
+  app/build/outputs/apk/release/app-arm64-v8a-release.apk
 ```
 
 Expected output:
@@ -127,7 +140,7 @@ Number of signers: 1
 ## 4. Install
 
 ```bash
-adb install -r app/build/outputs/apk/release/app-release.apk
+adb install -r app/build/outputs/apk/release/app-arm64-v8a-release.apk
 ```
 
 `-r` reinstalls/updates without wiping app data, as long as the signature matches.
@@ -150,8 +163,8 @@ CID=$(docker run -d -v kzkt-gradle:/root/.gradle \
       -v "$HOME/.android:/root/.android" \
       kzkt-builder ./gradlew assembleDebug assembleRelease)
 docker wait "$CID"
-docker cp "$CID:/app/app/build/outputs/apk/debug/app-debug.apk" .
-docker cp "$CID:/app/app/build/outputs/apk/release/app-release.apk" .
+docker cp "$CID:/app/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk" .
+docker cp "$CID:/app/app/build/outputs/apk/release/app-arm64-v8a-release.apk" .
 docker rm "$CID"
 ```
 

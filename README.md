@@ -50,7 +50,7 @@ KZKT is a native Android application for automatic manga and comic translation. 
 | Layer | Technologies |
 | :--- | :--- |
 | Language & Core | Kotlin 2.4, Java 17, AGP 9.3 |
-| UI | Jetpack Compose (BOM 2026.01.01), Material 3 1.5.0-alpha25, MaterialKolor (dynamic Material You theming), Navigation Compose 2.8.5, Coil 2.7 |
+| UI | Jetpack Compose (BOM 2026.01.01), Material 3 1.5.0-alpha25, MaterialKolor (dynamic Material You theming), Navigation Compose 2.9.8, Coil 2.7 |
 | Concurrency & State | Coroutines 1.9, Flow, ViewModel, DataStore Preferences 1.1.2 |
 | Machine Learning | ONNX Runtime 1.29 (YOLO), ML Kit Text Recognition 16.0.1 (Latin + Japanese) |
 | Computer Vision | OpenCV 4.10.0 Android SDK (`libopencv_java4.so` C++ JNI) |
