@@ -219,10 +219,7 @@ Ada dua workflow di `.github/workflows/`:
 
 KZKT bisa terwujud berkat karya banyak proyek dan komunitas open source:
 
-- CYPY oleh [indravoyager](https://github.com/indravoyager) sebagai framework dasar.
-- OpenCV, ONNX Runtime, dan Google ML Kit untuk visi dan OCR on-device.
-- Jetpack Compose dan Material 3 untuk toolkit UI.
-- Tulis ulang Android native dan pengembangan oleh kouzen-neo.
+- CYPY oleh [indravoyager](https://github.com/indravoyager/cypy) sebagai framework dasar.
 - Penerjemah, penguji beta, dan kontributor yang mendukung proyek ini.
 
 ---

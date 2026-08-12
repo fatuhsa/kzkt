@@ -219,10 +219,7 @@ Two workflows live in `.github/workflows/`:
 
 KZKT is made possible by the work of many open-source projects and communities:
 
-- CYPY by [indravoyager](https://github.com/indravoyager) for the base framework.
-- OpenCV, ONNX Runtime, and Google ML Kit for on-device vision and OCR.
-- Jetpack Compose and Material 3 for the UI toolkit.
-- Native Android rewrite and development by kouzen-neo.
+- CYPY by [indravoyager](https://github.com/indravoyager/cypy) for the base framework.
 - Translators, beta testers, and contributors who support the project.
 
 ---
