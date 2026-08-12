@@ -126,9 +126,10 @@ The CI lets you bump the version from the command line without touching
 ```
 
 - `versionName=1.25.2` → `versionCode` derived automatically (`1.25.2` →
-  `12502000`, always higher than previous releases).
+  `12502000`; 4-segment names like `1.25.1.23` → `12501023`, always higher
+  than previous releases).
 - Optional: `-PversionCode=12345` to override manually.
-- No flags → defaults `versionName=1.25.1.22`, `versionCode=1250122`.
+- No flags → defaults `versionName=1.35.0`, `versionCode=13500000` (derived).
 
 **Always prefer `-PversionName` for a new release** so the APK is installable as an
 update over the previous version.

@@ -55,20 +55,25 @@ android {
         minSdk = 26
         targetSdk = 36
         // ── Version bump otomatis ────────────────────────────────────
-        // CI dapat meng-Override dengan -PversionName=1.25.2 (dikirim dari
+        // CI dapat meng-Override dengan -PversionName=1.35.0 (dikirim dari
         // workflow_dispatch input). versionCode diturunkan otomatis dari
-        // nama versi (1.25.2 → 12502000) sehingga selalu naik per rilis.
-        // Tanpa flag: pakai nilai default di bawah.
+        // nama versi sehingga selalu naik per rilis.
+        // Tanpa flag: pakai default = versi rilis terakhir (1.35.0).
         val ciVersionName = (project.findProperty("versionName") as String?)?.takeIf { it.isNotBlank() }
         val ciVersionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull()
-        // Turunkan versionCode dari nama versi, skema x.y.z → major*10^7 + minor*10^5 + patch*10^3
-        // (1.25.2 → 12502000, 1.25.10 → 12510000) — selalu naik per rilis dan jauh di atas
-        // versionCode lama (1250122) sehingga update tetap bisa diinstall.
-        val derivedCode = ciVersionName?.split('.')?.take(3)?.mapIndexed { i, s ->
-            (s.toIntOrNull() ?: 0) * listOf(10_000_000, 100_000, 1_000)[i]
-        }?.sum()
-        versionCode = ciVersionCode ?: derivedCode ?: 1250122
-        versionName = ciVersionName ?: "1.25.1.22"
+        // Turunkan versionCode dari nama versi, skema x.y.z.w →
+        // major*10^7 + minor*10^5 + patch*10^3 + build*1
+        // (1.25.2 → 12502000, 1.25.1.22 → 12501022, 1.35.0 → 13500000).
+        // Segment ke-4 (build) ikut dihitung: tanpa itu, 1.25.1.22 dan
+        // 1.25.1.23 menghasilkan versionCode yang sama → update ditolak Android.
+        // Batas aman: build < 1000 dan patch < 100 (di luar itu bentrok dengan
+        // increment segmen berikutnya — tidak realistis untuk versi aplikasi ini).
+        val effectiveVersionName = ciVersionName ?: "1.35.0"
+        val derivedCode = effectiveVersionName.split('.').take(4).mapIndexed { i, s ->
+            (s.toIntOrNull() ?: 0) * listOf(10_000_000, 100_000, 1_000, 1)[i]
+        }.sum()
+        versionCode = ciVersionCode ?: derivedCode
+        versionName = effectiveVersionName
 
         ndk {
             // AGP melarang ndk.abiFilters di-set bersamaan dengan splits.abi.
