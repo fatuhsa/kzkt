@@ -1253,7 +1253,7 @@ private fun ModelDropdownInput(
             },
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryEditable),
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
             singleLine = true,
             textStyle = MaterialTheme.typography.bodySmall,
         )

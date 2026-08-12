@@ -57,7 +57,7 @@ android {
         // ── Version bump otomatis ────────────────────────────────────
         // CI dapat meng-Override dengan -PversionName=1.25.2 (dikirim dari
         // workflow_dispatch input). versionCode diturunkan otomatis dari
-        // nama versi (1.25.2 → 1250020) sehingga selalu naik per rilis.
+        // nama versi (1.25.2 → 12502000) sehingga selalu naik per rilis.
         // Tanpa flag: pakai nilai default di bawah.
         val ciVersionName = (project.findProperty("versionName") as String?)?.takeIf { it.isNotBlank() }
         val ciVersionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull()
@@ -172,8 +172,8 @@ dependencies {
     implementation("androidx.palette:palette-ktx:1.0.0")
 
     // Activity + Navigation
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.navigation:navigation-compose:2.8.5")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.navigation:navigation-compose:2.9.8")
 
     // Lifecycle + ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
@@ -183,7 +183,7 @@ dependencies {
     implementation(project(":opencv"))
 
     // ONNX Runtime (includes NNAPI support)
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.21.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.29.0")
 
     // HTTP + JSON
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -196,7 +196,7 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.2")
 
     // WorkManager
-    implementation("androidx.work:work-runtime-ktx:2.10.0")
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
 
     // Coil (image loading)
     implementation("io.coil-kt:coil-compose:2.7.0")

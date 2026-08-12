@@ -116,8 +116,12 @@ android {
     // The OpenCV 4.x Java sources trip Android's BidirectionalTextDetector lint
     // (NoSuchMethodError during lint analysis), which otherwise breaks `lint` for
     // the whole project. This module is vendored upstream code — skip that check.
+    // MissingPermission: the bundled camera classes (JavaCamera2View, Camera2Renderer)
+    // call CameraManager.openCamera without CAMERA, but the app never uses them — they
+    // are vendored upstream code that would otherwise fail every `lint` run.
     lint {
         disable += "BidiSpoofing"
+        disable += "MissingPermission"
     }
 
     sourceSets {

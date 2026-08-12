@@ -59,7 +59,7 @@ class TranslationWorker(
                     // Still too big — surface a clear error instead of silently truncating.
                     TranslationProgressTracker.progressFlow.tryEmit(
                         TranslationProgressTracker.ProgressEvent.Error(
-                            "Batch terlalu besar untuk diproses sekaligus. Pilih lebih sedikit file dan coba lagi."
+                            "The batch is too large to process at once. Select fewer files and try again."
                         )
                     )
                     return
@@ -551,7 +551,7 @@ class TranslationWorker(
 
         builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Translating komik...")
+            .setContentTitle("Translating manga...")
             .setContentText("Initializing...")
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)

@@ -6,7 +6,7 @@
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge&logo=open-source-initiative&logoColor=white" alt="License: MIT"></a>
     <a href="https://kotlinlang.org/"><img src="https://img.shields.io/badge/Kotlin-2.0+-7F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin"></a>
     <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-API%2026%2B-3DDC84.svg?style=for-the-badge&logo=android&logoColor=white" alt="Android SDK"></a>
-    <a href="https://onnxruntime.ai/"><img src="https://img.shields.io/badge/ONNX_Runtime-v1.21-0078D4.svg?style=for-the-badge&logo=onnx&logoColor=white" alt="ONNX Runtime"></a>
+    <a href="https://onnxruntime.ai/"><img src="https://img.shields.io/badge/ONNX_Runtime-v1.29-0078D4.svg?style=for-the-badge&logo=onnx&logoColor=white" alt="ONNX Runtime"></a>
     <a href="https://opencv.org/"><img src="https://img.shields.io/badge/OpenCV-v4.10.0-5C3EE8.svg?style=for-the-badge&logo=opencv&logoColor=white" alt="OpenCV"></a>
   </p>
 
@@ -52,10 +52,10 @@ KZKT is a native Android application for automatic manga and comic translation. 
 | Language & Core | Kotlin 2.4, Java 17, AGP 9.3 |
 | UI | Jetpack Compose (BOM 2026.01.01), Material 3 1.5.0-alpha25, MaterialKolor (dynamic Material You theming), Navigation Compose 2.8.5, Coil 2.7 |
 | Concurrency & State | Coroutines 1.9, Flow, ViewModel, DataStore Preferences 1.1.2 |
-| Machine Learning | ONNX Runtime 1.21 (YOLO), ML Kit Text Recognition 16.0.1 (Latin + Japanese) |
+| Machine Learning | ONNX Runtime 1.29 (YOLO), ML Kit Text Recognition 16.0.1 (Latin + Japanese) |
 | Computer Vision | OpenCV 4.10.0 Android SDK (`libopencv_java4.so` C++ JNI) |
 | Networking & JSON | OkHttp 4.12, Gson 2.11 |
-| Persistence & Background | DataStore Preferences, WorkManager 2.10, MediaStore |
+| Persistence & Background | DataStore Preferences, WorkManager 2.11, MediaStore |
 | Target API | `minSdk = 26` (Android 8.0), `compileSdk = 37`, `targetSdk = 36` |
 
 ---

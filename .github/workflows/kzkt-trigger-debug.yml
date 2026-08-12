@@ -61,12 +61,12 @@ jobs:
           IDS=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
             --jq '.artifacts[] | select(.name | startswith("kzkt-app-debug")) | .id')
           if [ -z "$IDS" ]; then
-            echo "Tidak ada artifact debug lama."
+            echo "No old debug artifacts to delete."
             exit 0
           fi
           for id in $IDS; do
-            echo "Menghapus artifact id=$id"
-            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/$id" || echo "Gagal hapus $id"
+            echo "Deleting artifact id=$id"
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/$id" || echo "Failed to delete $id"
           done
 
       # One artifact per ABI (like the release workflow) so each download is a
@@ -118,14 +118,14 @@ jobs:
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           if [ -z "$TG_BOT" ] || [ -z "$TG_CHAT" ]; then
-            echo "Telegram secrets belum diisi — lewati."
+            echo "Telegram secrets not set — skipping."
             exit 0
           fi
           BASE="https://nightly.link/${GITHUB_REPOSITORY}/workflows/kzkt-trigger-debug.yml/${GITHUB_RUN_ID}"
           RUN_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          # printf menerjemahkan \n jadi baris baru sungguhan (bukan teks literal)
-          MSG=$(printf 'KZKT Debug build selesai!\n\nDownload per ABI (tanpa login, via nightly.link):\n- arm64-v8a: %s/kzkt-app-debug-arm64-v8a.zip\n- armeabi-v7a: %s/kzkt-app-debug-armeabi-v7a.zip\n- x86: %s/kzkt-app-debug-x86.zip\n- x86_64: %s/kzkt-app-debug-x86_64.zip\n\nPilih arm64-v8a untuk HP modern (POCO F5).\nAlternatif (perlu login GitHub): %s' "$BASE" "$BASE" "$BASE" "$BASE" "$RUN_URL")
+          # printf turns \n into real newlines (not literal text)
+          MSG=$(printf 'KZKT Debug build finished!\n\nDownload per ABI (no login, via nightly.link):\n- arm64-v8a: %s/kzkt-app-debug-arm64-v8a.zip\n- armeabi-v7a: %s/kzkt-app-debug-armeabi-v7a.zip\n- x86: %s/kzkt-app-debug-x86.zip\n- x86_64: %s/kzkt-app-debug-x86_64.zip\n\nPick arm64-v8a for modern phones (POCO F5).\nAlternative (requires GitHub login): %s' "$BASE" "$BASE" "$BASE" "$BASE" "$RUN_URL")
           curl -s -F "chat_id=$TG_CHAT" \
             -F "text=$MSG" \
             "https://api.telegram.org/bot$TG_BOT/sendMessage" \
-            | grep -q '"ok":true' && echo "Notifikasi terkirim ke Telegram" || echo "Gagal kirim ke Telegram"
+            | grep -q '"ok":true' && echo "Telegram notification sent" || echo "Failed to send Telegram notification"
