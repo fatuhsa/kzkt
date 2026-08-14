@@ -1,4 +1,4 @@
-import com.kzkt.build.Versioning
+import com.kzkt.buildsrc.Versioning
 import java.util.Properties
 
 plugins {
