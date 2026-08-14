@@ -1,3 +1,4 @@
+import com.kzkt.build.Versioning
 import java.util.Properties
 
 plugins {
@@ -69,10 +70,7 @@ android {
         // Batas aman: build < 1000 dan patch < 100 (di luar itu bentrok dengan
         // increment segmen berikutnya — tidak realistis untuk versi aplikasi ini).
         val effectiveVersionName = ciVersionName ?: "1.35.0"
-        val derivedCode = effectiveVersionName.split('.').take(4).mapIndexed { i, s ->
-            (s.toIntOrNull() ?: 0) * listOf(10_000_000, 100_000, 1_000, 1)[i]
-        }.sum()
-        versionCode = ciVersionCode ?: derivedCode
+        versionCode = ciVersionCode ?: Versioning.deriveVersionCode(effectiveVersionName)
         versionName = effectiveVersionName
 
         ndk {

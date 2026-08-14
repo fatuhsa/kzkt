@@ -2,9 +2,15 @@ package com.kzkt.app
 
 import android.app.Application
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.opencv.android.OpenCVLoader
 
 class KzktApplication : Application() {
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -22,6 +28,17 @@ class KzktApplication : Application() {
             Log.d("KZKT", "OpenCV JNI initialized via initLocal()")
         } else {
             Log.e("KZKT", "OpenCV initLocal() returned false")
+        }
+
+        // 3. One-time migration: encrypt legacy plaintext API keys (idempotent).
+        appScope.launch {
+            try {
+                com.kzkt.app.data
+                    .SettingsRepository(this@KzktApplication)
+                    .migrateLegacyApiKeys()
+            } catch (e: Exception) {
+                Log.e("KZKT", "API key migration failed: ${e.message}")
+            }
         }
     }
 

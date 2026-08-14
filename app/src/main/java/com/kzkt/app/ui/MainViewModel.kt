@@ -10,8 +10,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.kzkt.app.core.Config
+import com.kzkt.app.core.PipelineResult
 import com.kzkt.app.core.TextRenderer
-import com.kzkt.app.core.TranslationPipeline
 import com.kzkt.app.core.YoloOnnx
 import com.kzkt.app.data.HistoryEntry
 import com.kzkt.app.data.HistoryRepository
@@ -52,7 +52,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Result
     val resultPaths = mutableStateListOf<String>()
     val currentPreviewPath = mutableStateOf<String?>(null)
-    val lastResultForEditing = mutableStateOf<TranslationPipeline.PipelineResult?>(null)
+    val lastResultForEditing = mutableStateOf<PipelineResult?>(null)
     val showInteractiveEditor = mutableStateOf(false)
 
     // YOLO model state
@@ -202,7 +202,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             currentPreviewPath.value = result.path
                         }
                         if (editMeta != null && latestResult != null) {
-                            lastResultForEditing.value = TranslationPipeline.PipelineResult(
+                            lastResultForEditing.value = PipelineResult(
                                 outputPath = latestResult.path,
                                 originalBitmap = editMeta.originalBitmap,
                                 translations = editMeta.translations,

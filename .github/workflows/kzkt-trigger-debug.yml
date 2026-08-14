@@ -34,16 +34,18 @@ jobs:
 
       # Same commands as local Docker builds; app/build is bind-mounted so the
       # APK lands in the runner workspace for upload.
-      - name: Unit tests + Debug APK (Docker)
+      - name: ktlint + Unit tests + Debug APK (Docker)
         run: |
           mkdir -p gradle-cache
           # -PciDebug=true gives the debug APK its own applicationId (com.kzkt.app.debug,
           # label "KZKT Debug") so it installs alongside the release app without
           # conflicts — see the debug buildType in app/build.gradle.kts.
+          # ktlint gates NEW style violations only (pre-existing ones are suppressed
+          # by config/ktlint-baseline.xml, see the root build.gradle.kts).
           docker run --rm \
             -v "$PWD/gradle-cache:/root/.gradle" \
             -v "$PWD/app/build:/app/app/build" \
-            kzkt-builder ./gradlew testDebugUnitTest assembleDebug -PciDebug=true
+            kzkt-builder ./gradlew ktlint testDebugUnitTest assembleDebug -PciDebug=true
           # The container writes as root, so hand ownership back to the runner
           # user — otherwise the actions/cache post-step can't read gradle-cache
           # (and to be safe, also fix app/build before artifact upload).

@@ -77,38 +77,57 @@ object Config {
     )
 
     // ── Tweakable Parameters ───────────────────────────────────────
+    /**
+     * Tweakable parameters, grouped by subsystem so each pipeline component only
+     * reads the knobs that affect it.
+     */
     data class TweakParams(
-        var maxBubblesPerRequest: Int = 30,
-        var minRequestDelay: Double = 2.0,
-        var filterSfxMode: String = "balanced",  // balanced | relaxed | strict
-        var padXRatio: Double = 0.40,
-        var padYRatio: Double = 0.25,
-        var minPad: Int = 35,
-        var skalaPotonganMosaik: Double = 2.0,
-        var maxTinggiMosaik: Int = 6000,
-        var overlapBatasCrop: Double = 0.35,
-        var maskAreaLuarBox: Boolean = true,
-        var maskMargin: Int = 18,
-        var maskMarginRatio: Double = 0.12,
-        var marginKiriNomor: Int = 55,
-        var marginKanan: Int = 10,
-        var jarakAntarPotongan: Int = 10,
-        var lebarMosaikMin: Int = 360,
-        var filterSfxAktif: Boolean = true,
-        var pakaiPatchUntukBoxGepeng: Boolean = true,
-        var rasioBoxGepeng: Double = 2.4,
-        var lebarBoxGepengRatio: Double = 0.45,
-        var tinggiBoxGepengRatio: Double = 0.22,
-        var useInpainting: Boolean = false,
-        var customFontPath: String = "",
-        var useLocalOcr: Boolean = false,
-        var enableDevLogs: Boolean = false,
-        var useImageUpscaler: Boolean = false,
-        var translateSfx: Boolean = false,
-        var renderTextColor: String = "auto",
-        var renderFontScale: Double = 1.0,
-        var jpegQuality: Int = 92,
-    )
+        /** Bubble detection + mosaic assembly knobs. */
+        val detection: DetectionParams = DetectionParams(),
+        /** Translated-text rendering + output encoding knobs. */
+        val render: RenderParams = RenderParams(),
+        /** Processing toggles + rate/batch limits. */
+        val engine: EngineParams = EngineParams(),
+    ) {
+        data class DetectionParams(
+            var filterSfxMode: String = "balanced",  // balanced | relaxed | strict
+            var padXRatio: Double = 0.40,
+            var padYRatio: Double = 0.25,
+            var minPad: Int = 35,
+            var skalaPotonganMosaik: Double = 2.0,
+            var maxTinggiMosaik: Int = 6000,
+            var overlapBatasCrop: Double = 0.35,
+            var maskAreaLuarBox: Boolean = true,
+            var maskMargin: Int = 18,
+            var maskMarginRatio: Double = 0.12,
+            var marginKiriNomor: Int = 55,
+            var marginKanan: Int = 10,
+            var jarakAntarPotongan: Int = 10,
+            var lebarMosaikMin: Int = 360,
+            var filterSfxAktif: Boolean = true,
+            var pakaiPatchUntukBoxGepeng: Boolean = true,
+            var rasioBoxGepeng: Double = 2.4,
+            var lebarBoxGepengRatio: Double = 0.45,
+            var tinggiBoxGepengRatio: Double = 0.22,
+        )
+
+        data class RenderParams(
+            var useInpainting: Boolean = false,
+            var customFontPath: String = "",
+            var renderTextColor: String = "auto",
+            var renderFontScale: Double = 1.0,
+            var jpegQuality: Int = 92,
+        )
+
+        data class EngineParams(
+            var maxBubblesPerRequest: Int = 30,
+            var minRequestDelay: Double = 2.0,
+            var useLocalOcr: Boolean = false,
+            var enableDevLogs: Boolean = false,
+            var useImageUpscaler: Boolean = false,
+            var translateSfx: Boolean = false,
+        )
+    }
 
     fun getLangCode(targetLanguage: String): String {
         val lang = targetLanguage.lowercase().trim()

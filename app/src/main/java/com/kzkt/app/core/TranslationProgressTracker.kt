@@ -9,7 +9,7 @@ object TranslationProgressTracker {
     var isCancelled: Boolean = false
 
     @Volatile
-    var cachedPageData: List<com.kzkt.app.core.TranslationPipeline.PageData>? = null
+    var cachedPageData: List<PageData>? = null
 
     fun clearCache() {
         cachedPageData?.forEach { page ->
