@@ -5,7 +5,6 @@ package com.kzkt.buildsrc
  * See AGENTS.md rule 3: versionCode must always increase per release.
  */
 object Versioning {
-
     /** Per-segment weights: major*10^7 + minor*10^5 + patch*10^3 + build*1. */
     private val SEGMENT_WEIGHTS = listOf(10_000_000, 100_000, 1_000, 1)
 
@@ -19,7 +18,10 @@ object Versioning {
      * segments would overlap (not realistic for this app's versioning).
      */
     fun deriveVersionCode(versionName: String): Int =
-        versionName.split('.').take(4).mapIndexed { i, s ->
-            (s.toIntOrNull() ?: 0) * SEGMENT_WEIGHTS[i]
-        }.sum()
+        versionName
+            .split('.')
+            .take(4)
+            .mapIndexed { i, s ->
+                (s.toIntOrNull() ?: 0) * SEGMENT_WEIGHTS[i]
+            }.sum()
 }

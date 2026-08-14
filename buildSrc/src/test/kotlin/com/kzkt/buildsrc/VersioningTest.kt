@@ -5,7 +5,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VersioningTest {
-
     @Test
     fun `three segment versions map to derived codes`() {
         assertEquals(13500000, Versioning.deriveVersionCode("1.35.0"))
@@ -21,8 +20,9 @@ class VersioningTest {
 
     @Test
     fun `versionCode is strictly increasing across sequential releases`() {
-        val codes = listOf("1.34.0", "1.35.0", "1.35.1", "1.36.0")
-            .map { Versioning.deriveVersionCode(it) }
+        val codes =
+            listOf("1.34.0", "1.35.0", "1.35.1", "1.36.0")
+                .map { Versioning.deriveVersionCode(it) }
         assertEquals(codes, codes.sorted())
         assertEquals(codes.toSet().size, codes.size)
     }
