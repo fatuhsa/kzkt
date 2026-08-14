@@ -33,6 +33,9 @@ abstract class OpenAICompatProvider(
     /** Optional `max_tokens` for text-only requests (null = omit, e.g. OpenRouter). */
     protected open val textMaxTokens: Int? = 4096
 
+    /** HTTP client used for requests — overridable (e.g. Custom provider's own timeout). */
+    protected open val httpClient: OkHttpClient get() = sharedClient
+
     protected val gson = Gson()
 
     companion object {
@@ -99,7 +102,7 @@ abstract class OpenAICompatProvider(
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 // use{} closes the response so the pooled connection is released promptly.
-                sharedClient.newCall(request).execute().use { response ->
+                httpClient.newCall(request).execute().use { response ->
                     val body = response.body?.string() ?: ""
 
                     if (response.code in listOf(401, 402)) throw ValueError("API_KEY_ERROR")

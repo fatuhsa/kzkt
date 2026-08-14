@@ -1,30 +1,33 @@
 package com.kzkt.app.core.providers
 
 import android.graphics.Bitmap
-import com.kzkt.app.core.ImageProcessor
-import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.google.gson.stream.JsonReader
-import okhttp3.*
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ConnectionPool
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.StringReader
 import java.util.concurrent.TimeUnit
 
 /**
  * Custom OpenAI-compatible provider with configurable base URL.
- * Ported from the original Python custom provider
+ * Extends [OpenAICompatProvider] to reuse the shared payload / endpoint / auth
+ * handling; only the response parsing is overridden to be lenient so it also
+ * accepts Ollama / LM Studio / direct formats (choices[0].text, top-level
+ * `response`, or top-level `message.content` without a `choices` array).
  */
 class CustomProvider(
-    override val apiKey: String,
-    override val modelName: String,
-    var baseUrl: String = "",
-    val timeoutSec: Int = 30,
-) : LlmProvider {
+    apiKey: String,
+    modelName: String,
+    baseUrl: String = "",
+    timeoutSec: Int = 30,
+) : OpenAICompatProvider(apiKey, modelName, baseUrl) {
 
     override val providerName: String = "Custom"
+    override val defaultEndpoint: String = "https://api.openai.com/v1/chat/completions"
+    override val textMaxTokens: Int? = null
 
-    private val client = OkHttpClient.Builder()
+    override val httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
         .readTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
         .writeTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
@@ -32,133 +35,18 @@ class CustomProvider(
         .retryOnConnectionFailure(true)
         .build()
 
-    private val gson = Gson()
-
-    private fun buildEndpoint(): String {
-        if (baseUrl.isBlank()) return "https://api.openai.com/v1/chat/completions"
-        var normalized = baseUrl.trimEnd('/')
-        if (normalized.endsWith("/chat/completions")) {
-            normalized = normalized.removeSuffix("/chat/completions").trimEnd('/')
-        }
-        return if (normalized.endsWith("/v1")) {
-            "$normalized/chat/completions"
-        } else {
-            "$normalized/v1/chat/completions"
-        }
-    }
-
     override suspend fun translateImage(image: Bitmap, prompt: String): String? {
-        if (baseUrl.isBlank()) {
+        if (customUrl.isBlank()) {
             throw RuntimeException("Custom provider base URL is not configured.")
         }
-
-        val dataUri = ImageProcessor.bitmapToBase64DataUri(image)
-        val endpoint = buildEndpoint()
-
-        val headers = mutableMapOf("Content-Type" to "application/json")
-        if (apiKey.isNotBlank()) headers["Authorization"] = "Bearer $apiKey"
-
-        val payload = mapOf(
-            "model" to modelName,
-            "messages" to listOf(mapOf(
-                "role" to "user",
-                "content" to listOf(
-                    mapOf("type" to "image_url", "image_url" to mapOf("url" to dataUri)),
-                    mapOf("type" to "text", "text" to prompt)
-                )
-            ))
-        )
-
-        val request = Request.Builder()
-            .url(endpoint)
-            .apply { headers.forEach { (k, v) -> addHeader(k, v) } }
-            .post(gson.toJson(payload).toRequestBody("application/json".toMediaTypeOrNull()))
-            .build()
-
-        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                // use{} closes the response so the pooled connection is released promptly.
-                client.newCall(request).execute().use { response ->
-                    val body = response.body?.string() ?: ""
-
-                    if (response.code in listOf(401, 402)) throw ValueError("API_KEY_ERROR")
-                    if (!response.isSuccessful) {
-                        throw RuntimeException("Custom API error ${response.code}: ${body.take(200)}")
-                    }
-
-                    val lenientReader = JsonReader(StringReader(body)).apply { isLenient = true }
-                    val json = JsonParser.parseReader(lenientReader)
-
-                    if (!json.isJsonObject) {
-                        return@withContext body
-                    }
-                    val jsonObj = json.asJsonObject
-
-                // 1. Standard OpenAI format: choices[0].message.content
-                if (jsonObj.has("choices") && jsonObj.get("choices").isJsonArray) {
-                    val choices = jsonObj.getAsJsonArray("choices")
-                    if (choices.size() > 0 && choices[0].isJsonObject) {
-                        val choiceObj = choices[0].asJsonObject
-                        if (choiceObj.has("message") && choiceObj.get("message").isJsonObject) {
-                            val msgObj = choiceObj.getAsJsonObject("message")
-                            if (msgObj.has("content") && !msgObj.get("content").isJsonNull) {
-                                val contentElem = msgObj.get("content")
-                                if (contentElem.isJsonPrimitive) return@withContext contentElem.asString
-                                if (contentElem.isJsonArray) {
-                                    return@withContext contentElem.asJsonArray
-                                        .filter { it.isJsonObject && it.asJsonObject.has("text") }
-                                        .joinToString("\n") { it.asJsonObject.get("text").asString }
-                                }
-                            }
-                        } else if (choiceObj.has("text") && !choiceObj.get("text").isJsonNull) {
-                            return@withContext choiceObj.get("text").asString
-                        }
-                    }
-                }
-
-                // 2. Ollama / Direct response format
-                if (jsonObj.has("response") && !jsonObj.get("response").isJsonNull) {
-                    return@withContext jsonObj.get("response").asString
-                }
-                if (jsonObj.has("message") && jsonObj.get("message").isJsonObject) {
-                    val msg = jsonObj.getAsJsonObject("message")
-                    if (msg.has("content") && !msg.get("content").isJsonNull) {
-                        return@withContext msg.get("content").asString
-                    }
-                }
-
-                body
-                }
-            } catch (e: java.io.IOException) {
-                throw RuntimeException("Custom network error: ${e.message}")
-            }
-        }
+        return super.translateImage(image, prompt)
     }
 
-
-    override suspend fun translateText(textJson: String, prompt: String): String? {
-        val endpoint = buildEndpoint()
-
-        val headers = mutableMapOf("Content-Type" to "application/json")
-        if (apiKey.isNotBlank()) headers["Authorization"] = "Bearer $apiKey"
-
-        val payload = mapOf(
-            "model" to modelName,
-            "messages" to listOf(
-                mapOf("role" to "user", "content" to prompt)
-            )
-        )
-
-        val request = Request.Builder()
-            .url(endpoint)
-            .apply { headers.forEach { (k, v) -> addHeader(k, v) } }
-            .post(gson.toJson(payload).toRequestBody("application/json".toMediaTypeOrNull()))
-            .build()
-
+    override suspend fun executeRequest(request: Request): String? {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 // use{} closes the response so the pooled connection is released promptly.
-                client.newCall(request).execute().use { response ->
+                httpClient.newCall(request).execute().use { response ->
                     val body = response.body?.string() ?: ""
 
                     if (response.code in listOf(401, 402)) throw ValueError("API_KEY_ERROR")
@@ -172,14 +60,41 @@ class CustomProvider(
                     if (!json.isJsonObject) return@withContext body
                     val jsonObj = json.asJsonObject
 
-                if (jsonObj.has("choices") && jsonObj.getAsJsonArray("choices").size() > 0) {
-                    val choice = jsonObj.getAsJsonArray("choices")[0].asJsonObject
-                    if (choice.has("message") && choice.getAsJsonObject("message").has("content")) {
-                        val contentElem = choice.getAsJsonObject("message").get("content")
-                        if (contentElem.isJsonPrimitive) return@withContext contentElem.asString
+                    // 1. Standard OpenAI format: choices[0].message.content (string or parts array)
+                    if (jsonObj.has("choices") && jsonObj.get("choices").isJsonArray) {
+                        val choices = jsonObj.getAsJsonArray("choices")
+                        if (choices.size() > 0 && choices[0].isJsonObject) {
+                            val choiceObj = choices[0].asJsonObject
+                            if (choiceObj.has("message") && choiceObj.get("message").isJsonObject) {
+                                val msgObj = choiceObj.getAsJsonObject("message")
+                                if (msgObj.has("content") && !msgObj.get("content").isJsonNull) {
+                                    val contentElem = msgObj.get("content")
+                                    if (contentElem.isJsonPrimitive) return@withContext contentElem.asString
+                                    if (contentElem.isJsonArray) {
+                                        return@withContext contentElem.asJsonArray
+                                            .filter { it.isJsonObject && it.asJsonObject.has("text") }
+                                            .joinToString("\n") { it.asJsonObject.get("text").asString }
+                                    }
+                                }
+                            } else if (choiceObj.has("text") && !choiceObj.get("text").isJsonNull) {
+                                // 1b. OpenAI completions format: choices[0].text
+                                return@withContext choiceObj.get("text").asString
+                            }
+                        }
                     }
-                }
-                body
+
+                    // 2. Ollama / direct response format
+                    if (jsonObj.has("response") && !jsonObj.get("response").isJsonNull) {
+                        return@withContext jsonObj.get("response").asString
+                    }
+                    if (jsonObj.has("message") && jsonObj.get("message").isJsonObject) {
+                        val msg = jsonObj.getAsJsonObject("message")
+                        if (msg.has("content") && !msg.get("content").isJsonNull) {
+                            return@withContext msg.get("content").asString
+                        }
+                    }
+
+                    body
                 }
             } catch (e: java.io.IOException) {
                 throw RuntimeException("Custom network error: ${e.message}")

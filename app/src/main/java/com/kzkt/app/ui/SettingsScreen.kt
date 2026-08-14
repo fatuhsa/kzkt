@@ -2,67 +2,49 @@
 
 package com.kzkt.app.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.outlined.BrightnessLow
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.GppGood
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.ModelTraining
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.kzkt.app.core.Config
+import com.kzkt.app.ui.component.AccentColorRow
+import com.kzkt.app.ui.component.ActiveProviderConfigCard
 import com.kzkt.app.ui.component.ChipsRow
 import com.kzkt.app.ui.component.Material3SettingsGroup
 import com.kzkt.app.ui.component.Material3SettingsItem
+import com.kzkt.app.ui.component.SettingsIcon
+import com.kzkt.app.ui.component.SfxFilterSection
+import com.kzkt.app.ui.component.TweakParamsSection
 import com.kzkt.app.ui.theme.DefaultThemeColor
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material.icons.outlined.TextFields
-import androidx.compose.material.icons.outlined.AutoFixHigh
-
-// Seed-color presets for the accent picker (Material You keeps the default crimson).
-private val ACCENT_PRESETS = listOf(
-    DefaultThemeColor,
-    Color(0xFF6D5DF6),
-    Color(0xFF00897B),
-    Color(0xFF2E7D32),
-    Color(0xFF1565C0),
-    Color(0xFFF9A825),
-)
 
 @Composable
 fun SettingsScreen(
@@ -146,11 +128,11 @@ fun SettingsScreen(
                         if (idx != -1) originalName = cursor.getString(idx)
                     }
                 }
-                
+
                 val fontsDir = java.io.File(context.filesDir, "custom_fonts")
                 fontsDir.mkdirs()
                 val destFile = java.io.File(fontsDir, originalName)
-                
+
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     destFile.outputStream().use { output -> input.copyTo(output) }
                 }
@@ -234,8 +216,6 @@ fun SettingsScreen(
                 ),
             )
         }
-
-
 
         // ── Provider & Configuration ──
         item(key = "provider") {
@@ -332,13 +312,13 @@ fun SettingsScreen(
                             }
                         ),
                         Material3SettingsItem(
-                            leadingContent = { SettingsIcon(androidx.compose.material.icons.Icons.Outlined.TextFields) },
+                            leadingContent = { SettingsIcon(Icons.Outlined.TextFields) },
                             title = { Text("Custom Dictionary / Glossary") },
                             description = { Text("Define how specific names or terms should be translated") },
                             onClick = onNavigateToGlossary
                         ),
                         Material3SettingsItem(
-                            leadingContent = { SettingsIcon(androidx.compose.material.icons.Icons.Outlined.DeleteOutline) },
+                            leadingContent = { SettingsIcon(Icons.Outlined.DeleteOutline) },
                             title = { Text("Clear Translation Cache") },
                             description = { Text("Forces re-translation of identical speech bubbles instead of using memory") },
                             onClick = {
@@ -607,8 +587,6 @@ fun SettingsScreen(
         }
 
         if (showAdvanced) {
-
-
             item(key = "image_upscaler") {
                 val useImageUpscaler by remember { derivedStateOf { viewModel.settings.value.useImageUpscaler } }
                 Material3SettingsGroup(
@@ -653,10 +631,10 @@ fun SettingsScreen(
                     SfxFilterSection(viewModel)
                 }
             }
-            
+
             item(key = "reset_settings") {
                 var showResetConfirm by remember { mutableStateOf(false) }
-                
+
                 Button(
                     onClick = { showResetConfirm = true },
                     modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
@@ -666,7 +644,7 @@ fun SettingsScreen(
                     Spacer(Modifier.width(8.dp))
                     Text("Reset Advanced Settings")
                 }
-                
+
                 if (showResetConfirm) {
                     AlertDialog(
                         onDismissRequest = { showResetConfirm = false },
@@ -674,8 +652,8 @@ fun SettingsScreen(
                         text = { Text("Are you sure you want to reset all advanced settings to their default values? This will not affect your API keys or models.") },
                         confirmButton = {
                             TextButton(onClick = {
-                                scope.launch { 
-                                    viewModel.settingsRepo.resetToDefault() 
+                                scope.launch {
+                                    viewModel.settingsRepo.resetToDefault()
                                     android.widget.Toast.makeText(context, "Settings reset", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                                 showResetConfirm = false
@@ -728,7 +706,7 @@ fun SettingsScreen(
             text = {
                 val fontsDir = java.io.File(context.filesDir, "custom_fonts")
                 val fonts = fontsDir.listFiles()?.filter { it.isFile && (it.name.endsWith(".ttf") || it.name.endsWith(".otf")) } ?: emptyList()
-                
+
                 LazyColumn {
                     item {
                         TextButton(
@@ -767,509 +745,3 @@ fun SettingsScreen(
         )
     }
 }
-
-@Composable
-private fun SettingsIcon(icon: ImageVector) {
-    Icon(
-        imageVector = icon,
-        contentDescription = null,
-        tint = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.size(24.dp),
-    )
-}
-
-@Composable
-private fun AccentColorRow(selected: Color, onSelect: (Color) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        ACCENT_PRESETS.forEach { color ->
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .background(color = color, shape = CircleShape)
-                    .border(
-                        width = 2.dp,
-                        color = if (color == selected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
-                        shape = CircleShape,
-                    )
-                    .clickable { onSelect(color) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun ActiveProviderConfigCard(viewModel: MainViewModel) {
-    val scope = rememberCoroutineScope()
-    // Read only the fields this card needs, each via its own derivedStateOf, so a
-    // change to any single setting recomposes just this card — not the whole
-    // Settings screen (recomposition storm).
-    val providerKey by remember { derivedStateOf { viewModel.settings.value.llmProvider } }
-    val meta = Config.PROVIDER_REGISTRY[providerKey] ?: return
-
-    val apiKey by remember(providerKey) { derivedStateOf {
-        when (providerKey) {
-            "gemini" -> viewModel.settings.value.geminiApiKey
-            "openai" -> viewModel.settings.value.openaiApiKey
-            "openrouter" -> viewModel.settings.value.openrouterApiKey
-            "zen" -> viewModel.settings.value.zenApiKey
-            "opencodego" -> viewModel.settings.value.opencodegoApiKey
-            "custom" -> viewModel.settings.value.customApiKey
-            else -> ""
-        }
-    } }
-
-    val baseUrl by remember(providerKey) { derivedStateOf { viewModel.settings.value.getBaseUrl(providerKey) } }
-    val defaultBaseUrl = meta.defaultBaseUrl
-
-    val currentModel by remember(providerKey) { derivedStateOf {
-        when (providerKey) {
-            "gemini" -> viewModel.settings.value.modelGemini
-            "openai" -> viewModel.settings.value.modelOpenai
-            "openrouter" -> viewModel.settings.value.modelOpenrouter
-            "zen" -> viewModel.settings.value.modelZen
-            "opencodego" -> viewModel.settings.value.modelOpencodego
-            "custom" -> viewModel.settings.value.modelCustom
-            else -> meta.defaultModel
-        }
-    } }
-
-    // Live API-key / base-URL field states (hoisted so the "Test API Key" button
-    // validates what the user is actually typing, not the debounced saved value).
-    var apiKeyText by remember(providerKey) { mutableStateOf(apiKey) }
-    var apiKeyVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(apiKeyText) {
-        if (apiKeyText != apiKey) {
-            kotlinx.coroutines.delay(350)
-            viewModel.settingsRepo.saveApiKey(providerKey, apiKeyText)
-        }
-    }
-    var baseUrlText by remember(providerKey) { mutableStateOf(baseUrl) }
-    LaunchedEffect(baseUrlText) {
-        if (baseUrlText != baseUrl) {
-            kotlinx.coroutines.delay(350)
-            viewModel.settingsRepo.saveBaseUrl(providerKey, baseUrlText)
-        }
-    }
-
-    val detected: List<String> = viewModel.providerModels[providerKey] ?: emptyList()
-    val presetList: List<String> = Config.PRESET_MODELS[providerKey] ?: emptyList()
-    val allModels = remember(presetList, detected) { (presetList + detected).distinct().sorted() }
-    val isLoading = viewModel.modelsLoading.value
-
-    Material3SettingsGroup(
-        title = "${meta.displayName} Configuration",
-        items = listOf(
-            Material3SettingsItem(
-                leadingContent = { SettingsIcon(Icons.Outlined.GppGood) },
-                title = {
-                    // Hoisted state: see apiKeyText / apiKeyVisible above. The single
-                    // debounced LaunchedEffect is the only write path.
-                    OutlinedTextField(
-                        value = apiKeyText,
-                        onValueChange = { apiKeyText = it },
-                        label = { Text(if (meta.requiresKey) "${meta.displayName} API Key" else "${meta.displayName} API Key (Optional)") },
-                        placeholder = { Text(if (meta.requiresKey) "Enter API Key" else "Optional API Key") },
-                        visualTransformation = if (apiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        trailingIcon = {
-                            IconButton(onClick = { apiKeyVisible = !apiKeyVisible }) {
-                                Icon(
-                                    if (apiKeyVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                    contentDescription = if (apiKeyVisible) "Hide" else "Show",
-                                )
-                            }
-                        },
-                    )
-                },
-            ),
-            Material3SettingsItem(
-                leadingContent = { SettingsIcon(Icons.Outlined.Link) },
-                title = {
-                    OutlinedTextField(
-                        value = baseUrlText,
-                        onValueChange = { baseUrlText = it },
-                        label = { Text("Base URL") },
-                        placeholder = { Text(if (defaultBaseUrl.isNotBlank()) defaultBaseUrl else "https://api.example.com") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        trailingIcon = {
-                            if (defaultBaseUrl.isNotBlank() && baseUrlText != defaultBaseUrl) {
-                                TextButton(onClick = {
-                                    baseUrlText = defaultBaseUrl
-                                    scope.launch { viewModel.settingsRepo.saveBaseUrl(providerKey, defaultBaseUrl) }
-                                }) {
-                                    Text("Reset", style = MaterialTheme.typography.labelSmall)
-                                }
-                            }
-                        }
-                    )
-                },
-            ),
-            Material3SettingsItem(
-                leadingContent = { SettingsIcon(Icons.Outlined.ModelTraining) },
-                title = {
-                    ModelDropdownInput(
-                        label = meta.displayName,
-                        value = currentModel,
-                        presets = if (allModels.isNotEmpty()) allModels else listOf(meta.defaultModel),
-                        onValue = { scope.launch { viewModel.settingsRepo.saveModel(providerKey, it) } },
-                    )
-                },
-            ),
-        )
-    )
-
-    // Model auto-detection performs a network call, so it is a real button — not
-    // a plain settings row that looks like a passive toggle.
-    Spacer(Modifier.height(8.dp))
-    OutlinedButton(
-        onClick = { viewModel.fetchModelsForProvider(providerKey, baseUrl, apiKey) },
-        enabled = !isLoading,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("Fetching models…")
-        } else {
-            Icon(
-                imageVector = Icons.Outlined.CloudDownload,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("Detect Models from API")
-        }
-    }
-
-    // ── Health check: validate key + model + base URL with one tiny request ──
-    val testState = viewModel.providerTestState.value
-    Spacer(Modifier.height(8.dp))
-    OutlinedButton(
-        onClick = { viewModel.testProviderConnection(providerKey, baseUrlText, apiKeyText, currentModel) },
-        enabled = testState?.loading != true,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        if (testState?.loading == true) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("Testing…")
-        } else {
-            Icon(
-                imageVector = Icons.Outlined.GppGood,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("Test API Key & Connection")
-        }
-    }
-    testState?.let { state ->
-        if (!state.loading && state.message.isNotBlank()) {
-            Spacer(Modifier.height(6.dp))
-            val resultColor = when (state.ok) {
-                true -> MaterialTheme.colorScheme.primary
-                false -> MaterialTheme.colorScheme.error
-                null -> MaterialTheme.colorScheme.onSurfaceVariant
-            }
-            Text(
-                state.message,
-                style = MaterialTheme.typography.bodySmall,
-                color = resultColor,
-                modifier = Modifier.padding(horizontal = 8.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun TweakParamsSection(viewModel: MainViewModel) {
-    val scope = rememberCoroutineScope()
-
-    // Per-field derived read so the section doesn't recompose on unrelated settings.
-    val useInpainting by remember { derivedStateOf { viewModel.settings.value.useInpainting } }
-    Material3SettingsGroup(
-        items = listOf(
-            Material3SettingsItem(
-                leadingContent = { SettingsIcon(Icons.Outlined.AutoFixHigh) },
-                title = { Text("OpenCV Text Inpainting") },
-                description = { Text("Seamlessly erase original text matching background textures") },
-                trailingContent = {
-                    Switch(
-                        checked = useInpainting,
-                        onCheckedChange = { scope.launch { viewModel.settingsRepo.saveUseInpainting(it) } }
-                    )
-                }
-            )
-        )
-    )
-    Spacer(Modifier.height(8.dp))
-
-    TweakSlider(
-        viewModel,
-        "custom_timeout",
-        "Custom Request Timeout",
-        "Maximum HTTP network timeout per LLM API request (30s – 600s)",
-        30f..600f
-    )
-    TweakSlider(
-        viewModel,
-        "max_bubbles",
-        "Bubbles Per Request",
-        "Maximum text speech bubbles processed in a single LLM batch",
-        5f..50f
-    )
-    TweakSlider(
-        viewModel,
-        "request_delay",
-        "Min Request Delay",
-        "Minimum delay interval between API calls to prevent rate limits",
-        0.5f..10f
-    )
-    TweakSlider(
-        viewModel,
-        "pad_x",
-        "Pad X Ratio",
-        "Horizontal padding multiplier added to text bubble bounding boxes",
-        0.1f..1.0f
-    )
-    TweakSlider(
-        viewModel,
-        "pad_y",
-        "Pad Y Ratio",
-        "Vertical padding multiplier added to text bubble bounding boxes",
-        0.1f..1.0f
-    )
-    TweakSlider(
-        viewModel,
-        "min_pad",
-        "Min Padding (px)",
-        "Minimum absolute pixel padding added around detected text bubbles",
-        5f..100f
-    )
-    TweakSlider(
-        viewModel,
-        "jpeg_quality",
-        "JPEG Output Quality",
-        "Compression quality for saved .jpg/.jpeg translations (higher = larger file)",
-        70f..100f
-    )
-}
-
-private fun saveTweakSliderValue(
-    scope: kotlinx.coroutines.CoroutineScope,
-    viewModel: MainViewModel,
-    keyField: String,
-    value: Float
-) {
-    scope.launch {
-        when (keyField) {
-            "custom_timeout" -> viewModel.settingsRepo.saveCustomTimeoutSec(value.toInt())
-            "jpeg_quality" -> viewModel.settingsRepo.saveJpegQuality(value.toInt())
-            else -> viewModel.settingsRepo.saveTweakParam(
-                keyField,
-                when (keyField) {
-                    "max_bubbles", "min_pad" -> value.toInt()
-                    else -> value
-                }
-            )
-        }
-    }
-}
-
-/**
- * One tweak-parameter slider with descriptions and +/- stepper buttons for precise adjustment.
- */
-@Composable
-private fun TweakSlider(
-    viewModel: MainViewModel,
-    keyField: String,
-    label: String,
-    description: String,
-    range: ClosedFloatingPointRange<Float>,
-) {
-    val scope = rememberCoroutineScope()
-
-    val value by remember { derivedStateOf {
-        when (keyField) {
-            "max_bubbles" -> viewModel.settings.value.maxBubblesPerRequest.toFloat()
-            "request_delay" -> viewModel.settings.value.minRequestDelay
-            "pad_x" -> viewModel.settings.value.padXRatio
-            "pad_y" -> viewModel.settings.value.padYRatio
-            "min_pad" -> viewModel.settings.value.minPad.toFloat()
-            "custom_timeout" -> viewModel.settings.value.customTimeoutSec.toFloat()
-            "jpeg_quality" -> viewModel.settings.value.jpegQuality.toFloat()
-            else -> 0f
-        }
-    } }
-    var sliderValue by remember(value) { mutableFloatStateOf(value) }
-
-    val step = when (keyField) {
-        "custom_timeout" -> 5f
-        "max_bubbles", "min_pad" -> 1f
-        "request_delay" -> 0.5f
-        "jpeg_quality" -> 1f
-        else -> 0.05f
-    }
-
-    Material3SettingsGroup(
-        items = listOf(
-            Material3SettingsItem(
-                title = {
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                            val fmt = when (keyField) {
-                                "request_delay" -> "%.1fs".format(sliderValue)
-                                "min_pad", "max_bubbles", "jpeg_quality" -> "${sliderValue.toInt()}"
-                                "custom_timeout" -> "${sliderValue.toInt()}s"
-                                else -> "%.2f".format(sliderValue)
-                            }
-                            Text(fmt, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                        }
-                        Text(
-                            description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    val newValue = (sliderValue - step).coerceIn(range.start, range.endInclusive)
-                                    sliderValue = newValue
-                                    saveTweakSliderValue(scope, viewModel, keyField, newValue)
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Remove,
-                                    contentDescription = "Decrease",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Slider(
-                                value = sliderValue,
-                                onValueChange = { sliderValue = it },
-                                onValueChangeFinished = {
-                                    saveTweakSliderValue(scope, viewModel, keyField, sliderValue)
-                                },
-                                valueRange = range,
-                                modifier = Modifier.weight(1f),
-                            )
-                            IconButton(
-                                onClick = {
-                                    val newValue = (sliderValue + step).coerceIn(range.start, range.endInclusive)
-                                    sliderValue = newValue
-                                    saveTweakSliderValue(scope, viewModel, keyField, newValue)
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Add,
-                                    contentDescription = "Increase",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    }
-                },
-            ),
-        ),
-    )
-}
-
-@Composable
-private fun SfxFilterSection(viewModel: MainViewModel) {
-    val scope = rememberCoroutineScope()
-    val current by remember { derivedStateOf { viewModel.settings.value.filterSfxMode } }
-    val modes = listOf("balanced", "relaxed", "strict")
-    Material3SettingsGroup(
-        items = modes.map { mode ->
-            Material3SettingsItem(
-                leadingContent = { SettingsIcon(Icons.Outlined.Tune) },
-                title = { Text(mode.uppercase().replaceFirstChar { it }) },
-                isHighlighted = current == mode,
-                trailingContent = {
-                    RadioButton(
-                        selected = current == mode,
-                        onClick = { scope.launch { viewModel.settingsRepo.saveTweakParam("sfx_mode", mode) } },
-                    )
-                },
-            )
-        },
-    )
-}
-
-@Composable
-private fun ModelDropdownInput(
-    label: String,
-    value: String,
-    presets: List<String>,
-    onValue: (String) -> Unit,
-) {
-    var textState by remember(value) { mutableStateOf(value) }
-    var expanded by remember { mutableStateOf(false) }
-
-    // Debounce writes: typing a long model name would otherwise hit DataStore on
-    // every keystroke. Saving happens 350 ms after typing pauses (or immediately
-    // when picking from the dropdown).
-    LaunchedEffect(textState) {
-        if (textState != value) {
-            kotlinx.coroutines.delay(350)
-            onValue(textState)
-        }
-    }
-
-    val options = remember(presets, value) {
-        val list = presets.toMutableList()
-        if (value.isNotBlank() && value !in list) list.add(0, value)
-        list
-    }
-
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-        OutlinedTextField(
-            value = textState,
-            onValueChange = { newText ->
-                textState = newText
-            },
-            label = { Text(label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodySmall,
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { model ->
-                DropdownMenuItem(
-                    text = { Text(model, style = MaterialTheme.typography.bodySmall) },
-                    onClick = {
-                        textState = model
-                        onValue(model)
-                        expanded = false
-                    },
-                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
-                )
-            }
-        }
-    }
-}
-

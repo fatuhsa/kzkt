@@ -73,11 +73,11 @@ object MosaicBuilder {
         if (!useTwoColumns) {
             // Single column vertical stack for small batches (< 4)
             val mosaicWidth = maxOf(
-                params.lebarMosaikMin,
-                (crops.maxOf { it.bitmap.width } + params.marginKiriNomor + params.marginKanan)
+                params.detection.lebarMosaikMin,
+                (crops.maxOf { it.bitmap.width } + params.detection.marginKiriNomor + params.detection.marginKanan)
             )
             val mosaicHeight = crops.sumOf { it.bitmap.height } +
-                (crops.size * params.jarakAntarPotongan) + 20
+                (crops.size * params.detection.jarakAntarPotongan) + 20
 
             val mosaic = Bitmap.createBitmap(mosaicWidth, mosaicHeight, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(mosaic)
@@ -87,8 +87,8 @@ object MosaicBuilder {
             for ((id, crop) in crops) {
                 val numY = yOffset + (crop.height / 2f) - (numberPaint.textSize / 2f) + 20f
                 canvas.drawText(id, 5f, numY, numberPaint)
-                canvas.drawBitmap(crop, params.marginKiriNomor.toFloat(), yOffset.toFloat(), null)
-                yOffset += crop.height + params.jarakAntarPotongan
+                canvas.drawBitmap(crop, params.detection.marginKiriNomor.toFloat(), yOffset.toFloat(), null)
+                yOffset += crop.height + params.detection.jarakAntarPotongan
             }
             return mosaic
         } else {
@@ -97,12 +97,12 @@ object MosaicBuilder {
             val rightCrops = crops.filterIndexed { idx, _ -> idx % 2 == 1 }
 
             val leftColWidth = maxOf(
-                params.lebarMosaikMin / 2,
-                (leftCrops.maxOf { it.bitmap.width } + params.marginKiriNomor + params.marginKanan)
+                params.detection.lebarMosaikMin / 2,
+                (leftCrops.maxOf { it.bitmap.width } + params.detection.marginKiriNomor + params.detection.marginKanan)
             )
             val rightColWidth = maxOf(
-                params.lebarMosaikMin / 2,
-                (rightCrops.maxOf { it.bitmap.width } + params.marginKiriNomor + params.marginKanan)
+                params.detection.lebarMosaikMin / 2,
+                (rightCrops.maxOf { it.bitmap.width } + params.detection.marginKiriNomor + params.detection.marginKanan)
             )
 
             val rowCount = (crops.size + 1) / 2
@@ -111,10 +111,10 @@ object MosaicBuilder {
                 val left = crops[r * 2]
                 val right = crops.getOrNull(r * 2 + 1)
                 val rowH = maxOf(left.bitmap.height, right?.bitmap?.height ?: 0)
-                totalHeight += rowH + params.jarakAntarPotongan
+                totalHeight += rowH + params.detection.jarakAntarPotongan
             }
 
-            val totalWidth = leftColWidth + rightColWidth + params.jarakAntarPotongan
+            val totalWidth = leftColWidth + rightColWidth + params.detection.jarakAntarPotongan
             val mosaic = Bitmap.createBitmap(totalWidth, totalHeight, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(mosaic)
             canvas.drawColor(Color.WHITE)
@@ -128,17 +128,17 @@ object MosaicBuilder {
                 // Draw left item
                 val numYLeft = yOffset + (left.bitmap.height / 2f) - (numberPaint.textSize / 2f) + 20f
                 canvas.drawText(left.id, 5f, numYLeft, numberPaint)
-                canvas.drawBitmap(left.bitmap, params.marginKiriNomor.toFloat(), yOffset.toFloat(), null)
+                canvas.drawBitmap(left.bitmap, params.detection.marginKiriNomor.toFloat(), yOffset.toFloat(), null)
 
                 // Draw right item if present
                 if (right != null) {
-                    val rightXOffset = leftColWidth + params.jarakAntarPotongan
+                    val rightXOffset = leftColWidth + params.detection.jarakAntarPotongan
                     val numYRight = yOffset + (right.bitmap.height / 2f) - (numberPaint.textSize / 2f) + 20f
                     canvas.drawText(right.id, (rightXOffset + 5).toFloat(), numYRight, numberPaint)
-                    canvas.drawBitmap(right.bitmap, (rightXOffset + params.marginKiriNomor).toFloat(), yOffset.toFloat(), null)
+                    canvas.drawBitmap(right.bitmap, (rightXOffset + params.detection.marginKiriNomor).toFloat(), yOffset.toFloat(), null)
                 }
 
-                yOffset += rowH + params.jarakAntarPotongan
+                yOffset += rowH + params.detection.jarakAntarPotongan
             }
             return mosaic
         }

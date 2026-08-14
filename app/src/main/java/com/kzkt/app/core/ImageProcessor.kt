@@ -5,6 +5,10 @@ import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
 import com.kzkt.app.core.Config.TweakParams
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
 import org.opencv.core.*
@@ -212,13 +216,13 @@ object ImageProcessor {
         boxes: List<IntArray>,
         params: TweakParams,
     ): List<IntArray> {
-        if (!params.filterSfxAktif) return boxes
+        if (!params.detection.filterSfxAktif) return boxes
 
         val imgHeight = mat.rows()
         val imgWidth = mat.cols()
         val totalArea = maxOf(1, imgHeight * imgWidth)
 
-        val (blackThr, edgeThr, whiteSafe) = when (params.filterSfxMode.lowercase()) {
+        val (blackThr, edgeThr, whiteSafe) = when (params.detection.filterSfxMode.lowercase()) {
             "relaxed", "longgar" -> Triple(0.20, 0.14, 0.58)
             "strict", "ketat" -> Triple(0.13, 0.09, 0.68)
             else -> Triple(0.16, 0.11, 0.62) // balanced
@@ -347,7 +351,7 @@ object ImageProcessor {
             val overlapX = overlap1D(x1, x2, ox1, ox2).toDouble() / minOf(boxW, otherW)
             val overlapY = overlap1D(y1, y2, oy1, oy2).toDouble() / minOf(boxH, otherH)
 
-            if (overlapX >= params.overlapBatasCrop) {
+            if (overlapX >= params.detection.overlapBatasCrop) {
                 if (oy1 >= y2) { // other is below
                     val batas = (y2 + oy1) / 2
                     cropY2 = minOf(cropY2, maxOf(y2, batas))
@@ -357,7 +361,7 @@ object ImageProcessor {
                 }
             }
 
-            if (overlapY >= params.overlapBatasCrop) {
+            if (overlapY >= params.detection.overlapBatasCrop) {
                 if (ox1 >= x2) { // other is to the right
                     val batas = (x2 + ox1) / 2
                     cropX2 = minOf(cropX2, maxOf(x2, batas))
@@ -381,17 +385,17 @@ object ImageProcessor {
         x1: Int, y1: Int, x2: Int, y2: Int,
         params: TweakParams,
     ): Mat {
-        if (!params.maskAreaLuarBox) return crop
+        if (!params.detection.maskAreaLuarBox) return crop
 
         val localX1 = x1 - cropX1
         val localY1 = y1 - cropY1
         val localX2 = x2 - cropX1
         val localY2 = y2 - cropY1
 
-        val maskX1 = maxOf(0, localX1 - params.maskMargin)
-        val maskY1 = maxOf(0, localY1 - params.maskMargin)
-        val maskX2 = minOf(crop.cols(), localX2 + params.maskMargin)
-        val maskY2 = minOf(crop.rows(), localY2 + params.maskMargin)
+        val maskX1 = maxOf(0, localX1 - params.detection.maskMargin)
+        val maskY1 = maxOf(0, localY1 - params.detection.maskMargin)
+        val maskX2 = minOf(crop.cols(), localX2 + params.detection.maskMargin)
+        val maskY2 = minOf(crop.rows(), localY2 + params.detection.maskMargin)
 
         val result = Mat.ones(crop.size(), crop.type())
         val region = result.submat(Rect(maskX1, maskY1, maskX2 - maskX1, maskY2 - maskY1))
@@ -404,6 +408,46 @@ object ImageProcessor {
             region.release()
         }
         return result
+    }
+
+    /**
+     * Doubles the resolution of [bitmap] via the smart upscaler. Returns a new
+     * bitmap; the caller must recycle the input afterwards.
+     */
+    fun upscaleBitmap(bitmap: Bitmap): Bitmap {
+        val mat = bitmapToMat(bitmap)
+        val enhanced = enhanceImage(mat)
+        val result = matToBitmap(enhanced)
+        mat.release()
+        enhanced.release()
+        return result
+    }
+
+    /**
+     * Pre-filters [translations] (dropping SKIP / blank values), then erases the
+     * original text strokes inside the matching bubbles of [mat] in parallel.
+     * Shared by the single-image and batch paths so the parallel inpainting
+     * boilerplate lives in exactly one place.
+     */
+    suspend fun inpaintTranslated(
+        mat: Mat,
+        translations: Map<String, String>,
+        coordinateMap: Map<String, IntArray>,
+    ) {
+        val targets = coordinateMap.mapNotNull { (id, box) ->
+            val text = translations[id]
+            if (text != null && text.uppercase() != "SKIP" && text.isNotBlank()) box else null
+        }
+        if (targets.isEmpty()) return
+        coroutineScope {
+            targets.map { box ->
+                async(Dispatchers.Default) {
+                    synchronized(mat) {
+                        inpaintBubbleText(mat, box)
+                    }
+                }
+            }.awaitAll()
+        }
     }
 
     /**

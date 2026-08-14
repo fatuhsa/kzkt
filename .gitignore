@@ -35,6 +35,7 @@ keystore.properties
 *.pem
 *.key
 *.mobileprovision
+kzkt-backup-*.zip
 
 # ── IDE & editor ─────────────────────────────────────────────────
 .idea/

@@ -15,6 +15,33 @@ object FileUtils {
      * Resolve a content URI to a file path on the filesystem.
      * Works for most file providers and MediaStore URIs.
      */
+    /**
+     * Resolve a batch of picked document URIs into local file paths: archives
+     * (ZIP/CBZ/EPUB) are extracted, content-URI files are copied to cache, and
+     * plain file paths are returned as-is. Used by the Translate file picker.
+     */
+    fun resolvePickedUris(context: Context, uris: List<Uri>): List<String> {
+        val paths = mutableListOf<String>()
+        for (uri in uris) {
+            val mimeType = context.contentResolver.getType(uri)
+            val path = getPathFromUri(context, uri)
+            val isZip = mimeType?.contains("zip") == true || mimeType?.contains("cbz") == true || mimeType?.contains("epub") == true ||
+                path?.lowercase()?.endsWith(".zip") == true ||
+                path?.lowercase()?.endsWith(".cbz") == true ||
+                path?.lowercase()?.endsWith(".epub") == true
+
+            if (isZip) {
+                paths.addAll(com.kzkt.app.util.ArchiveExtractor.extractCbz(context, uri))
+            } else if (path != null) {
+                paths.add(path)
+            } else {
+                val copied = copyUriToCache(context, uri)
+                if (copied != null) paths.add(copied)
+            }
+        }
+        return paths
+    }
+
     fun getPathFromUri(context: Context, uri: Uri): String? {
         // Try direct path
         if (uri.scheme == "file") return uri.path

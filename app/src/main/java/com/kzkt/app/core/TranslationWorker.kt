@@ -44,6 +44,9 @@ class TranslationWorker(
         const val EXTRA_FILES_FILE = "com.kzkt.app.extra.FILES_FILE"
         const val EXTRA_RETRY = "com.kzkt.app.extra.RETRY"
 
+        /** Peak PDF pages kept in memory per translation group (bounds RAM). */
+        const val PDF_PAGE_GROUP_SIZE = 6
+
         fun startTranslation(context: Context, files: List<String>, retry: Boolean = false) {
             // WorkManager caps input data at ~10 KB when serialized, so a large folder
             // (dozens of long paths) blows past it with IllegalStateException. Instead of
@@ -183,21 +186,27 @@ class TranslationWorker(
                 }
 
                 val params = Config.TweakParams(
-                    maxBubblesPerRequest = s.maxBubblesPerRequest,
-                    minRequestDelay = s.minRequestDelay.toDouble(),
-                    filterSfxMode = s.filterSfxMode,
-                    padXRatio = s.padXRatio.toDouble(),
-                    padYRatio = s.padYRatio.toDouble(),
-                    minPad = s.minPad,
-                    customFontPath = s.customFontPath,
-                    useInpainting = s.useInpainting,
-                    useLocalOcr = s.useLocalOcr,
-                    enableDevLogs = s.enableDevLogs,
-                    useImageUpscaler = s.useImageUpscaler,
-                    translateSfx = s.translateSfx,
-                    renderTextColor = s.renderTextColor,
-                    renderFontScale = s.renderFontScale.toDouble(),
-                    jpegQuality = s.jpegQuality,
+                    detection = Config.TweakParams.DetectionParams(
+                        filterSfxMode = s.filterSfxMode,
+                        padXRatio = s.padXRatio.toDouble(),
+                        padYRatio = s.padYRatio.toDouble(),
+                        minPad = s.minPad,
+                    ),
+                    render = Config.TweakParams.RenderParams(
+                        useInpainting = s.useInpainting,
+                        customFontPath = s.customFontPath,
+                        renderTextColor = s.renderTextColor,
+                        renderFontScale = s.renderFontScale.toDouble(),
+                        jpegQuality = s.jpegQuality,
+                    ),
+                    engine = Config.TweakParams.EngineParams(
+                        maxBubblesPerRequest = s.maxBubblesPerRequest,
+                        minRequestDelay = s.minRequestDelay.toDouble(),
+                        useLocalOcr = s.useLocalOcr,
+                        enableDevLogs = s.enableDevLogs,
+                        useImageUpscaler = s.useImageUpscaler,
+                        translateSfx = s.translateSfx,
+                    ),
                 )
 
                 val cacheRepo = TranslationCacheRepository(applicationContext)
@@ -209,23 +218,29 @@ class TranslationWorker(
                 val fallbackProviders = createFallbackProviders(s, s.llmProvider)
 
                 val pipeline = TranslationPipeline(
-                    yolo = yoloInstance,
-                    provider = primaryProvider,
-                    textRenderer = textRendererInstance,
-                    params = params,
-                    targetLanguage = s.targetLanguage,
-                    cacheRepo = cacheRepo,
-                    glossary = glossary,
-                    fallbackProviders = fallbackProviders,
-                    context = applicationContext,
-                    onProgress = { msg -> emitScope.launch { emitLog(msg) } },
-                    onStepProgress = { percent, msg ->
-                        emitScope.launch {
-                            emitProgress(percent, 100)
-                            updateNotificationProgress(msg, percent, 100)
-                        }
-                    },
-                    isCancelled = { TranslationProgressTracker.isCancelled }
+                    config = PipelineConfig(
+                        yolo = yoloInstance,
+                        textRenderer = textRendererInstance,
+                        params = params,
+                        targetLanguage = s.targetLanguage,
+                        cacheRepo = cacheRepo,
+                        glossary = glossary,
+                        context = applicationContext,
+                    ),
+                    providerChain = ProviderChain(
+                        provider = primaryProvider,
+                        fallbackProviders = fallbackProviders,
+                    ),
+                    callbacks = PipelineCallbacks(
+                        onProgress = { msg -> emitScope.launch { emitLog(msg) } },
+                        onStepProgress = { percent, msg ->
+                            emitScope.launch {
+                                emitProgress(percent, 100)
+                                updateNotificationProgress(msg, percent, 100)
+                            }
+                        },
+                        isCancelled = { TranslationProgressTracker.isCancelled }
+                    )
                 )
 
                 val cacheOutputFolder = java.io.File(applicationContext.cacheDir, "translated_outputs")
@@ -293,38 +308,43 @@ class TranslationWorker(
                         // PAGE-GROUP CHUNKING: Split PDF pages into groups of 6 pages per group.
                         // Bounds peak memory usage to ~6 page bitmaps at a time instead of loading all 20-50+ page bitmaps into RAM simultaneously.
                         // DO NOT optimize this back into a single processImageBatch call!
-                        val pageGroupSize = 6
-                        val pageGroups = pages.chunked(pageGroupSize)
-                        val allTranslatedPages = mutableListOf<TranslationPipeline.PipelineResult>()
+                        val pageGroups = pages.chunked(PDF_PAGE_GROUP_SIZE)
+                        val allTranslatedPages = mutableListOf<PipelineResult>()
 
                         for ((groupIdx, pageGroup) in pageGroups.withIndex()) {
                             if (TranslationProgressTracker.isCancelled) break
 
                             val groupPipeline = TranslationPipeline(
-                                yolo = yoloInstance,
-                                provider = primaryProvider,
-                                textRenderer = textRendererInstance,
-                                params = params,
-                                targetLanguage = s.targetLanguage,
-                                cacheRepo = cacheRepo,
-                                fallbackProviders = fallbackProviders,
-                                context = applicationContext,
-                                onProgress = { msg -> emitScope.launch { emitLog(msg) } },
-                                onStepProgress = { groupPercent, msg ->
-                                    val overallPercent = ((groupIdx * 100f + groupPercent) / pageGroups.size).toInt().coerceIn(0, 100)
-                                    emitScope.launch {
-                                        emitProgress(completed, totalSteps)
-                                        updateNotificationProgress("[$fileName - Group ${groupIdx + 1}/${pageGroups.size}] $msg", completed, totalSteps)
-                                    }
-                                },
-                                isCancelled = { TranslationProgressTracker.isCancelled }
+                                config = PipelineConfig(
+                                    yolo = yoloInstance,
+                                    textRenderer = textRendererInstance,
+                                    params = params,
+                                    targetLanguage = s.targetLanguage,
+                                    cacheRepo = cacheRepo,
+                                    context = applicationContext,
+                                ),
+                                providerChain = ProviderChain(
+                                    provider = primaryProvider,
+                                    fallbackProviders = fallbackProviders,
+                                ),
+                                callbacks = PipelineCallbacks(
+                                    onProgress = { msg -> emitScope.launch { emitLog(msg) } },
+                                    onStepProgress = { groupPercent, msg ->
+                                        val overallPercent = ((groupIdx * 100f + groupPercent) / pageGroups.size).toInt().coerceIn(0, 100)
+                                        emitScope.launch {
+                                            emitProgress(completed, totalSteps)
+                                            updateNotificationProgress("[$fileName - Group ${groupIdx + 1}/${pageGroups.size}] $msg", completed, totalSteps)
+                                        }
+                                    },
+                                    isCancelled = { TranslationProgressTracker.isCancelled }
+                                )
                             )
 
                             val groupResults = groupPipeline.processImageBatch(
                                 imagePaths = pageGroup,
                                 outputDir = outputDir,
                                 cachedPages = retryCache,
-                                pageOffset = groupIdx * pageGroupSize,
+                                pageOffset = groupIdx * PDF_PAGE_GROUP_SIZE,
                                 totalBatchPages = pages.size
                             )
                             allTranslatedPages.addAll(groupResults)

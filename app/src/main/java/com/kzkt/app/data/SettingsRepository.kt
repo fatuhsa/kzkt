@@ -37,6 +37,12 @@ class SettingsRepository(private val context: Context) {
         private val KEY_OPENCODEGO_KEY = stringPreferencesKey("opencodego_api_key")
         private val KEY_CUSTOM_KEY = stringPreferencesKey("custom_api_key")
 
+        // API-key preference names — their values are encrypted at rest via KeyCipher.
+        private val API_KEY_PREFS = setOf(
+            "gemini_api_key", "openai_api_key", "openrouter_api_key",
+            "zen_api_key", "opencodego_api_key", "custom_api_key",
+        )
+
         // Models
         private val KEY_MODEL_GEMINI = stringPreferencesKey("model_gemini")
         private val KEY_MODEL_OPENAI = stringPreferencesKey("model_openai")
@@ -142,12 +148,12 @@ class SettingsRepository(private val context: Context) {
             baseUrlZen = prefs[KEY_BASE_URL_ZEN] ?: Defaults.settings.baseUrlZen,
             baseUrlOpencodego = prefs[KEY_BASE_URL_OPENCODEGO] ?: Defaults.settings.baseUrlOpencodego,
             customBaseUrl = prefs[KEY_CUSTOM_BASE_URL] ?: Defaults.settings.customBaseUrl,
-            geminiApiKey = prefs[KEY_GEMINI_KEY] ?: Defaults.settings.geminiApiKey,
-            openaiApiKey = prefs[KEY_OPENAI_KEY] ?: Defaults.settings.openaiApiKey,
-            openrouterApiKey = prefs[KEY_OPENROUTER_KEY] ?: Defaults.settings.openrouterApiKey,
-            zenApiKey = prefs[KEY_ZEN_KEY] ?: Defaults.settings.zenApiKey,
-            opencodegoApiKey = prefs[KEY_OPENCODEGO_KEY] ?: Defaults.settings.opencodegoApiKey,
-            customApiKey = prefs[KEY_CUSTOM_KEY] ?: Defaults.settings.customApiKey,
+            geminiApiKey = prefs[KEY_GEMINI_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.geminiApiKey,
+            openaiApiKey = prefs[KEY_OPENAI_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.openaiApiKey,
+            openrouterApiKey = prefs[KEY_OPENROUTER_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.openrouterApiKey,
+            zenApiKey = prefs[KEY_ZEN_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.zenApiKey,
+            opencodegoApiKey = prefs[KEY_OPENCODEGO_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.opencodegoApiKey,
+            customApiKey = prefs[KEY_CUSTOM_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.customApiKey,
             modelGemini = prefs[KEY_MODEL_GEMINI] ?: Defaults.settings.modelGemini,
             modelOpenai = prefs[KEY_MODEL_OPENAI] ?: Defaults.settings.modelOpenai,
             modelOpenrouter = prefs[KEY_MODEL_OPENROUTER] ?: Defaults.settings.modelOpenrouter,
@@ -200,7 +206,23 @@ class SettingsRepository(private val context: Context) {
                 "custom" -> KEY_CUSTOM_KEY
                 else -> return@edit
             }
-            prefs[keyPref] = key
+            prefs[keyPref] = KeyCipher.encrypt(key)
+        }
+    }
+
+    /**
+     * One-time migration: encrypt any API keys still stored in plaintext by older
+     * versions (pre-encryption). Idempotent; runs at app start.
+     */
+    suspend fun migrateLegacyApiKeys() {
+        context.dataStore.edit { prefs ->
+            listOf(KEY_GEMINI_KEY, KEY_OPENAI_KEY, KEY_OPENROUTER_KEY, KEY_ZEN_KEY, KEY_OPENCODEGO_KEY, KEY_CUSTOM_KEY)
+                .forEach { pref ->
+                    val value = prefs[pref]
+                    if (!value.isNullOrEmpty() && !value.startsWith(KeyCipher.PREFIX)) {
+                        prefs[pref] = KeyCipher.encrypt(value)
+                    }
+                }
         }
     }
  
@@ -297,7 +319,12 @@ class SettingsRepository(private val context: Context) {
         prefs.asMap().forEach { (key, value) ->
             val entry = JSONObject()
             when (value) {
-                is String -> { entry.put("t", "string"); entry.put("v", value) }
+                // API keys are exported decrypted so a backup restores them on ANY
+                // device — the at-rest ciphertext is bound to this device's Keystore.
+                is String -> {
+                    entry.put("t", "string")
+                    entry.put("v", if (key.name in API_KEY_PREFS) KeyCipher.decrypt(value) else value)
+                }
                 is Int -> { entry.put("t", "int"); entry.put("v", value) }
                 is Long -> { entry.put("t", "long"); entry.put("v", value) }
                 is Float -> { entry.put("t", "float"); entry.put("v", value.toDouble()) }
@@ -319,7 +346,10 @@ class SettingsRepository(private val context: Context) {
                 val name = keys.next()
                 val entry = root.getJSONObject(name)
                 when (entry.getString("t")) {
-                    "string" -> prefs[stringPreferencesKey(name)] = entry.getString("v")
+                    "string" -> {
+                        val v = entry.getString("v")
+                        prefs[stringPreferencesKey(name)] = if (name in API_KEY_PREFS) KeyCipher.encrypt(v) else v
+                    }
                     "int" -> prefs[intPreferencesKey(name)] = entry.getInt("v")
                     "long" -> prefs[longPreferencesKey(name)] = entry.getLong("v")
                     "float" -> prefs[floatPreferencesKey(name)] = entry.getDouble("v").toFloat()

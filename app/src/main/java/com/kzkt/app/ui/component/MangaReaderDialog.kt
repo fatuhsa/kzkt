@@ -105,7 +105,7 @@ private fun loadReaderBitmap(context: android.content.Context, path: String, isS
 fun MangaReaderDialog(
     pagePaths: List<String>,
     initialIndex: Int = 0,
-    pipelineResult: com.kzkt.app.core.TranslationPipeline.PipelineResult? = null,
+    pipelineResult: com.kzkt.app.core.PipelineResult? = null,
     targetLanguage: String = "Indonesian",
     customFontPath: String = "",
     bookKey: String? = null,
