@@ -148,12 +148,12 @@ fun ResultPreviewCard(
             if (pagesToDisplay.isNotEmpty()) {
                 MangaReaderDialog(
                     pagePaths = pagesToDisplay,
+                    // Open on the page the user is actually previewing, not always
+                    // the first page of the batch.
+                    initialIndex = allResultPaths.indexOf(currentPath).coerceAtLeast(0),
                     pipelineResult = lastResult,
                     targetLanguage = viewModel.settings.value.targetLanguage,
                     customFontPath = viewModel.settings.value.customFontPath,
-                    // Bookmark key = output folder, so a batch result remembers the
-                    // last-read page across re-opens of the reader.
-                    bookKey = File(pagesToDisplay.first()).parent,
                     onDismiss = { showFullscreenViewer = false }
                 )
             }

@@ -108,7 +108,6 @@ fun MangaReaderDialog(
     pipelineResult: com.kzkt.app.core.PipelineResult? = null,
     targetLanguage: String = "Indonesian",
     customFontPath: String = "",
-    bookKey: String? = null,
     onDismiss: () -> Unit,
 ) {
     if (pagePaths.isEmpty()) return
@@ -128,22 +127,6 @@ fun MangaReaderDialog(
     var isSideBySide by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var isImmersive by remember { mutableStateOf(false) }
 
-    // ── Bookmark (per-book last-read page) ──
-    val positionRepo = remember(context) { com.kzkt.app.data.ReadingPositionRepository(context) }
-    // The restore effect owns this flag: saves are suppressed until it finishes,
-    // otherwise opening at page 0 would overwrite the stored position with 0.
-    var resumed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        if (bookKey != null && initialIndex == 0) {
-            val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                positionRepo.get(bookKey)
-            }
-            if (saved != null && saved > 0 && saved < pagePaths.size) {
-                pagerState.scrollToPage(saved)
-            }
-        }
-        resumed = true
-    }
     // ── Immersive fullscreen (hide system bars) ──
     val dialogView = androidx.compose.ui.platform.LocalView.current
     val activityWindow = remember(context) { context.findActivity()?.window }
@@ -178,17 +161,6 @@ fun MangaReaderDialog(
     val webtoonListState = rememberLazyListState()
     val visibleWebtoonPage by remember { derivedStateOf { webtoonListState.firstVisibleItemIndex } }
     val currentPageIndex = if (isWebtoonMode) visibleWebtoonPage.coerceIn(0, pagePaths.size - 1) else pagerState.currentPage
-
-    // Save the current page (debounced — rapid flings cancel the pending write).
-    LaunchedEffect(currentPageIndex, bookKey) {
-        if (bookKey != null && resumed) {
-            kotlinx.coroutines.delay(250)
-            val index = currentPageIndex
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                positionRepo.save(bookKey, index)
-            }
-        }
-    }
 
     // Switching to webtoon mode continues from the page the pager was showing.
     LaunchedEffect(isWebtoonMode) {

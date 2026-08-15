@@ -224,8 +224,18 @@ object FileUtils {
         }
     }
 
-    /** Copy translated file to public MediaStore Download/KZKT directory. */
-    fun saveToMediaStore(context: Context, filePath: String): String? {
+    /**
+     * Copy translated file to public MediaStore Download/KZKT directory.
+     *
+     * @param subDirName optional batch folder under Download/KZKT (e.g. "2026-08-16
+     * 14-32 (4 pages)"). When blank the file lands directly in Download/KZKT — used
+     * for exports (ZIP/PDF) which stay in the main folder.
+     */
+    fun saveToMediaStore(
+        context: Context,
+        filePath: String,
+        subDirName: String = "",
+    ): String? {
         try {
             val file = File(filePath)
             if (!file.exists()) return null
@@ -239,12 +249,18 @@ object FileUtils {
                 lowerName.endsWith(".webp") -> "image/webp"
                 else -> "image/png"
             }
+            val relPath =
+                if (subDirName.isBlank()) {
+                    "${android.os.Environment.DIRECTORY_DOWNLOADS}/KZKT"
+                } else {
+                    "${android.os.Environment.DIRECTORY_DOWNLOADS}/KZKT/$subDirName"
+                }
 
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                 val values = android.content.ContentValues().apply {
                     put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
                     put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "${android.os.Environment.DIRECTORY_DOWNLOADS}/KZKT")
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, relPath)
                 }
 
                 val targetUri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
@@ -272,7 +288,7 @@ object FileUtils {
                     // and the path stays valid.
                     val fallbackDir = File(
                         context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS),
-                        "KZKT"
+                        if (subDirName.isBlank()) "KZKT" else "KZKT/$subDirName"
                     )
                     fallbackDir.mkdirs()
                     val fallbackFile = File(fallbackDir, fileName)
@@ -283,7 +299,7 @@ object FileUtils {
 
             // Fallback for pre-Android Q or if MediaStore insert fails
             val downloadFolder = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            val outputFolder = File(downloadFolder, "KZKT")
+            val outputFolder = File(downloadFolder, if (subDirName.isBlank()) "KZKT" else "KZKT/$subDirName")
             outputFolder.mkdirs()
             val destFile = File(outputFolder, fileName)
             file.copyTo(destFile, overwrite = true)
@@ -294,7 +310,7 @@ object FileUtils {
             return try {
                 val file = File(filePath)
                 val downloadFolder = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-                val outputFolder = File(downloadFolder, "KZKT")
+                val outputFolder = File(downloadFolder, if (subDirName.isBlank()) "KZKT" else "KZKT/$subDirName")
                 outputFolder.mkdirs()
                 val destFile = File(outputFolder, file.name)
                 file.copyTo(destFile, overwrite = true)

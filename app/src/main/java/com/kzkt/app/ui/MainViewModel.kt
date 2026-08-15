@@ -210,14 +210,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             )
                         }
                         if (completed) {
+                            // Tail events (final Progress + Completed) can arrive while a
+                            // flush is already in flight — force the UI to the finished
+                            // state even if the last Progress event was coalesced away.
                             translationActive.value = false
                             canRetry.value = false
+                            translationDone.value = translationTotal.value
+                            translationProgress.value = 1f
                         }
                         if (error != null) {
                             translationLog.add("[!] Error: $error")
                             translationActive.value = false
                             canRetry.value = com.kzkt.app.core.TranslationProgressTracker.cachedPageData != null
                         }
+                    }
+                    // Tail-drain: events that arrived while this flush was suspended
+                    // (inside the 33 ms window or the IO edit-meta load) sat in the
+                    // pending buffers but scheduleFlush() bailed because flushJob was
+                    // still active. Without this second pass the UI can stick on e.g.
+                    // "3/4" with a Cancel button after the worker already finished.
+                    flushJob = null
+                    if (
+                        pendingLogs.isNotEmpty() ||
+                        pendingProgress != null ||
+                        pendingResults.isNotEmpty() ||
+                        pendingCompleted ||
+                        pendingError != null
+                    ) {
+                        scheduleFlush()
                     }
                 }
             }

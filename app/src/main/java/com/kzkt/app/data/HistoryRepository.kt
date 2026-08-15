@@ -25,6 +25,11 @@ data class HistoryEntry(
     val inputPath: String = "",
     // "ok" = translated, "failed" = the page failed and is retryable from History.
     val status: String = "ok",
+    // ID of the translation run this page belongs to. All pages of one batch
+    // (folder / multi-select / PDF) share the same ID, so the reader can group
+    // siblings even when the source file names differ. Empty for entries recorded
+    // before this field existed (Gson defaults keep them loadable).
+    val batchId: String = "",
 )
 
 /**

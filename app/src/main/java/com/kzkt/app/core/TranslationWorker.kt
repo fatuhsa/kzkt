@@ -247,6 +247,28 @@ class TranslationWorker(
                 cacheOutputFolder.mkdirs()
                 val outputDir = cacheOutputFolder.absolutePath
 
+                // One ID for the whole run: every page of this batch (folder,
+                // multi-select or PDF) shares it, so the History reader can group
+                // siblings even when the source file names differ. Timestamp-based
+                // (collisions across runs are harmless — grouping only needs pages
+                // of the SAME run to match, never different runs to differ).
+                val batchId = System.currentTimeMillis().toString()
+
+                // One public folder per run (Download/KZKT/<date-time (N pages)>)
+                // so a batch's translated images are easy to find and sort by. The
+                // page count covers PDF inputs too (cheap pageCount read — no render).
+                // PDF *results* and ZIP/PDF exports intentionally stay in the main
+                // Download/KZKT folder (they are single files, not batches).
+                val totalPages = files.sumOf { f ->
+                    if (f.endsWith(".pdf", ignoreCase = true)) {
+                        com.kzkt.app.util.PdfImporter.pdfPageCount(java.io.File(f), applicationContext)
+                    } else {
+                        1
+                    }
+                }
+                val batchFolderName =
+                    "${java.text.SimpleDateFormat("yyyy-MM-dd HH-mm", java.util.Locale.getDefault()).format(java.util.Date(batchId.toLongOrNull() ?: System.currentTimeMillis()))} ($totalPages pages)"
+
                 var completed = 0
                 val totalSteps = files.fold(0) { acc, f ->
                     acc + if (f.endsWith(".pdf", ignoreCase = true)) 3 else 1
@@ -288,7 +310,8 @@ class TranslationWorker(
                                         provider = s.llmProvider,
                                         targetLanguage = s.targetLanguage,
                                         inputPath = path,
-                                        status = "failed"
+                                        status = "failed",
+                                        batchId = batchId
                                     )
                                 )
                             } catch (e: Exception) {
@@ -384,7 +407,8 @@ class TranslationWorker(
                                                 provider = s.llmProvider,
                                                 targetLanguage = s.targetLanguage,
                                                 inputPath = path,
-                                                status = "ok"
+                                                status = "ok",
+                                                batchId = batchId
                                             )
                                         )
                                     } catch (e: Exception) {
@@ -413,7 +437,8 @@ class TranslationWorker(
                                         provider = s.llmProvider,
                                         targetLanguage = s.targetLanguage,
                                         inputPath = path,
-                                        status = "failed"
+                                        status = "failed",
+                                        batchId = batchId
                                     )
                                 )
                             } catch (e: Exception) {
@@ -431,7 +456,7 @@ class TranslationWorker(
                         val result = pipeline.processSingleImage(path, outputDir)
                         if (result.outputPath != null) {
                             emitPageStatus(path, "done")
-                            val publicPath = com.kzkt.app.ui.FileUtils.saveToMediaStore(applicationContext, result.outputPath)
+                            val publicPath = com.kzkt.app.ui.FileUtils.saveToMediaStore(applicationContext, result.outputPath, batchFolderName)
                             if (publicPath != null) {
                                 emitLog("[+] Image translated and saved to public folder: $publicPath")
                                 emitResultPath(publicPath)
@@ -455,7 +480,8 @@ class TranslationWorker(
                                             provider = s.llmProvider,
                                             targetLanguage = s.targetLanguage,
                                             inputPath = path,
-                                            status = "ok"
+                                            status = "ok",
+                                            batchId = batchId
                                         )
                                     )
                                 } catch (e: Exception) {
@@ -480,7 +506,8 @@ class TranslationWorker(
                                         provider = s.llmProvider,
                                         targetLanguage = s.targetLanguage,
                                         inputPath = path,
-                                        status = "failed"
+                                        status = "failed",
+                                        batchId = batchId
                                     )
                                 )
                             } catch (e: Exception) {
