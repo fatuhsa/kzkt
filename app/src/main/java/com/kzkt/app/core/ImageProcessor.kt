@@ -44,6 +44,20 @@ object ImageProcessor {
         return "data:image/jpeg;base64,${bitmapToBase64(bitmap, Bitmap.CompressFormat.JPEG, 85)}"
     }
 
+    /**
+     * Downscale [bitmap] when its longest side exceeds [maxDimension] so provider
+     * image-size limits are respected. Returns the same bitmap instance when it is
+     * already small enough — the caller must not recycle the original in that case.
+     */
+    fun prepareImageForProvider(bitmap: Bitmap, maxDimension: Int): Bitmap {
+        val longest = maxOf(bitmap.width, bitmap.height)
+        if (longest <= maxDimension) return bitmap
+        val scale = maxDimension.toFloat() / longest
+        val newW = maxOf(1, (bitmap.width * scale).toInt())
+        val newH = maxOf(1, (bitmap.height * scale).toInt())
+        return Bitmap.createScaledBitmap(bitmap, newW, newH, true)
+    }
+
     fun matToBitmap(mat: Mat): Bitmap {
         val bitmap = Bitmap.createBitmap(mat.cols(), mat.rows(), Bitmap.Config.ARGB_8888)
         Utils.matToBitmap(mat, bitmap)
@@ -372,6 +386,72 @@ object ImageProcessor {
         }
         if (count == 0L) return android.graphics.Color.WHITE
         return android.graphics.Color.rgb((r / count).toInt(), (g / count).toInt(), (b / count).toInt())
+    }
+
+    /**
+     * Median color of the ring of pixels around [box]. More robust than the mean
+     * when stray text strokes, specular highlights or panel borders touch the
+     * sample strip — the median ignores those outliers. Used by the clean render
+     * style so the erased free-text fill blends with the real page background.
+     */
+    fun sampleRegionBackgroundColorMedian(
+        mat: Mat,
+        box: IntArray,
+        thickness: Int = 6,
+    ): Int {
+        val cols = mat.cols()
+        val rows = mat.rows()
+        val x1 = box[0].coerceIn(0, cols - 1)
+        val y1 = box[1].coerceIn(0, rows - 1)
+        val x2 = box[2].coerceIn(x1 + 1, cols)
+        val y2 = box[3].coerceIn(y1 + 1, rows)
+
+        val ex1 = maxOf(0, x1 - thickness)
+        val ey1 = maxOf(0, y1 - thickness)
+        val ex2 = minOf(cols, x2 + thickness)
+        val ey2 = minOf(rows, y2 + thickness)
+        val ew = ex2 - ex1
+        val eh = ey2 - ey1
+        if (ew <= 0 || eh <= 0) return android.graphics.Color.WHITE
+
+        val ringCapacity = ew * eh - (x2 - x1) * (y2 - y1)
+        if (ringCapacity <= 0) return android.graphics.Color.WHITE
+
+        val sub = mat.submat(org.opencv.core.Rect(ex1, ey1, ew, eh))
+        val buf = ByteArray(ew * eh * 4)
+        val rs = IntArray(ringCapacity)
+        val gs = IntArray(ringCapacity)
+        val bs = IntArray(ringCapacity)
+        var count = 0
+        try {
+            sub.get(0, 0, buf)
+            for (row in 0 until eh) {
+                for (col in 0 until ew) {
+                    val px = col + ex1
+                    val py = row + ey1
+                    val inBox = px >= x1 && px < x2 && py >= y1 && py < y2
+                    if (inBox) continue
+                    val idx = (row * ew + col) * 4
+                    bs[count] = buf[idx].toInt() and 0xFF
+                    gs[count] = buf[idx + 1].toInt() and 0xFF
+                    rs[count] = buf[idx + 2].toInt() and 0xFF
+                    count++
+                }
+            }
+        } catch (_: Exception) {
+            return android.graphics.Color.WHITE
+        } finally {
+            sub.release()
+        }
+        if (count == 0) return android.graphics.Color.WHITE
+        val rArr = rs.copyOfRange(0, count)
+        val gArr = gs.copyOfRange(0, count)
+        val bArr = bs.copyOfRange(0, count)
+        java.util.Arrays.sort(rArr)
+        java.util.Arrays.sort(gArr)
+        java.util.Arrays.sort(bArr)
+        val mid = count / 2
+        return android.graphics.Color.rgb(rArr[mid], gArr[mid], bArr[mid])
     }
 
     /**

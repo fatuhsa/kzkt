@@ -38,6 +38,7 @@ fun InteractiveEditorDialog(
     textRenderer: TextRenderer,
     targetLanguage: String,
     customFontPath: String = "",
+    renderStyle: String = "manga",
     rawTexts: Map<String, String>? = null,
     styles: Map<String, BubbleMeta>? = null,
     onDismiss: () -> Unit,
@@ -150,7 +151,8 @@ fun InteractiveEditorDialog(
                     textAlign = bubble.align,
                     fontPreset = bubble.fontPreset,
                     fontScale = bubble.fontScale,
-                    strokeColorHex = bubble.strokeColor
+                    strokeColorHex = bubble.strokeColor,
+                    renderStyle = renderStyle,
                 )
             }
             resultBmp

@@ -19,6 +19,11 @@ abstract class OpenAICompatProvider(
     override val apiKey: String,
     override val modelName: String,
     val customUrl: String = "",
+    /** Header name + value prefix for the API key (default: `Authorization: Bearer`). */
+    private val authHeaderName: String = "Authorization",
+    private val authHeaderPrefix: String = "Bearer ",
+    /** Longest-side limit before the mosaic is downscaled (provider image limits). */
+    private val maxImageDimension: Int = 4096,
 ) : LlmProvider {
 
     /** The default chat-completions endpoint used when [customUrl] is blank. */
@@ -60,7 +65,10 @@ abstract class OpenAICompatProvider(
     }
 
     override suspend fun translateImage(image: Bitmap, prompt: String): String? {
-        val dataUri = ImageProcessor.bitmapToBase64DataUri(image)
+        // Downscale oversized mosaics so provider image-size limits are respected.
+        val prepared = ImageProcessor.prepareImageForProvider(image, maxImageDimension)
+        val dataUri = ImageProcessor.bitmapToBase64DataUri(prepared)
+        if (prepared !== image && !prepared.isRecycled) prepared.recycle()
         val imagePart: Map<String, Any> = if (imageDetail != null) {
             mapOf("type" to "image_url", "image_url" to mapOf("url" to dataUri, "detail" to imageDetail))
         } else {
@@ -69,13 +77,65 @@ abstract class OpenAICompatProvider(
         val payload = buildPayload(
             content = listOf(imagePart, mapOf("type" to "text", "text" to prompt))
         )
-        return executeRequest(buildRequest(payload))
+        return executeWithStreamFallback(payload)
     }
 
     override suspend fun translateText(textJson: String, prompt: String): String? {
         val payload = buildPayload(content = prompt)
         textMaxTokens?.let { payload["max_tokens"] = it }
-        return executeRequest(buildRequest(payload))
+        return executeWithStreamFallback(payload)
+    }
+
+    /**
+     * Send [payload] with `stream: true` and parse the SSE response, falling back
+     * to the proven non-streaming path when the provider ignores the flag or the
+     * stream fails — the outcome is identical to the old behaviour in every case.
+     */
+    protected suspend fun executeWithStreamFallback(payload: MutableMap<String, Any>): String? {
+        val streamRequest = buildRequest(payload.toMutableMap().apply { put("stream", true) })
+        val plainRequest = buildRequest(payload)
+        return try {
+            executeStreamingRequest(streamRequest)?.takeIf { it.isNotBlank() } ?: executeRequest(plainRequest)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Streaming attempt failed (provider may reject `stream: true`) — retry
+            // once with the plain request so the result is identical to before.
+            executeRequest(plainRequest)
+        }
+    }
+
+    /**
+     * Execute a request expecting an SSE (text/event-stream) response and return
+     * the accumulated text. Returns null when the response is not SSE — the
+     * caller then falls back to the regular non-streaming parse.
+     */
+    protected open suspend fun executeStreamingRequest(request: Request): String? {
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                httpClient.newCall(request).execute().use { response ->
+                    if (response.code in listOf(401, 402)) throw ValueError("API_KEY_ERROR")
+                    if (!response.isSuccessful) {
+                        val body = response.body?.string() ?: ""
+                        val detail = try {
+                            val errorObj = JsonParser.parseString(body).asJsonObject.getAsJsonObject("error")
+                            errorObj.get("message")?.asString ?: body.take(200)
+                        } catch (_: Exception) {
+                            body.take(200)
+                        }
+                        throw RuntimeException("${providerName} API error ${response.code}: ${detail}")
+                    }
+                    val contentType = response.header("Content-Type") ?: ""
+                    if (!contentType.contains("text/event-stream", ignoreCase = true)) {
+                        return@withContext null
+                    }
+                    val body = response.body ?: return@withContext null
+                    SseParser.readStream(body.source(), SseParser::extractContentDelta)
+                }
+            } catch (e: java.io.IOException) {
+                throw RuntimeException("${providerName} network error: ${e.message}")
+            }
+        }
     }
 
     private fun buildPayload(content: Any): MutableMap<String, Any> {
@@ -94,7 +154,7 @@ abstract class OpenAICompatProvider(
             .url(buildEndpoint())
             .addHeader("Content-Type", "application/json")
             .post(gson.toJson(payload).toRequestBody("application/json".toMediaTypeOrNull()))
-        if (apiKey.isNotBlank()) builder.addHeader("Authorization", "Bearer $apiKey")
+        if (apiKey.isNotBlank()) builder.addHeader(authHeaderName, authHeaderPrefix + apiKey)
         return builder.build()
     }
 

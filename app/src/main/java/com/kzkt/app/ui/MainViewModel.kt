@@ -551,10 +551,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 val requestBuilder = Request.Builder().url(endpoint)
                 if (apiKey.isNotBlank()) {
-                    if (providerKey == "gemini") {
-                        requestBuilder.header("x-goog-api-key", apiKey)
-                    } else {
-                        requestBuilder.header("Authorization", "Bearer $apiKey")
+                    when (providerKey) {
+                        "gemini" -> requestBuilder.header("x-goog-api-key", apiKey)
+                        "anthropic" -> requestBuilder.header("x-api-key", apiKey)
+                        else -> requestBuilder.header("Authorization", "Bearer $apiKey")
                     }
                 }
                 val models = mutableListOf<String>()

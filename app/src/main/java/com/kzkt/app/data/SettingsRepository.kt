@@ -28,6 +28,7 @@ class SettingsRepository(private val context: Context) {
         private val KEY_BASE_URL_ZEN = stringPreferencesKey("base_url_zen")
         private val KEY_BASE_URL_OPENCODEGO = stringPreferencesKey("base_url_opencodego")
         private val KEY_CUSTOM_BASE_URL = stringPreferencesKey("custom_base_url")
+        private val KEY_BASE_URL_ANTHROPIC = stringPreferencesKey("base_url_anthropic")
 
         // API Keys
         private val KEY_GEMINI_KEY = stringPreferencesKey("gemini_api_key")
@@ -36,11 +37,12 @@ class SettingsRepository(private val context: Context) {
         private val KEY_ZEN_KEY = stringPreferencesKey("zen_api_key")
         private val KEY_OPENCODEGO_KEY = stringPreferencesKey("opencodego_api_key")
         private val KEY_CUSTOM_KEY = stringPreferencesKey("custom_api_key")
+        private val KEY_ANTHROPIC_KEY = stringPreferencesKey("anthropic_api_key")
 
         // API-key preference names — their values are encrypted at rest via KeyCipher.
         private val API_KEY_PREFS = setOf(
             "gemini_api_key", "openai_api_key", "openrouter_api_key",
-            "zen_api_key", "opencodego_api_key", "custom_api_key",
+            "zen_api_key", "opencodego_api_key", "custom_api_key", "anthropic_api_key",
         )
 
         // Models
@@ -50,6 +52,7 @@ class SettingsRepository(private val context: Context) {
         private val KEY_MODEL_ZEN = stringPreferencesKey("model_zen")
         private val KEY_MODEL_OPENCODEGO = stringPreferencesKey("model_opencodego")
         private val KEY_MODEL_CUSTOM = stringPreferencesKey("model_custom")
+        private val KEY_MODEL_ANTHROPIC = stringPreferencesKey("model_anthropic")
 
         // Tweak params
         private val KEY_MAX_BUBBLES = intPreferencesKey("max_bubbles_per_request")
@@ -71,6 +74,7 @@ class SettingsRepository(private val context: Context) {
         private val KEY_JPEG_QUALITY = intPreferencesKey("jpeg_quality")
         private val KEY_RENDER_TEXT_COLOR = stringPreferencesKey("render_text_color")
         private val KEY_RENDER_FONT_SCALE = floatPreferencesKey("render_font_scale")
+        private val KEY_RENDER_STYLE = stringPreferencesKey("render_style")
         // Theme (persisted so dark mode / pure black / accent survive app restarts)
         private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
         private val KEY_PURE_BLACK = booleanPreferencesKey("pure_black")
@@ -86,18 +90,21 @@ class SettingsRepository(private val context: Context) {
         val baseUrlZen: String = "https://opencode.ai/zen/v1",
         val baseUrlOpencodego: String = "https://opencode.ai/zen/go/v1",
         val customBaseUrl: String = "",
+        val baseUrlAnthropic: String = "https://api.anthropic.com",
         val geminiApiKey: String = "",
         val openaiApiKey: String = "",
         val openrouterApiKey: String = "",
         val zenApiKey: String = "",
         val opencodegoApiKey: String = "",
         val customApiKey: String = "",
+        val anthropicApiKey: String = "",
         val modelGemini: String = "gemini-3.1-flash-lite",
         val modelOpenai: String = "gpt-5.4-mini",
         val modelOpenrouter: String = "qwen/qwen2.5-vl-72b-instruct:free",
         val modelZen: String = "minimax-m3-free",
         val modelOpencodego: String = "mimo-v2.5",
         val modelCustom: String = "gpt-5.4-mini",
+        val modelAnthropic: String = "claude-sonnet-4-5",
         val maxBubblesPerRequest: Int = 30,
         val minRequestDelay: Float = 2.0f,
         val filterSfxMode: String = "balanced",
@@ -117,6 +124,9 @@ class SettingsRepository(private val context: Context) {
         // "white" / "black" force the rendered text colour regardless of the bubble.
         val renderTextColor: String = "auto",
         val renderFontScale: Float = 1.0f,
+        // "manga" = outlined comic-style text (classic look);
+        // "clean" = flat text, no outline, sans-serif — Google-Translate-like.
+        val renderStyle: String = "manga",
         // JPEG output quality used for .jpg/.jpeg translations.
         val jpegQuality: Int = 92,
         // "system" = follow device theme, "light" / "dark" = explicit override.
@@ -132,6 +142,7 @@ class SettingsRepository(private val context: Context) {
             "zen" -> baseUrlZen
             "opencodego" -> baseUrlOpencodego
             "custom" -> customBaseUrl
+            "anthropic" -> baseUrlAnthropic
             else -> ""
         }
     }
@@ -150,18 +161,21 @@ class SettingsRepository(private val context: Context) {
             baseUrlZen = prefs[KEY_BASE_URL_ZEN] ?: Defaults.settings.baseUrlZen,
             baseUrlOpencodego = prefs[KEY_BASE_URL_OPENCODEGO] ?: Defaults.settings.baseUrlOpencodego,
             customBaseUrl = prefs[KEY_CUSTOM_BASE_URL] ?: Defaults.settings.customBaseUrl,
+            baseUrlAnthropic = prefs[KEY_BASE_URL_ANTHROPIC] ?: Defaults.settings.baseUrlAnthropic,
             geminiApiKey = prefs[KEY_GEMINI_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.geminiApiKey,
             openaiApiKey = prefs[KEY_OPENAI_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.openaiApiKey,
             openrouterApiKey = prefs[KEY_OPENROUTER_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.openrouterApiKey,
             zenApiKey = prefs[KEY_ZEN_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.zenApiKey,
             opencodegoApiKey = prefs[KEY_OPENCODEGO_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.opencodegoApiKey,
             customApiKey = prefs[KEY_CUSTOM_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.customApiKey,
+            anthropicApiKey = prefs[KEY_ANTHROPIC_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.anthropicApiKey,
             modelGemini = prefs[KEY_MODEL_GEMINI] ?: Defaults.settings.modelGemini,
             modelOpenai = prefs[KEY_MODEL_OPENAI] ?: Defaults.settings.modelOpenai,
             modelOpenrouter = prefs[KEY_MODEL_OPENROUTER] ?: Defaults.settings.modelOpenrouter,
             modelZen = prefs[KEY_MODEL_ZEN] ?: Defaults.settings.modelZen,
             modelOpencodego = prefs[KEY_MODEL_OPENCODEGO] ?: Defaults.settings.modelOpencodego,
             modelCustom = prefs[KEY_MODEL_CUSTOM] ?: Defaults.settings.modelCustom,
+            modelAnthropic = prefs[KEY_MODEL_ANTHROPIC] ?: Defaults.settings.modelAnthropic,
             maxBubblesPerRequest = prefs[KEY_MAX_BUBBLES] ?: Defaults.settings.maxBubblesPerRequest,
             minRequestDelay = prefs[KEY_REQUEST_DELAY] ?: Defaults.settings.minRequestDelay,
             filterSfxMode = prefs[KEY_SFX_MODE] ?: Defaults.settings.filterSfxMode,
@@ -179,6 +193,7 @@ class SettingsRepository(private val context: Context) {
             autoCheckUpdates = prefs[KEY_AUTO_CHECK_UPDATES] ?: Defaults.settings.autoCheckUpdates,
             renderTextColor = prefs[KEY_RENDER_TEXT_COLOR] ?: Defaults.settings.renderTextColor,
             renderFontScale = prefs[KEY_RENDER_FONT_SCALE] ?: Defaults.settings.renderFontScale,
+            renderStyle = prefs[KEY_RENDER_STYLE] ?: Defaults.settings.renderStyle,
             jpegQuality = prefs[KEY_JPEG_QUALITY] ?: Defaults.settings.jpegQuality,
             themeMode = prefs[KEY_THEME_MODE] ?: Defaults.settings.themeMode,
             pureBlack = prefs[KEY_PURE_BLACK] ?: Defaults.settings.pureBlack,
@@ -207,6 +222,7 @@ class SettingsRepository(private val context: Context) {
                 "zen" -> KEY_ZEN_KEY
                 "opencodego" -> KEY_OPENCODEGO_KEY
                 "custom" -> KEY_CUSTOM_KEY
+                "anthropic" -> KEY_ANTHROPIC_KEY
                 else -> return@edit
             }
             prefs[keyPref] = KeyCipher.encrypt(key)
@@ -219,7 +235,7 @@ class SettingsRepository(private val context: Context) {
      */
     suspend fun migrateLegacyApiKeys() {
         context.dataStore.edit { prefs ->
-            listOf(KEY_GEMINI_KEY, KEY_OPENAI_KEY, KEY_OPENROUTER_KEY, KEY_ZEN_KEY, KEY_OPENCODEGO_KEY, KEY_CUSTOM_KEY)
+            listOf(KEY_GEMINI_KEY, KEY_OPENAI_KEY, KEY_OPENROUTER_KEY, KEY_ZEN_KEY, KEY_OPENCODEGO_KEY, KEY_CUSTOM_KEY, KEY_ANTHROPIC_KEY)
                 .forEach { pref ->
                     val value = prefs[pref]
                     if (!value.isNullOrEmpty() && !value.startsWith(KeyCipher.PREFIX)) {
@@ -238,6 +254,7 @@ class SettingsRepository(private val context: Context) {
                 "zen" -> KEY_MODEL_ZEN
                 "opencodego" -> KEY_MODEL_OPENCODEGO
                 "custom" -> KEY_MODEL_CUSTOM
+                "anthropic" -> KEY_MODEL_ANTHROPIC
                 else -> return@edit
             }
             prefs[key] = model
@@ -253,6 +270,7 @@ class SettingsRepository(private val context: Context) {
                 "zen" -> KEY_BASE_URL_ZEN
                 "opencodego" -> KEY_BASE_URL_OPENCODEGO
                 "custom" -> KEY_CUSTOM_BASE_URL
+                "anthropic" -> KEY_BASE_URL_ANTHROPIC
                 else -> return@edit
             }
             prefs[key] = url
@@ -297,6 +315,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun saveRenderFontScale(scale: Float) {
         context.dataStore.edit { it[KEY_RENDER_FONT_SCALE] = scale.coerceIn(0.8f, 1.5f) }
+    }
+
+    suspend fun saveRenderStyle(style: String) {
+        context.dataStore.edit { it[KEY_RENDER_STYLE] = style }
     }
 
     suspend fun saveJpegQuality(quality: Int) {
@@ -402,6 +424,7 @@ class SettingsRepository(private val context: Context) {
             prefs.remove(KEY_JPEG_QUALITY)
             prefs.remove(KEY_RENDER_TEXT_COLOR)
             prefs.remove(KEY_RENDER_FONT_SCALE)
+            prefs.remove(KEY_RENDER_STYLE)
         }
     }
 }

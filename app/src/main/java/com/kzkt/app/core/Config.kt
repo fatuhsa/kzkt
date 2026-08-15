@@ -16,6 +16,14 @@ object Config {
         val defaultBaseUrl: String = "",
         val description: String = "",
         val requiresKey: Boolean = true,
+        // Flexible auth: header name + value prefix used for the API key.
+        // Defaults match OpenAI-compat (`Authorization: Bearer ...`); override in
+        // the registry for providers that expect `x-api-key` or a bare key.
+        val authHeaderName: String = "Authorization",
+        val authHeaderPrefix: String = "Bearer ",
+        // Longest-side limit before the mosaic image is downscaled for this
+        // provider (provider image-size limits).
+        val maxImageDimension: Int = 4096,
     )
 
     val PROVIDER_REGISTRY: Map<String, ProviderMeta> = mapOf(
@@ -24,6 +32,14 @@ object Config {
             defaultModel = "gemini-3.1-flash-lite",
             defaultBaseUrl = "https://generativelanguage.googleapis.com/v1beta",
             description = "Free tier available",
+        ),
+        "anthropic" to ProviderMeta(
+            key = "anthropic", displayName = "Anthropic",
+            defaultModel = "claude-sonnet-4-5",
+            defaultBaseUrl = "https://api.anthropic.com",
+            description = "Claude — native Messages API (vision + text)",
+            authHeaderName = "x-api-key",
+            authHeaderPrefix = "",
         ),
         "openai" to ProviderMeta(
             key = "openai", displayName = "OpenAI",
@@ -116,6 +132,9 @@ object Config {
             var customFontPath: String = "",
             var renderTextColor: String = "auto",
             var renderFontScale: Double = 1.0,
+            // "manga" = outlined comic-style text (classic look);
+            // "clean" = flat text, no outline, sans-serif — Google-Translate-like.
+            var renderStyle: String = "manga",
             var jpegQuality: Int = 92,
         )
 
@@ -147,6 +166,7 @@ object Config {
         ),
         "zen" to listOf("minimax-m3-free", "glm-4v-free", "qwen2.5-vl-free"),
         "opencodego" to listOf("mimo-v2.5", "claude-3-5-sonnet"),
+        "anthropic" to listOf("claude-sonnet-4-5", "claude-haiku-4-5", "claude-opus-4-1"),
     )
 
 }

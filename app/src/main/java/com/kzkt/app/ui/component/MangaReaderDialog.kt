@@ -108,6 +108,7 @@ fun MangaReaderDialog(
     pipelineResult: com.kzkt.app.core.PipelineResult? = null,
     targetLanguage: String = "Indonesian",
     customFontPath: String = "",
+    renderStyle: String = "manga",
     onDismiss: () -> Unit,
 ) {
     if (pagePaths.isEmpty()) return
@@ -384,11 +385,19 @@ fun MangaReaderDialog(
                                 IconButton(
                                     onClick = {
                                         scope.launch(Dispatchers.IO) {
-                                            val fileName = "KZKT_Export_${System.currentTimeMillis()}.cbz"
+                                            val fileName = "KZKT_Export_${System.currentTimeMillis()}.zip"
                                             val cbzFile = com.kzkt.app.util.ArchiveExtractor.createCbz(context, pagePaths, fileName)
                                             withContext(Dispatchers.Main) {
                                                 if (cbzFile != null) {
-                                                    android.widget.Toast.makeText(context, "Exported to Downloads: ${cbzFile.name}", android.widget.Toast.LENGTH_LONG).show()
+                                                    // Copy into the public Downloads/KZKT main folder (same
+                                                    // pattern as the History export), then drop the temp copy.
+                                                    val publicPath = com.kzkt.app.ui.FileUtils.saveToMediaStore(context, cbzFile.absolutePath)
+                                                    if (publicPath != null) {
+                                                        cbzFile.delete()
+                                                        android.widget.Toast.makeText(context, "Saved to Downloads/KZKT: ${File(publicPath).name}", android.widget.Toast.LENGTH_LONG).show()
+                                                    } else {
+                                                        android.widget.Toast.makeText(context, "Exported to Downloads: ${cbzFile.name}", android.widget.Toast.LENGTH_LONG).show()
+                                                    }
                                                 } else {
                                                     android.widget.Toast.makeText(context, "Export failed", android.widget.Toast.LENGTH_SHORT).show()
                                                 }
@@ -398,7 +407,7 @@ fun MangaReaderDialog(
                                 ) {
                                     Icon(
                                         Icons.Filled.FolderZip,
-                                        contentDescription = "Export CBZ",
+                                        contentDescription = "Export ZIP",
                                         tint = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
@@ -416,6 +425,7 @@ fun MangaReaderDialog(
                         textRenderer = com.kzkt.app.core.TextRenderer(context),
                         targetLanguage = targetLanguage,
                         customFontPath = customFontPath,
+                        renderStyle = renderStyle,
                         rawTexts = activeRawTexts,
                         styles = activeStyles,
                         onDismiss = { showEditor = false },

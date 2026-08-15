@@ -170,7 +170,8 @@ class TextRenderer(private val context: Context) {
         fontPreset: String = "Default",
         fontScale: Float = 1.0f,
         strokeColorHex: String? = null,
-        textColorHex: String? = null
+        textColorHex: String? = null,
+        renderStyle: String = "manga",
     ) {
         val (x1, y1, x2, y2) = bubbleRect
         val boxWidth = maxOf(1, x2 - x1)
@@ -181,12 +182,34 @@ class TextRenderer(private val context: Context) {
         val isJapanese = langKey == "japanese" || langKey == "jepang"
 
         if (isJapanese) {
-            renderJapaneseVertical(canvas, text, x1, y1, x2, y2, settings, backgroundPatch, bgColor, customFontPath, isBold, isItalic, fontPreset, fontScale, strokeColorHex, textColorHex)
+            renderJapaneseVertical(
+                canvas = canvas,
+                text = text,
+                x1 = x1,
+                y1 = y1,
+                x2 = x2,
+                y2 = y2,
+                settings = settings,
+                backgroundPatch = backgroundPatch,
+                bgColor = bgColor,
+                customFontPath = customFontPath,
+                isBold = isBold,
+                isItalic = isItalic,
+                fontPreset = fontPreset,
+                fontScale = fontScale,
+                strokeColorHex = strokeColorHex,
+                textColorHex = textColorHex,
+                renderStyle = renderStyle,
+            )
             return
         }
 
+        // Clean style keeps the original casing and draws flat (no outline);
+        // classic manga style uppercases Latin text and outlines it.
+        val isCleanStyle = renderStyle.equals("clean", ignoreCase = true)
         var displayText = text
-        if (!hasNonLatin(text)) displayText = text.uppercase()
+        if (!hasNonLatin(text) && !isCleanStyle) displayText = text.uppercase()
+        val effectiveFontPreset = if (isCleanStyle && !hasNonLatin(text)) "Sans-Serif" else fontPreset
 
         val maxW = (boxWidth * settings.scaleW).toFloat()
         val maxH = (boxHeight * settings.scaleH).toFloat()
@@ -202,7 +225,7 @@ class TextRenderer(private val context: Context) {
         while (low <= high) {
             val fSize = (low + high) / 2
             val paint = Paint().apply {
-                val baseTypeface = getTypeface(displayText, customFontPath, fontPreset)
+                val baseTypeface = getTypeface(displayText, customFontPath, effectiveFontPreset)
                 val style = if (isBold && isItalic) Typeface.BOLD_ITALIC else if (isBold) Typeface.BOLD else if (isItalic) Typeface.ITALIC else Typeface.NORMAL
                 typeface = Typeface.create(baseTypeface, style)
                 textSize = fSize.toFloat()
@@ -233,7 +256,7 @@ class TextRenderer(private val context: Context) {
         // Final render calculation
         bestFontSize = maxOf(minFontSize, (bestFontSize * settings.fontScale * fontScale).toInt())
         val finalPaint = Paint().apply {
-            val baseTypeface = getTypeface(displayText, customFontPath, fontPreset)
+            val baseTypeface = getTypeface(displayText, customFontPath, effectiveFontPreset)
             val style = if (isBold && isItalic) Typeface.BOLD_ITALIC else if (isBold) Typeface.BOLD else if (isItalic) Typeface.ITALIC else Typeface.NORMAL
             typeface = Typeface.create(baseTypeface, style)
             textSize = bestFontSize.toFloat()
@@ -255,7 +278,9 @@ class TextRenderer(private val context: Context) {
         val centerX = x1 + (boxWidth - textWidth) / 2f
         val centerY = y1 + (boxHeight - textHeight) / 2f
 
-        val strokeW = maxOf(1f, bestFontSize / 11f)
+        // Clean style draws no outline unless the user explicitly picked one in the
+        // editor (explicit per-bubble override always wins over the render preset).
+        val strokeW = if (isCleanStyle && strokeColorHex == null) 0f else maxOf(1f, bestFontSize / 11f)
         val isDarkBg = isDarkColor(bgColor)
         val autoTextColor = if (isDarkBg) Color.WHITE else Color.BLACK
         val textColor = textColorHex?.let {
@@ -297,15 +322,18 @@ class TextRenderer(private val context: Context) {
                 else -> centerX + (textWidth - lineWidth) / 2f
             }
 
-            // Stroke (outline for contrast)
-            val strokePaint = Paint(finalPaint).apply {
-                style = Paint.Style.STROKE
-                strokeWidth = strokeW
-                strokeCap = Paint.Cap.ROUND
-                strokeJoin = Paint.Join.ROUND
-                color = strokeColor
+            // Stroke (outline for contrast) — skipped entirely in clean style so the
+            // text looks flat like Google Translate.
+            if (strokeW > 0f) {
+                val strokePaint = Paint(finalPaint).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = strokeW
+                    strokeCap = Paint.Cap.ROUND
+                    strokeJoin = Paint.Join.ROUND
+                    color = strokeColor
+                }
+                canvas.drawText(line, lineX, currentY - finalPaint.fontMetrics.ascent, strokePaint)
             }
-            canvas.drawText(line, lineX, currentY - finalPaint.fontMetrics.ascent, strokePaint)
 
             // Fill (text color)
             val fillPaint = Paint(finalPaint).apply {
@@ -334,7 +362,8 @@ class TextRenderer(private val context: Context) {
         fontPreset: String,
         fontScale: Float = 1.0f,
         strokeColorHex: String? = null,
-        textColorHex: String? = null
+        textColorHex: String? = null,
+        renderStyle: String = "manga",
     ) {
         val cleanText = text.replace(" ", "").replace("\n", "")
         val boxWidth = maxOf(1, x2 - x1)
@@ -402,7 +431,8 @@ class TextRenderer(private val context: Context) {
             try { android.graphics.Color.parseColor(it) } catch (e: Exception) { autoStrokeColor }
         } ?: autoStrokeColor
 
-        val strokeW = maxOf(1f, bestFontSize / 11f)
+        val noStroke = renderStyle.equals("clean", ignoreCase = true) && strokeColorHex == null
+        val strokeW = if (noStroke) 0f else maxOf(1f, bestFontSize / 11f)
         val strokePaint = Paint(paint).apply {
             style = Paint.Style.STROKE
             strokeWidth = strokeW
@@ -454,9 +484,11 @@ class TextRenderer(private val context: Context) {
                 val cx = curX + offsetX
                 val cy = curY + offsetY
 
-                strokePaint.style = Paint.Style.FILL_AND_STROKE
-                strokePaint.color = strokeColor
-                canvas.drawText(displayChar.toString(), cx, cy - fontMetrics.ascent, strokePaint)
+                if (strokeW > 0f) {
+                    strokePaint.style = Paint.Style.FILL_AND_STROKE
+                    strokePaint.color = strokeColor
+                    canvas.drawText(displayChar.toString(), cx, cy - fontMetrics.ascent, strokePaint)
+                }
 
                 canvas.drawText(displayChar.toString(), cx, cy - fontMetrics.ascent, fillPaint)
 

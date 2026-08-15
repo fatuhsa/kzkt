@@ -302,7 +302,7 @@ fun HistoryScreen(
                                 dayGroup.label,
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
                             )
                         }
                         dayGroup.batches.forEach { batch ->
@@ -381,6 +381,7 @@ fun HistoryScreen(
                 initialIndex = readerInitialIndex,
                 targetLanguage = viewModel.settings.value.targetLanguage,
                 customFontPath = viewModel.settings.value.customFontPath,
+                renderStyle = viewModel.settings.value.renderStyle,
                 onDismiss = { readerPages = null },
             )
         }
@@ -507,11 +508,9 @@ private fun HistoryFilterHeader(
 
         // Sort controls: by time or by file name, plus a direction toggle that
         // flips the pages inside each batch (page 1 first ↔ last page first).
+        // The two chips share the row width so the toggle sits at the far right.
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(bottom = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -522,6 +521,7 @@ private fun HistoryFilterHeader(
                 leadingIcon = if (sortMode == HistorySortMode.TIME) {
                     { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
                 } else null,
+                modifier = Modifier.weight(1f),
             )
             FilterChip(
                 selected = sortMode == HistorySortMode.NAME,
@@ -530,6 +530,7 @@ private fun HistoryFilterHeader(
                 leadingIcon = if (sortMode == HistorySortMode.NAME) {
                     { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
                 } else null,
+                modifier = Modifier.weight(1f),
             )
             Divider(modifier = Modifier.height(24.dp).width(1.dp))
             // Direction toggle — flips the order in the list AND in the reader.
@@ -540,16 +541,6 @@ private fun HistoryFilterHeader(
                     tint = MaterialTheme.colorScheme.primary,
                 )
             }
-            Text(
-                when {
-                    sortMode == HistorySortMode.TIME && !sortDescending -> "Newest batch · P1 first"
-                    sortMode == HistorySortMode.TIME -> "Oldest batch · Last first"
-                    !sortDescending -> "A-Z · P1 first"
-                    else -> "Z-A · Last first"
-                },
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

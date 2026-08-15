@@ -73,7 +73,20 @@ class ChunkTranslator(
                         saveToCache(parsed, cropItems, prov)
                         succeeded = true
                         break
-                    } else if (logUnparseable) {
+                    }
+                    // JSON repair pass: ask the same provider to fix the malformed
+                    // output into valid JSON before failing over. Falls through to
+                    // the next provider when the repair also fails, so well-formed
+                    // responses never take this path.
+                    val repaired = repairJsonOutput(prov, cleaned)
+                    val repairedParsed = repaired?.let { JsonUtils.parseTranslationMap(JsonUtils.sanitizeJson(it)) }
+                    if (repairedParsed != null && repairedParsed.isNotEmpty()) {
+                        allTranslations.putAll(repairedParsed)
+                        saveToCache(repairedParsed, cropItems, prov)
+                        succeeded = true
+                        break
+                    }
+                    if (logUnparseable) {
                         onProgress("  [!] ${prov.providerName} returned unparseable output (raw: ${cleaned.take(80)}). Trying next provider...")
                     }
                 }
@@ -182,6 +195,34 @@ class ChunkTranslator(
             if (!dummyBmp.isRecycled) dummyBmp.recycle()
         }
         return OcrResult(ocrMap, translated)
+    }
+
+    /**
+     * Ask [prov] to repair a malformed translation response into valid JSON. One
+     * attempt per provider — when it fails the caller just falls through to the
+     * next provider, so behaviour for well-formed responses is unchanged.
+     */
+    private suspend fun repairJsonOutput(prov: LlmProvider, raw: String): String? {
+        if (raw.isBlank()) return null
+        onProgress("  [!] Unparseable output — requesting JSON repair from ${prov.providerName}...")
+        val repairPrompt = "The text below is a translation result that is not valid JSON. " +
+            "Fix ONLY the JSON syntax/formatting errors and return the exact same translations " +
+            "as a valid JSON object with the same keys and values. " +
+            "Output ONLY the corrected JSON object — no markdown, no commentary.\n\n" +
+            "Broken output:\n$raw"
+        return try {
+            rateLimiter.executeWithRetry(
+                apiCall = { prov.translateText(raw, repairPrompt) },
+                providerName = prov.providerName,
+                isCancelled = isCancelled,
+                onWait = { msg -> onProgress(msg) },
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            onProgress("  [!] JSON repair failed (${e.message ?: "Unknown error"})")
+            null
+        }
     }
 
     /**

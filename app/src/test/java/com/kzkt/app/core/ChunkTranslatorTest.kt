@@ -18,6 +18,27 @@ import org.junit.Test
 class ChunkTranslatorTest {
 
     /** Deterministic fake provider: returns a canned response or throws on demand. */
+    /** Fake whose repair call (2nd translateText) returns valid JSON. */
+    private class RepairProvider(
+        override val providerName: String,
+        private val broken: String,
+        private val fixed: String,
+    ) : LlmProvider {
+        override val apiKey: String = "test-key"
+        override val modelName: String = "test-model"
+        var calls = 0
+
+        override suspend fun translateImage(image: Bitmap, prompt: String): String? {
+            calls++
+            return broken
+        }
+
+        override suspend fun translateText(textJson: String, prompt: String): String? {
+            calls++
+            return if (calls == 1) broken else fixed
+        }
+    }
+
     private class FakeProvider(
         override val providerName: String,
         private val response: String? = null,
@@ -148,9 +169,25 @@ class ChunkTranslatorTest {
 
         assertTrue(ok)
         assertEquals("dari fallback", translations["1"])
-        assertEquals(1, primary.textCalls)
+        // Initial call + one JSON-repair attempt (which returns the same broken text).
+        assertEquals(2, primary.textCalls)
         assertEquals(1, fallback.textCalls)
         assertTrue(progress.any { it.contains("unparseable") })
+    }
+
+    @Test
+    fun `unparseable primary output is repaired by the same provider`() = runBlocking {
+        val primary = RepairProvider("Primary", broken = "bukan json", fixed = """{"1":"diperbaiki"}""")
+        val fallback = FakeProvider("Fallback", response = """{"1":"fallback"}""")
+        val progress = mutableListOf<String>()
+
+        val (ok, translations) = runChain(primary, listOf(fallback), onProgress = { progress.add(it) })
+
+        assertTrue(ok)
+        assertEquals("diperbaiki", translations["1"])
+        assertEquals(2, primary.calls)
+        assertEquals(0, fallback.textCalls)
+        assertTrue(progress.any { it.contains("repair") })
     }
 
     @Test

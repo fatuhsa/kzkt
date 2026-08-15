@@ -197,6 +197,7 @@ class TranslationWorker(
                         customFontPath = s.customFontPath,
                         renderTextColor = s.renderTextColor,
                         renderFontScale = s.renderFontScale.toDouble(),
+                        renderStyle = s.renderStyle,
                         jpegQuality = s.jpegQuality,
                     ),
                     engine = Config.TweakParams.EngineParams(

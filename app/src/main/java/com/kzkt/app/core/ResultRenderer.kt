@@ -39,6 +39,7 @@ class ResultRenderer(
             else -> null
         }
         val fontScale = params.render.renderFontScale.toFloat()
+        val isCleanStyle = params.render.renderStyle.equals("clean", ignoreCase = true)
         var count = 0
 
         // Pass 1: Draw all background patches first
@@ -75,38 +76,50 @@ class ResultRenderer(
                     canvas.drawRect(x1 - pad, y1 - pad, x2 + pad, y2 + pad, erasePaint)
                 }
             } else if (!params.render.useInpainting && !(params.detection.pakaiPatchUntukBoxGepeng && suspiciousFlat)) {
-                // Background: blurred adaptive patch, drawn on a bubble-sized overlay
-                val marginX = (w * params.detection.maskMarginRatio).toInt()
-                val marginY = (h * params.detection.maskMarginRatio).toInt()
-                val cornerRadius = maxOf(6, minOf(w, h) / 3)
-                val blur = 6f
+                if (isCleanStyle) {
+                    // Clean style: flat solid patch (no blur, no rounded corners) so the
+                    // background under the text looks uniform like Google Translate.
+                    val pad = 2f
+                    val patchPaint =
+                        Paint().apply {
+                            color = bgColor
+                            isAntiAlias = false
+                        }
+                    canvas.drawRect(x1 - pad, y1 - pad, x2 + pad, y2 + pad, patchPaint)
+                } else {
+                    // Background: blurred adaptive patch, drawn on a bubble-sized overlay
+                    val marginX = (w * params.detection.maskMarginRatio).toInt()
+                    val marginY = (h * params.detection.maskMarginRatio).toInt()
+                    val cornerRadius = maxOf(6, minOf(w, h) / 3)
+                    val blur = 6f
 
-                val overlay = Bitmap.createBitmap(
-                    (x2 - x1) + marginX * 2 + (blur * 2).toInt(),
-                    (y2 - y1) + marginY * 2 + (blur * 2).toInt(),
-                    Bitmap.Config.ARGB_8888
-                )
-                overlay.eraseColor(Color.TRANSPARENT)
-                val overlayCanvas = Canvas(overlay)
+                    val overlay = Bitmap.createBitmap(
+                        (x2 - x1) + marginX * 2 + (blur * 2).toInt(),
+                        (y2 - y1) + marginY * 2 + (blur * 2).toInt(),
+                        Bitmap.Config.ARGB_8888
+                    )
+                    overlay.eraseColor(Color.TRANSPARENT)
+                    val overlayCanvas = Canvas(overlay)
 
-                val bgPaint = Paint().apply {
-                    color = bgColor
-                    isAntiAlias = true
+                    val bgPaint = Paint().apply {
+                        color = bgColor
+                        isAntiAlias = true
+                    }
+                    val pad = blur
+                    overlayCanvas.drawRoundRect(
+                        RectF(
+                            pad + marginX, pad + marginY,
+                            pad + marginX + (x2 - x1), pad + marginY + (y2 - y1)
+                        ),
+                        cornerRadius.toFloat(), cornerRadius.toFloat(), bgPaint
+                    )
+
+                    // Apply blur
+                    val blurPaint = Paint().apply {
+                        maskFilter = BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL)
+                    }
+                    canvas.drawBitmap(overlay, x1 - marginX - pad, y1 - marginY - pad, blurPaint)
                 }
-                val pad = blur
-                overlayCanvas.drawRoundRect(
-                    RectF(
-                        pad + marginX, pad + marginY,
-                        pad + marginX + (x2 - x1), pad + marginY + (y2 - y1)
-                    ),
-                    cornerRadius.toFloat(), cornerRadius.toFloat(), bgPaint
-                )
-
-                // Apply blur
-                val blurPaint = Paint().apply {
-                    maskFilter = BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL)
-                }
-                canvas.drawBitmap(overlay, x1 - marginX - pad, y1 - marginY - pad, blurPaint)
             }
         }
 
@@ -132,15 +145,18 @@ class ResultRenderer(
             if (params.render.useInpainting) {
                 textRenderer.renderTextInBubble(canvas, coordinateMap[num]!!, text,
                     backgroundPatch = false, targetLanguage = targetLanguage, bgColor = bgColor,
-                    customFontPath = params.render.customFontPath, fontScale = fontScale, textColorHex = textColorHex)
+                    customFontPath = params.render.customFontPath, fontScale = fontScale, textColorHex = textColorHex,
+                    renderStyle = params.render.renderStyle)
             } else if (params.detection.pakaiPatchUntukBoxGepeng && suspiciousFlat) {
                 textRenderer.renderTextInBubble(canvas, coordinateMap[num]!!, text,
                     backgroundPatch = true, targetLanguage = targetLanguage, bgColor = bgColor,
-                    customFontPath = params.render.customFontPath, fontScale = fontScale, textColorHex = textColorHex)
+                    customFontPath = params.render.customFontPath, fontScale = fontScale, textColorHex = textColorHex,
+                    renderStyle = params.render.renderStyle)
             } else {
                 textRenderer.renderTextInBubble(canvas, coordinateMap[num]!!, text,
                     backgroundPatch = false, targetLanguage = targetLanguage, bgColor = bgColor,
-                    customFontPath = params.render.customFontPath, fontScale = fontScale, textColorHex = textColorHex)
+                    customFontPath = params.render.customFontPath, fontScale = fontScale, textColorHex = textColorHex,
+                    renderStyle = params.render.renderStyle)
             }
             count++
         }

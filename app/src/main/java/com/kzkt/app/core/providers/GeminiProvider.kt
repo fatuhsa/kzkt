@@ -25,6 +25,10 @@ class GeminiProvider(
     override val providerName: String = "Google Gemini"
     private val apiBaseUrl = if (customUrl.isNotBlank()) customUrl.trimEnd('/') else "https://generativelanguage.googleapis.com/v1beta"
 
+    // Gemini inline-data images are limited to 3072×3072 px — downscale larger
+    // mosaics so big pages do not get rejected.
+    private val maxImageDimension: Int = 3072
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(com.kzkt.app.core.Config.CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
         .readTimeout(com.kzkt.app.core.Config.READ_TIMEOUT_SEC, TimeUnit.SECONDS)
@@ -34,8 +38,10 @@ class GeminiProvider(
     private val gson = Gson()
 
     override suspend fun translateImage(image: Bitmap, prompt: String): String? {
-        val base64 = ImageProcessor.bitmapToBase64(image)
-        val url = "$apiBaseUrl/models/$modelName:generateContent"
+        val prepared = ImageProcessor.prepareImageForProvider(image, maxImageDimension)
+        val base64 = ImageProcessor.bitmapToBase64(prepared)
+        if (prepared !== image && !prepared.isRecycled) prepared.recycle()
+        val endpoint = "$apiBaseUrl/models/$modelName"
 
         val requestBody = gson.toJson(mapOf(
             "contents" to listOf(mapOf(
@@ -56,11 +62,11 @@ class GeminiProvider(
             )
         ))
 
-        return executeGeminiRequest(url, requestBody)
+        return executeGeminiWithStream(endpoint, requestBody)
     }
 
     override suspend fun translateText(textJson: String, prompt: String): String? {
-        val url = "$apiBaseUrl/models/$modelName:generateContent"
+        val endpoint = "$apiBaseUrl/models/$modelName"
         val requestBody = gson.toJson(mapOf(
             "contents" to listOf(mapOf(
                 "parts" to listOf(
@@ -74,12 +80,65 @@ class GeminiProvider(
                 "responseMimeType" to "application/json"
             )
         ))
-        return executeGeminiRequest(url, requestBody)
+        return executeGeminiWithStream(endpoint, requestBody)
     }
 
-    private suspend fun executeGeminiRequest(url: String, requestBody: String): String? {
+    /**
+     * Try the SSE streaming endpoint first, falling back to the plain
+     * generateContent endpoint when the provider ignores the stream or the
+     * stream fails — the outcome is identical to the old behaviour.
+     */
+    private suspend fun executeGeminiWithStream(endpoint: String, requestBody: String): String? {
+        val plainUrl = "$endpoint:generateContent?key=$apiKey"
+        val streamUrl = "$endpoint:streamGenerateContent?alt=sse&key=$apiKey"
+        return try {
+            executeGeminiStreaming(streamUrl, requestBody)?.takeIf { it.isNotBlank() }
+                ?: executeGeminiPlain(plainUrl, requestBody)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Streaming attempt failed — retry once with the plain endpoint so the
+            // result is identical to before.
+            executeGeminiPlain(plainUrl, requestBody)
+        }
+    }
+
+    /**
+     * POST to the SSE streaming endpoint and accumulate the text deltas.
+     * Returns null when the response is not SSE (caller falls back to plain).
+     */
+    private suspend fun executeGeminiStreaming(url: String, requestBody: String): String? {
         val request = Request.Builder()
-            .url("$url?key=$apiKey")
+            .url(url)
+            .post(requestBody.toRequestBody("application/json".toMediaTypeOrNull()))
+            .build()
+
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                client.newCall(request).execute().use { response ->
+                    if (response.code == 403 || response.code == 401) {
+                        throw ValueError("API_KEY_ERROR")
+                    }
+                    if (!response.isSuccessful) {
+                        val body = response.body?.string() ?: ""
+                        throw RuntimeException("Gemini API error ${response.code}: ${body.take(200)}")
+                    }
+                    val contentType = response.header("Content-Type") ?: ""
+                    if (!contentType.contains("text/event-stream", ignoreCase = true)) {
+                        return@withContext null
+                    }
+                    val body = response.body ?: return@withContext null
+                    SseParser.readStream(body.source(), SseParser::extractContentDelta)
+                }
+            } catch (e: IOException) {
+                throw RuntimeException("Gemini network error: ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun executeGeminiPlain(url: String, requestBody: String): String? {
+        val request = Request.Builder()
+            .url(url)
             .post(requestBody.toRequestBody("application/json".toMediaTypeOrNull()))
             .build()
 

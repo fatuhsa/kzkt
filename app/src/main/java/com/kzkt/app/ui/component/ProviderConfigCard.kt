@@ -2,6 +2,7 @@
 
 package com.kzkt.app.ui.component
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,8 +17,8 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.GppGood
-import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.ModelTraining
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -66,6 +67,7 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
             "zen" -> viewModel.settings.value.zenApiKey
             "opencodego" -> viewModel.settings.value.opencodegoApiKey
             "custom" -> viewModel.settings.value.customApiKey
+            "anthropic" -> viewModel.settings.value.anthropicApiKey
             else -> ""
         }
     } }
@@ -81,6 +83,7 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
             "zen" -> viewModel.settings.value.modelZen
             "opencodego" -> viewModel.settings.value.modelOpencodego
             "custom" -> viewModel.settings.value.modelCustom
+            "anthropic" -> viewModel.settings.value.modelAnthropic
             else -> meta.defaultModel
         }
     } }
@@ -108,123 +111,131 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
     val allModels = remember(presetList, detected) { (presetList + detected).distinct().sorted() }
     val isLoading = viewModel.modelsLoading.value
 
-    Material3SettingsGroup(
-        title = "${meta.displayName} Configuration",
-        items = listOf(
-            Material3SettingsItem(
-                leadingContent = { SettingsIcon(Icons.Outlined.GppGood) },
-                title = {
-                    // Hoisted state: see apiKeyText / apiKeyVisible above. The single
-                    // debounced LaunchedEffect is the only write path.
-                    OutlinedTextField(
-                        value = apiKeyText,
-                        onValueChange = { apiKeyText = it },
-                        label = { Text(if (meta.requiresKey) "${meta.displayName} API Key" else "${meta.displayName} API Key (Optional)") },
-                        placeholder = { Text(if (meta.requiresKey) "Enter API Key" else "Optional API Key") },
-                        visualTransformation = if (apiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        trailingIcon = {
-                            IconButton(onClick = { apiKeyVisible = !apiKeyVisible }) {
-                                Icon(
-                                    if (apiKeyVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                    contentDescription = if (apiKeyVisible) "Hide" else "Show",
-                                )
-                            }
-                        },
-                    )
+    // One unified card for all provider fields (API key / base URL / model) — a
+    // single shared background instead of separate boxes per input.
+    Text(
+        "${meta.displayName} Configuration",
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
+    )
+    val cardContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = cardContainerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // API key field — hoisted state (see apiKeyText / apiKeyVisible above).
+            // The single debounced LaunchedEffect is the only write path.
+            OutlinedTextField(
+                value = apiKeyText,
+                onValueChange = { apiKeyText = it },
+                label = { Text(if (meta.requiresKey) "API Key" else "API Key (Optional)") },
+                placeholder = { Text(if (meta.requiresKey) "Enter API Key" else "Optional API Key") },
+                visualTransformation = if (apiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                trailingIcon = {
+                    IconButton(onClick = { apiKeyVisible = !apiKeyVisible }) {
+                        Icon(
+                            if (apiKeyVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                            contentDescription = if (apiKeyVisible) "Hide" else "Show",
+                        )
+                    }
                 },
-            ),
-            Material3SettingsItem(
-                leadingContent = { SettingsIcon(Icons.Outlined.Link) },
-                title = {
-                    OutlinedTextField(
-                        value = baseUrlText,
-                        onValueChange = { baseUrlText = it },
-                        label = { Text("Base URL") },
-                        placeholder = { Text(if (defaultBaseUrl.isNotBlank()) defaultBaseUrl else "https://api.example.com") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        trailingIcon = {
-                            if (defaultBaseUrl.isNotBlank() && baseUrlText != defaultBaseUrl) {
-                                TextButton(onClick = {
-                                    baseUrlText = defaultBaseUrl
-                                    scope.launch { viewModel.settingsRepo.saveBaseUrl(providerKey, defaultBaseUrl) }
-                                }) {
-                                    Text("Reset", style = MaterialTheme.typography.labelSmall)
-                                }
+            )
+            // Base URL is only meaningful for the generic "Custom" provider — the
+            // built-in providers use their own fixed endpoints.
+            if (providerKey == "custom") {
+                OutlinedTextField(
+                    value = baseUrlText,
+                    onValueChange = { baseUrlText = it },
+                    label = { Text("Base URL") },
+                    placeholder = { Text(if (defaultBaseUrl.isNotBlank()) defaultBaseUrl else "https://api.example.com") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    trailingIcon = {
+                        if (defaultBaseUrl.isNotBlank() && baseUrlText != defaultBaseUrl) {
+                            TextButton(onClick = {
+                                baseUrlText = defaultBaseUrl
+                                scope.launch { viewModel.settingsRepo.saveBaseUrl(providerKey, defaultBaseUrl) }
+                            }) {
+                                Text("Reset", style = MaterialTheme.typography.labelSmall)
                             }
                         }
-                    )
-                },
-            ),
-            Material3SettingsItem(
-                leadingContent = { SettingsIcon(Icons.Outlined.ModelTraining) },
-                title = {
-                    ModelDropdownInput(
-                        label = meta.displayName,
-                        value = currentModel,
-                        presets = if (allModels.isNotEmpty()) allModels else listOf(meta.defaultModel),
-                        onValue = { scope.launch { viewModel.settingsRepo.saveModel(providerKey, it) } },
-                    )
-                },
-            ),
-        )
-    )
-
-    // Model auto-detection performs a network call, so it is a real button — not
-    // a plain settings row that looks like a passive toggle.
-    Spacer(Modifier.height(8.dp))
-    OutlinedButton(
-        onClick = { viewModel.fetchModelsForProvider(providerKey, baseUrl, apiKey) },
-        enabled = !isLoading,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.primary,
+                    }
+                )
+            }
+            // Model field — editable text with a dropdown of presets / detected models.
+            ModelDropdownInput(
+                label = meta.displayName,
+                value = currentModel,
+                presets = if (allModels.isNotEmpty()) allModels else listOf(meta.defaultModel),
+                onValue = { scope.launch { viewModel.settingsRepo.saveModel(providerKey, it) } },
             )
-            Spacer(Modifier.width(8.dp))
-            Text("Fetching models…")
-        } else {
-            Icon(
-                imageVector = Icons.Outlined.CloudDownload,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("Detect Models from API")
         }
     }
 
-    // ── Health check: validate key + model + base URL with one tiny request ──
-    val testState = viewModel.providerTestState.value
+    // Detect (model auto-detection, network call) and Test (health check) are
+    // real actions, so they are buttons — side by side to keep the card compact.
     Spacer(Modifier.height(8.dp))
-    OutlinedButton(
-        onClick = { viewModel.testProviderConnection(providerKey, baseUrlText, apiKeyText, currentModel) },
-        enabled = testState?.loading != true,
+    val testState = viewModel.providerTestState.value
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (testState?.loading == true) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("Testing…")
-        } else {
-            Icon(
-                imageVector = Icons.Outlined.GppGood,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("Test API Key & Connection")
+        OutlinedButton(
+            onClick = { viewModel.fetchModelsForProvider(providerKey, baseUrl, apiKey) },
+            enabled = !isLoading,
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(16.dp),
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Fetching…")
+            } else {
+                Icon(
+                    imageVector = Icons.Outlined.CloudDownload,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Detect Models")
+            }
+        }
+        OutlinedButton(
+            onClick = { viewModel.testProviderConnection(providerKey, baseUrlText, apiKeyText, currentModel) },
+            enabled = testState?.loading != true,
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(16.dp),
+        ) {
+            if (testState?.loading == true) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Testing…")
+            } else {
+                Icon(
+                    imageVector = Icons.Outlined.GppGood,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Test API")
+            }
         }
     }
     testState?.let { state ->

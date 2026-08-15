@@ -165,10 +165,15 @@ fun SettingsScreen(
 
         // ── Appearance ──
         item(key = "appearance") {
-            val customFontPath by remember { derivedStateOf { viewModel.settings.value.customFontPath } }
-            Material3SettingsGroup(
-                title = "Appearance",
-                items = listOf(
+            Column {
+                Text(
+                    "Appearance",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
+                )
+                Material3SettingsGroup(
+                    items = listOf(
                     Material3SettingsItem(
                         leadingContent = { SettingsIcon(Icons.Outlined.DarkMode) },
                         title = { Text("Dark mode") },
@@ -194,27 +199,13 @@ fun SettingsScreen(
                         leadingContent = { SettingsIcon(Icons.Outlined.Palette) },
                         title = { Text("Accent color") },
                         description = {
-                            Text(if (themeColor == DefaultThemeColor) "System / Material You (default)" else "Custom seed color")
+                            Text(if (themeColor == DefaultThemeColor) "System / Material You" else "Custom seed color")
                         },
                         trailingContent = { AccentColorRow(themeColor, onThemeColorChange) },
                     ),
-                    Material3SettingsItem(
-                        leadingContent = { SettingsIcon(Icons.Outlined.TextFields) },
-                        title = { Text("Custom Font (.ttf / .otf)") },
-                        description = {
-                            Text(if (customFontPath.isNotBlank()) java.io.File(customFontPath).name else "Tap to import custom font file")
-                        },
-                        trailingContent = if (customFontPath.isNotBlank()) {
-                            {
-                                IconButton(onClick = { scope.launch { viewModel.settingsRepo.saveCustomFontPath("") } }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear Custom Font")
-                                }
-                            }
-                        } else null,
-                        onClick = { showFontDialog = true },
                     ),
-                ),
-            )
+                )
+            }
         }
 
         // ── Provider & Configuration ──
@@ -276,6 +267,7 @@ fun SettingsScreen(
                 // derivedStateOf, so changing one setting recomposes just this
                 // group — not the whole Settings screen (recomposition storm).
                 val useLocalOcr by remember { derivedStateOf { viewModel.settings.value.useLocalOcr } }
+                val useImageUpscaler by remember { derivedStateOf { viewModel.settings.value.useImageUpscaler } }
                 val translateSfx by remember { derivedStateOf { viewModel.settings.value.translateSfx } }
                 val translateFreeText by remember { derivedStateOf { viewModel.settings.value.translateFreeText } }
                 Material3SettingsGroup(
@@ -294,6 +286,17 @@ fun SettingsScreen(
                             },
                             onClick = {
                                 scope.launch { viewModel.settingsRepo.saveUseLocalOcr(!useLocalOcr) }
+                            }
+                        ),
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.Science) },
+                            title = { Text("Smart Image Upscaler") },
+                            description = { Text("Enhance low-resolution images for better AI text detection. May increase RAM usage.") },
+                            trailingContent = {
+                                Switch(
+                                    checked = useImageUpscaler,
+                                    onCheckedChange = { scope.launch { viewModel.settingsRepo.saveUseImageUpscaler(it) } }
+                                )
                             }
                         ),
                         Material3SettingsItem(
@@ -316,13 +319,10 @@ fun SettingsScreen(
                             leadingContent = { SettingsIcon(Icons.Outlined.TextFields) },
                             title = { Text("Translate Free Text (outside bubbles)") },
                             description = {
-                                val desc =
-                                    if (translateFreeText) {
-                                        "ON: caption boxes, signs & background text get translated too (ML Kit)."
-                                    } else {
-                                        "OFF: only speech bubbles are translated (default)."
-                                    }
-                                Text(desc)
+                                Text(
+                                    if (translateFreeText) "ON: also translate text outside bubbles"
+                                    else "OFF: only speech bubbles"
+                                )
                             },
                             trailingContent = {
                                 Switch(
@@ -334,21 +334,6 @@ fun SettingsScreen(
                                 scope.launch { viewModel.settingsRepo.saveTranslateFreeText(!translateFreeText) }
                             },
                         ),
-                        Material3SettingsItem(
-                            leadingContent = { SettingsIcon(Icons.Outlined.TextFields) },
-                            title = { Text("Custom Dictionary / Glossary") },
-                            description = { Text("Define how specific names or terms should be translated") },
-                            onClick = onNavigateToGlossary
-                        ),
-                        Material3SettingsItem(
-                            leadingContent = { SettingsIcon(Icons.Outlined.DeleteOutline) },
-                            title = { Text("Clear Translation Cache") },
-                            description = { Text("Forces re-translation of identical speech bubbles instead of using memory") },
-                            onClick = {
-                                com.kzkt.app.data.TranslationCacheRepository(context).clear()
-                                android.widget.Toast.makeText(context, "Translation cache cleared", android.widget.Toast.LENGTH_SHORT).show()
-                            }
-                        )
                     )
                 )
                 // OCR script is auto-detected: the single bundled ML Kit model
@@ -393,21 +378,29 @@ fun SettingsScreen(
                 )
                 val textColor by remember { derivedStateOf { viewModel.settings.value.renderTextColor } }
                 val fontScale by remember { derivedStateOf { viewModel.settings.value.renderFontScale } }
+                val renderStyle by remember { derivedStateOf { viewModel.settings.value.renderStyle } }
+                val customFontPath by remember { derivedStateOf { viewModel.settings.value.customFontPath } }
                 Material3SettingsGroup(
                     items = listOf(
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.Tune) },
+                            title = { Text("Render style") },
+                            description = {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    listOf("manga" to "Manga", "clean" to "Clean").forEach { (key, label) ->
+                                        FilterChip(
+                                            selected = renderStyle == key,
+                                            onClick = { scope.launch { viewModel.settingsRepo.saveRenderStyle(key) } },
+                                            label = { Text(label) },
+                                        )
+                                    }
+                                }
+                            },
+                        ),
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.Palette) },
                             title = { Text("Text color") },
                             description = {
-                                Text(
-                                    when (textColor) {
-                                        "white" -> "Always white — best on dark bubbles"
-                                        "black" -> "Always black — best on light bubbles"
-                                        else -> "Auto: white on dark bubbles, black on light"
-                                    }
-                                )
-                            },
-                            trailingContent = {
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     listOf("auto" to "Auto", "white" to "White", "black" to "Black").forEach { (key, label) ->
                                         FilterChip(
@@ -460,6 +453,21 @@ fun SettingsScreen(
                                 }
                             },
                         ),
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.TextFields) },
+                            title = { Text("Custom Font (.ttf / .otf)") },
+                            description = {
+                                Text(if (customFontPath.isNotBlank()) java.io.File(customFontPath).name else "Tap to import custom font file")
+                            },
+                            trailingContent = if (customFontPath.isNotBlank()) {
+                                {
+                                    IconButton(onClick = { scope.launch { viewModel.settingsRepo.saveCustomFontPath("") } }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Clear Custom Font")
+                                    }
+                                }
+                            } else null,
+                            onClick = { showFontDialog = true },
+                        ),
                     )
                 )
             }
@@ -469,7 +477,7 @@ fun SettingsScreen(
         item(key = "data") {
             Column {
                 Text(
-                    "Data",
+                    "Data & Memory",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
@@ -487,6 +495,21 @@ fun SettingsScreen(
                             title = { Text("Restore Backup") },
                             description = { Text("Import a backup file — overwrites current settings, glossary and history") },
                             onClick = { backupPickerLauncher.launch("*/*") },
+                        ),
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.DeleteOutline) },
+                            title = { Text("Clear Translation Cache") },
+                            description = { Text("Forces re-translation of identical speech bubbles instead of using memory") },
+                            onClick = {
+                                com.kzkt.app.data.TranslationCacheRepository(context).clear()
+                                android.widget.Toast.makeText(context, "Translation cache cleared", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        ),
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.TextFields) },
+                            title = { Text("Custom Dictionary / Glossary") },
+                            description = { Text("Define how specific names or terms should be translated") },
+                            onClick = onNavigateToGlossary
                         ),
                     )
                 )
@@ -529,39 +552,6 @@ fun SettingsScreen(
                             },
                             onClick = { viewModel.checkForUpdate(manual = true) },
                         ),
-                    )
-                )
-            }
-        }
-
-        // ── Developer ──
-        item(key = "developer") {
-            Column {
-                Text(
-                    "Developer",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
-                )
-                val enableDevLogs by remember { derivedStateOf { viewModel.settings.value.enableDevLogs } }
-                Material3SettingsGroup(
-                    items = listOf(
-                        Material3SettingsItem(
-                            leadingContent = { SettingsIcon(Icons.Outlined.BugReport) },
-                            title = { Text("Verbose Developer Logs") },
-                            description = { Text(if (enableDevLogs) "ON: Shows bubble-by-bubble OCR text and connection details." else "OFF: Clean & simple progress logs.") },
-                            trailingContent = {
-                                Switch(
-                                    checked = enableDevLogs,
-                                    onCheckedChange = { enabled ->
-                                        scope.launch { viewModel.settingsRepo.saveEnableDevLogs(enabled) }
-                                    }
-                                )
-                            },
-                            onClick = {
-                                scope.launch { viewModel.settingsRepo.saveEnableDevLogs(!enableDevLogs) }
-                            }
-                        )
                     )
                 )
             }
@@ -610,19 +600,25 @@ fun SettingsScreen(
         }
 
         if (showAdvanced) {
-            item(key = "image_upscaler") {
-                val useImageUpscaler by remember { derivedStateOf { viewModel.settings.value.useImageUpscaler } }
+            // ── Verbose Developer Logs ──
+            item(key = "dev_logs") {
+                val enableDevLogs by remember { derivedStateOf { viewModel.settings.value.enableDevLogs } }
                 Material3SettingsGroup(
                     items = listOf(
                         Material3SettingsItem(
-                            leadingContent = { SettingsIcon(Icons.Outlined.Science) },
-                            title = { Text("Smart Image Upscaler") },
-                            description = { Text("Enhance low-resolution images for better AI text detection. May increase RAM usage.") },
+                            leadingContent = { SettingsIcon(Icons.Outlined.BugReport) },
+                            title = { Text("Verbose Developer Logs") },
+                            description = { Text(if (enableDevLogs) "ON: Shows bubble-by-bubble OCR text and connection details." else "OFF: Clean & simple progress logs.") },
                             trailingContent = {
                                 Switch(
-                                    checked = useImageUpscaler,
-                                    onCheckedChange = { scope.launch { viewModel.settingsRepo.saveUseImageUpscaler(it) } }
+                                    checked = enableDevLogs,
+                                    onCheckedChange = { enabled ->
+                                        scope.launch { viewModel.settingsRepo.saveEnableDevLogs(enabled) }
+                                    }
                                 )
+                            },
+                            onClick = {
+                                scope.launch { viewModel.settingsRepo.saveEnableDevLogs(!enableDevLogs) }
                             }
                         )
                     )

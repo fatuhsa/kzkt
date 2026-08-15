@@ -111,7 +111,15 @@ class PagePreparer(
                 if (cropX2 - cropX1 <= 0 || cropY2 - cropY1 <= 0) continue
 
                 val id = "${idPrefix}ft${order + 1}"
-                bgColors[id] = ImageProcessor.sampleRegionBackgroundColor(cropMatFull, box)
+                val isCleanStyle = params.render.renderStyle.equals("clean", ignoreCase = true)
+                bgColors[id] =
+                    if (isCleanStyle) {
+                        // Median is robust to stray strokes at the ring — the flat erase
+                        // fill blends with the real page background in clean style.
+                        ImageProcessor.sampleRegionBackgroundColorMedian(cropMatFull, box)
+                    } else {
+                        ImageProcessor.sampleRegionBackgroundColor(cropMatFull, box)
+                    }
 
                 val cropMat = cropMatFull.submat(org.opencv.core.Rect(cropX1, cropY1, cropX2 - cropX1, cropY2 - cropY1))
                 val scale = params.detection.skalaPotonganMosaik

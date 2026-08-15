@@ -7,14 +7,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
@@ -63,49 +58,42 @@ fun TweakParamsSection(viewModel: MainViewModel) {
         viewModel,
         "custom_timeout",
         "Custom Request Timeout",
-        "Maximum HTTP network timeout per LLM API request (30s – 600s)",
         30f..600f
     )
     TweakSlider(
         viewModel,
         "max_bubbles",
         "Bubbles Per Request",
-        "Maximum text speech bubbles processed in a single LLM batch",
         5f..50f
     )
     TweakSlider(
         viewModel,
         "request_delay",
         "Min Request Delay",
-        "Minimum delay interval between API calls to prevent rate limits",
         0.5f..10f
     )
     TweakSlider(
         viewModel,
         "pad_x",
         "Pad X Ratio",
-        "Horizontal padding multiplier added to text bubble bounding boxes",
         0.1f..1.0f
     )
     TweakSlider(
         viewModel,
         "pad_y",
         "Pad Y Ratio",
-        "Vertical padding multiplier added to text bubble bounding boxes",
         0.1f..1.0f
     )
     TweakSlider(
         viewModel,
         "min_pad",
         "Min Padding (px)",
-        "Minimum absolute pixel padding added around detected text bubbles",
         5f..100f
     )
     TweakSlider(
         viewModel,
         "jpeg_quality",
         "JPEG Output Quality",
-        "Compression quality for saved .jpg/.jpeg translations (higher = larger file)",
         70f..100f
     )
 }
@@ -132,14 +120,13 @@ private fun saveTweakSliderValue(
 }
 
 /**
- * One tweak-parameter slider with descriptions and +/- stepper buttons for precise adjustment.
+ * One tweak-parameter slider (advanced settings).
  */
 @Composable
 private fun TweakSlider(
     viewModel: MainViewModel,
     keyField: String,
     label: String,
-    description: String,
     range: ClosedFloatingPointRange<Float>,
 ) {
     val scope = rememberCoroutineScope()
@@ -157,14 +144,6 @@ private fun TweakSlider(
         }
     } }
     var sliderValue by remember(value) { mutableFloatStateOf(value) }
-
-    val step = when (keyField) {
-        "custom_timeout" -> 5f
-        "max_bubbles", "min_pad" -> 1f
-        "request_delay" -> 0.5f
-        "jpeg_quality" -> 1f
-        else -> 0.05f
-    }
 
     Material3SettingsGroup(
         items = listOf(
@@ -185,54 +164,15 @@ private fun TweakSlider(
                             }
                             Text(fmt, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                         }
-                        Text(
-                            description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
+                        Slider(
+                            value = sliderValue,
+                            onValueChange = { sliderValue = it },
+                            onValueChangeFinished = {
+                                saveTweakSliderValue(scope, viewModel, keyField, sliderValue)
+                            },
+                            valueRange = range,
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    val newValue = (sliderValue - step).coerceIn(range.start, range.endInclusive)
-                                    sliderValue = newValue
-                                    saveTweakSliderValue(scope, viewModel, keyField, newValue)
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Remove,
-                                    contentDescription = "Decrease",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Slider(
-                                value = sliderValue,
-                                onValueChange = { sliderValue = it },
-                                onValueChangeFinished = {
-                                    saveTweakSliderValue(scope, viewModel, keyField, sliderValue)
-                                },
-                                valueRange = range,
-                                modifier = Modifier.weight(1f),
-                            )
-                            IconButton(
-                                onClick = {
-                                    val newValue = (sliderValue + step).coerceIn(range.start, range.endInclusive)
-                                    sliderValue = newValue
-                                    saveTweakSliderValue(scope, viewModel, keyField, newValue)
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Add,
-                                    contentDescription = "Increase",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
                     }
                 },
             ),

@@ -154,6 +154,7 @@ fun ResultPreviewCard(
                     pipelineResult = lastResult,
                     targetLanguage = viewModel.settings.value.targetLanguage,
                     customFontPath = viewModel.settings.value.customFontPath,
+                    renderStyle = viewModel.settings.value.renderStyle,
                     onDismiss = { showFullscreenViewer = false }
                 )
             }
@@ -174,6 +175,7 @@ fun ResultPreviewCard(
                 textRenderer = TextRenderer(context),
                 targetLanguage = viewModel.settings.value.targetLanguage,
                 customFontPath = viewModel.settings.value.customFontPath,
+                renderStyle = viewModel.settings.value.renderStyle,
                 rawTexts = lastResult.rawTexts,
                 styles = lastResult.styles,
                 onDismiss = { viewModel.showInteractiveEditor.value = false },
