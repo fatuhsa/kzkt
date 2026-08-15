@@ -32,11 +32,11 @@ private fun dayOf(ts: Long): LocalDate =
 fun filterHistoryEntries(
     entries: List<HistoryEntry>,
     query: String,
-    providerFilter: String?,
-    languageFilter: String?,
-    startMillis: Long?,
-    endMillis: Long?,
     removedIds: Set<Long>,
+    providerFilter: String? = null,
+    languageFilter: String? = null,
+    startMillis: Long? = null,
+    endMillis: Long? = null,
 ): List<HistoryEntry> = entries.asSequence()
     .filterNot { it.timestamp in removedIds }
     .filter { providerFilter == null || it.provider == providerFilter }
@@ -58,21 +58,58 @@ fun filterHistoryEntries(
     }
     .toList()
 
-/** Group entries into day buckets with friendly headers, newest day first. */
-fun groupByDay(entries: List<HistoryEntry>): List<Pair<String, List<HistoryEntry>>> {
+/** Grouping key for a translation run: batchId when present, legacy heuristic otherwise. */
+private fun batchKeyOf(entry: HistoryEntry): String =
+    entry.batchId.ifBlank { bookGroupKey(entry.outputPath) }
+
+/** One translation run inside a day: label + its pages (already sorted). */
+data class HistoryBatchGroup(
+    val label: String,
+    val entries: List<HistoryEntry>,
+)
+
+/** One day bucket: friendly header ("Today") + its translation runs. */
+data class HistoryDayGroup(
+    val label: String,
+    val batches: List<HistoryBatchGroup>,
+)
+
+/**
+ * Group entries into day buckets (newest day first), and inside each day into
+ * translation runs ([HistoryEntry.batchId], or [bookGroupKey] for legacy
+ * entries) so every batch gets its own separator in the list. Pages of one run
+ * are already ordered by the active sort, so grouping preserves that order.
+ */
+fun groupByDayAndBatch(entries: List<HistoryEntry>): List<HistoryDayGroup> {
     if (entries.isEmpty()) return emptyList()
     val today = LocalDate.now()
     val yesterday = today.minusDays(1)
     return entries
         .groupBy { dayOf(it.timestamp) }
         .toSortedMap(compareByDescending { it })
-        .map { (day, list) ->
-            val label = when (day) {
+        .map { (day, dayEntries) ->
+            val dayLabel = when (day) {
                 today -> "Today"
                 yesterday -> "Yesterday"
                 else -> DAY_HEADER_FORMATTER.format(Date(day.toEpochDay() * 86_400_000L))
             }
-            label to list
+            val batches =
+                dayEntries
+                    .groupBy(::batchKeyOf)
+                    .values
+                    .map { batchEntries ->
+                        val failedCount = batchEntries.count { it.status == "failed" }
+                        val finishedAt = batchEntries.maxOf { it.timestamp }
+                        val pageWord = if (batchEntries.size == 1) "page" else "pages"
+                        val label =
+                            buildString {
+                                append("${batchEntries.size} ", pageWord)
+                                if (failedCount > 0) append(" · $failedCount failed")
+                                append(" · ", TIME_FORMATTER.format(Date(finishedAt)))
+                            }
+                        HistoryBatchGroup(label, batchEntries)
+                    }
+            HistoryDayGroup(dayLabel, batches)
         }
 }
 
@@ -99,6 +136,94 @@ fun bookGroupKey(path: String): String {
     return "${f.parent ?: ""}|${stripped.ifEmpty { "numbered" }}"
 }
 
+/** How the History list and reader order their entries. */
+enum class HistorySortMode { TIME, NAME }
+
+/**
+ * Sort history entries for display.
+ *
+ * Both modes group entries by translation run (same [HistoryEntry.batchId], or
+ * [bookGroupKey] for legacy entries). Inside every run the pages start with
+ * page 1 (oldest timestamp) on top by default; [descending] flips them so the
+ * last page comes first — so the toggle ALWAYS visibly changes the order, even
+ * when History holds a single run.
+ *
+ * The runs themselves are ordered by the mode: TIME = newest run first by
+ * default (oldest first when [descending]), NAME = numeric-aware file name of
+ * the run's first page (A-Z by default, Z-A when [descending]). Pure — shared
+ * by the History screen and unit tests.
+ */
+fun sortHistoryEntries(
+    entries: List<HistoryEntry>,
+    mode: HistorySortMode,
+    descending: Boolean,
+): List<HistoryEntry> {
+    val grouped =
+        entries.groupBy { e ->
+            if (e.batchId.isNotBlank()) "batch:${e.batchId}" else "book:${bookGroupKey(e.outputPath)}"
+        }
+    val runs =
+        grouped.values.map { run ->
+            val pages = run.sortedBy { it.timestamp }
+            Triple(
+                if (descending) pages.reversed() else pages,
+                run.maxOf { it.timestamp },
+                pages.first().fileName,
+            )
+        }
+    val orderedRuns =
+        when (mode) {
+            HistorySortMode.TIME -> if (descending) runs.sortedBy { it.second } else runs.sortedByDescending { it.second }
+            HistorySortMode.NAME -> if (descending) runs.sortedByDescending { it.third } else runs.sortedBy { it.third }
+        }
+    return orderedRuns.flatMap { it.first }
+}
+
+/**
+ * All pages that open together with [targetPath] in the reader, INCLUDING the
+ * tapped page itself, ordered by [sortMode] (default: translation time, oldest
+ * first = page 1, the newest page last — the natural reading order regardless
+ * of file names). Returns the ordered list plus the index of [targetPath]
+ * within it, so the reader opens on the page the user tapped.
+ *
+ * Pages are grouped by the translation run they belong to (same
+ * [HistoryEntry.batchId]) — which works even when the source file names differ
+ * — or, for entries recorded before batchId existed, pages sharing the same
+ * [bookGroupKey] heuristic. PDFs are excluded (they open in the PDF reader
+ * instead) and missing files are skipped.
+ */
+fun orderedPagesFor(
+    entries: List<HistoryEntry>,
+    targetPath: String,
+    sortMode: HistorySortMode = HistorySortMode.TIME,
+    descending: Boolean = false,
+): Pair<List<String>, Int> {
+    val target = entries.firstOrNull { it.outputPath == targetPath }
+    val batchId = target?.batchId ?: ""
+    val pages =
+        entries.mapNotNull { e ->
+            val p = e.outputPath
+            val sameBatch = batchId.isNotBlank() && e.batchId == batchId
+            val sameBook = batchId.isBlank() && bookGroupKey(p) == bookGroupKey(targetPath)
+            val isSibling = !p.endsWith(".pdf", ignoreCase = true) && File(p).exists() && (sameBatch || sameBook)
+            if (isSibling) e to p else null
+        }
+    val comparator =
+        Comparator<Pair<HistoryEntry, String>> { (ea, pa), (eb, pb) ->
+            val primary =
+                when (sortMode) {
+                    HistorySortMode.TIME -> ea.timestamp.compareTo(eb.timestamp)
+                    HistorySortMode.NAME -> compareNatural(ea.fileName, eb.fileName)
+                }
+            if (primary != 0) primary else compareNatural(pa, pb)
+        }
+    val ordered =
+        pages
+            .sortedWith(if (descending) comparator.reversed() else comparator)
+            .map { it.second }
+    return ordered to ordered.indexOf(targetPath).coerceAtLeast(0)
+}
+
 /** Natural (numeric-aware) string comparison for page ordering. */
 fun compareNatural(a: String, b: String): Int {
     val regex = Regex("(\\d+)|(\\D+)")
@@ -109,7 +234,10 @@ fun compareNatural(a: String, b: String): Int {
         val x = ca[i]
         val y = cb[i]
         val cmp = if (x.all(Char::isDigit) && y.all(Char::isDigit)) {
-            x.toLong().compareTo(y.toLong())
+            // toLongOrNull guards against digit runs that overflow Long (e.g.
+            // temp-dir names like "kzkt_batch12345678901234567890"); treat those
+            // as equal so ordering falls through to the next segment.
+            (x.toLongOrNull() ?: 0L).compareTo(y.toLongOrNull() ?: 0L)
         } else {
             x.compareTo(y)
         }

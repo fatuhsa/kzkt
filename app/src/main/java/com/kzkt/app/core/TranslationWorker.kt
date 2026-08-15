@@ -247,6 +247,13 @@ class TranslationWorker(
                 cacheOutputFolder.mkdirs()
                 val outputDir = cacheOutputFolder.absolutePath
 
+                // One ID for the whole run: every page of this batch (folder,
+                // multi-select or PDF) shares it, so the History reader can group
+                // siblings even when the source file names differ. Timestamp-based
+                // (collisions across runs are harmless — grouping only needs pages
+                // of the SAME run to match, never different runs to differ).
+                val batchId = System.currentTimeMillis().toString()
+
                 var completed = 0
                 val totalSteps = files.fold(0) { acc, f ->
                     acc + if (f.endsWith(".pdf", ignoreCase = true)) 3 else 1
@@ -288,7 +295,8 @@ class TranslationWorker(
                                         provider = s.llmProvider,
                                         targetLanguage = s.targetLanguage,
                                         inputPath = path,
-                                        status = "failed"
+                                        status = "failed",
+                                        batchId = batchId
                                     )
                                 )
                             } catch (e: Exception) {
@@ -384,7 +392,8 @@ class TranslationWorker(
                                                 provider = s.llmProvider,
                                                 targetLanguage = s.targetLanguage,
                                                 inputPath = path,
-                                                status = "ok"
+                                                status = "ok",
+                                                batchId = batchId
                                             )
                                         )
                                     } catch (e: Exception) {
@@ -413,7 +422,8 @@ class TranslationWorker(
                                         provider = s.llmProvider,
                                         targetLanguage = s.targetLanguage,
                                         inputPath = path,
-                                        status = "failed"
+                                        status = "failed",
+                                        batchId = batchId
                                     )
                                 )
                             } catch (e: Exception) {
@@ -455,7 +465,8 @@ class TranslationWorker(
                                             provider = s.llmProvider,
                                             targetLanguage = s.targetLanguage,
                                             inputPath = path,
-                                            status = "ok"
+                                            status = "ok",
+                                            batchId = batchId
                                         )
                                     )
                                 } catch (e: Exception) {
@@ -480,7 +491,8 @@ class TranslationWorker(
                                         provider = s.llmProvider,
                                         targetLanguage = s.targetLanguage,
                                         inputPath = path,
-                                        status = "failed"
+                                        status = "failed",
+                                        batchId = batchId
                                     )
                                 )
                             } catch (e: Exception) {

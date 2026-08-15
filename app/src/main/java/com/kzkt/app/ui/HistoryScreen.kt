@@ -19,15 +19,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,7 +41,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -55,7 +56,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kzkt.app.data.HistoryEntry
 import com.kzkt.app.ui.component.EmptyHistoryPlaceholder
-import com.kzkt.app.ui.component.HistoryDateRangeDialog
 import com.kzkt.app.ui.component.HistorySelectionBar
 import com.kzkt.app.ui.component.MangaReaderDialog
 import com.kzkt.app.ui.component.NoResultsItem
@@ -74,12 +74,13 @@ fun HistoryScreen(
     val scope = rememberCoroutineScope()
     val entries by viewModel.historyEntries.collectAsStateWithLifecycle()
 
-    // Search + provider filter state
+    // Search state
     var query by rememberSaveable { mutableStateOf("") }
-    var providerFilter by rememberSaveable { mutableStateOf<String?>(null) }
-    var languageFilter by rememberSaveable { mutableStateOf<String?>(null) }
-    val dateRangeState = rememberDateRangePickerState()
-    var showDateRangePicker by remember { mutableStateOf(false) }
+
+    // Sort state — how the list is ordered AND how the reader orders the pages
+    // of a batch. Default: by translation time, page 1 on top (= first page).
+    var sortMode by rememberSaveable { mutableStateOf(HistorySortMode.TIME) }
+    var sortDescending by rememberSaveable { mutableStateOf(false) }
 
     // Tombstones for entries pending permanent deletion — hides the item
     // immediately after a swipe while the DataStore write settles (supports Undo).
@@ -100,28 +101,20 @@ fun HistoryScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val filteredEntries = remember(entries, query, providerFilter, languageFilter, dateRangeState.selectedStartDateMillis, dateRangeState.selectedEndDateMillis, removedIds) {
+    val filteredEntries = remember(entries, query, removedIds) {
         filterHistoryEntries(
             entries = entries,
             query = query,
-            providerFilter = providerFilter,
-            languageFilter = languageFilter,
-            startMillis = dateRangeState.selectedStartDateMillis,
-            endMillis = dateRangeState.selectedEndDateMillis,
             removedIds = removedIds,
         )
     }
 
-    val groupedEntries = remember(filteredEntries) { groupByDay(filteredEntries) }
-
-    val providerOptions = remember(entries) {
-        entries.map { it.provider }
-            .distinct()
-            .sortedBy { providerDisplayName(it) }
+    // Apply the chosen sort to the displayed list. Grouping by day happens AFTER
+    // sorting so each day bucket keeps the selected order internally.
+    val sortedFiltered = remember(filteredEntries, sortMode, sortDescending) {
+        sortHistoryEntries(filteredEntries, sortMode, sortDescending)
     }
-    val languageOptions = remember(entries) {
-        entries.map { it.targetLanguage }.distinct().sorted()
-    }
+    val groupedEntries = remember(sortedFiltered) { groupByDayAndBatch(sortedFiltered) }
 
     fun openReaderForEntry(entry: HistoryEntry) {
         val file = File(entry.outputPath)
@@ -131,24 +124,16 @@ fun HistoryScreen(
             // made opening a translated PDF slow.
             pdfReaderPath = entry.outputPath
         } else if (file.exists()) {
-            // Group pages by "book" so the reader only shows sibling pages of the
-            // same chapter instead of every image in history. Sibling detection +
+            // Group pages by batch so the reader shows every sibling of the same
+            // translation run (folder / multi-select / PDF) instead of only the
+            // tapped page — ordered by the SAME sort the user picked in the list
+            // (time or name, ascending/descending). Sibling detection +
             // File.exists() run off the main thread (synchronous disk I/O).
             scope.launch(Dispatchers.IO) {
-                val bookKey = bookGroupKey(file.absolutePath)
-                val siblingPages = entries.mapNotNull { e ->
-                    val p = e.outputPath
-                    if (!p.endsWith(".pdf", ignoreCase = true) &&
-                        File(p).exists() &&
-                        bookGroupKey(p) == bookKey
-                    ) p else null
-                }.sortedWith(Comparator { a, b -> compareNatural(a, b) })
-
-                val pages = siblingPages.ifEmpty { listOf(file.absolutePath) }
-                val idx = pages.indexOf(file.absolutePath).coerceAtLeast(0)
+                val (pages, initialIndex) = orderedPagesFor(entries, file.absolutePath, sortMode, sortDescending)
                 kotlinx.coroutines.withContext(Dispatchers.Main) {
                     readerPages = pages
-                    readerInitialIndex = idx
+                    readerInitialIndex = initialIndex
                 }
             }
         }
@@ -293,18 +278,13 @@ fun HistoryScreen(
                         selectedCount = selectedTimestamps.size,
                         query = query,
                         onQueryChange = { query = it },
-                        providerFilter = providerFilter,
-                        onProviderFilterChange = { providerFilter = it },
-                        providerOptions = providerOptions,
-                        languageFilter = languageFilter,
-                        onLanguageFilterChange = { languageFilter = it },
-                        languageOptions = languageOptions,
-                        hasDateFilter = dateRangeState.selectedStartDateMillis != null,
-                        onDateFilterClick = { showDateRangePicker = true },
-                        onClearDateFilter = { dateRangeState.setSelection(null, null) },
                         onSelectMode = { selectionMode = true },
                         onExitSelectMode = { exitSelectionMode() },
                         onClearAllClick = { confirmClearAll = true },
+                        sortMode = sortMode,
+                        onSortModeChange = { sortMode = it },
+                        sortDescending = sortDescending,
+                        onToggleSortDirection = { sortDescending = !sortDescending },
                     )
                 }
 
@@ -314,37 +294,65 @@ fun HistoryScreen(
                         NoResultsItem()
                     }
                 } else {
-                    // Date-grouped entries ("Today", "Yesterday", then formatted date)
-                    groupedEntries.forEach { (label, groupEntries) ->
-                        item(key = "day_${groupEntries.first().timestamp}") {
+                    // Day buckets ("Today", "Yesterday", ...), each split into its
+                    // translation runs (batchId) with a small separator header.
+                    groupedEntries.forEach { dayGroup ->
+                        item(key = "day_${dayGroup.batches.first().entries.first().timestamp}") {
                             Text(
-                                label,
+                                dayGroup.label,
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
                             )
                         }
-                        // Stable key: timestamp alone can collide when a multi-file batch is
-                        // recorded in the same millisecond, which made LazyColumn throw
-                        // "key already used" and stall the list. contentType lets LazyColumn
-                        // reuse item composition while scrolling.
-                        items(
-                            groupEntries,
-                            key = { "${it.timestamp}_${it.fileName}_${it.pageCount}" },
-                            contentType = { "history_entry" },
-                        ) { entry ->
-                            SwipeToDismissHistoryItem(
-                                entry = entry,
-                                onClick = {
-                                    if (selectionMode) toggleSelect(entry) else openReaderForEntry(entry)
-                                },
-                                onLongClick = { if (selectionMode) toggleSelect(entry) else confirmDelete = entry },
-                                onDelete = { deleteEntry(entry) },
-                                selectionMode = selectionMode,
-                                isSelected = entry.timestamp in selectedTimestamps,
-                                onToggleSelect = { toggleSelect(entry) },
-                                onRetry = { viewModel.retryHistoryEntry(entry) },
-                            )
+                        dayGroup.batches.forEach { batch ->
+                            // Batch separator: e.g. "4 pages · 14:32" — visually a thin
+                            // divider plus a muted label so runs are easy to tell apart.
+                            item(key = "batch_${batch.entries.first().timestamp}") {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+                                ) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.weight(1f),
+                                        thickness = 1.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant,
+                                    )
+                                    Text(
+                                        batch.label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 8.dp),
+                                    )
+                                    HorizontalDivider(
+                                        modifier = Modifier.weight(1f),
+                                        thickness = 1.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant,
+                                    )
+                                }
+                            }
+                            // Stable key: timestamp alone can collide when a multi-file batch is
+                            // recorded in the same millisecond, which made LazyColumn throw
+                            // "key already used" and stall the list. contentType lets LazyColumn
+                            // reuse item composition while scrolling.
+                            items(
+                                batch.entries,
+                                key = { "${it.timestamp}_${it.fileName}_${it.pageCount}" },
+                                contentType = { "history_entry" },
+                            ) { entry ->
+                                SwipeToDismissHistoryItem(
+                                    entry = entry,
+                                    onClick = {
+                                        if (selectionMode) toggleSelect(entry) else openReaderForEntry(entry)
+                                    },
+                                    onLongClick = { if (selectionMode) toggleSelect(entry) else confirmDelete = entry },
+                                    onDelete = { deleteEntry(entry) },
+                                    selectionMode = selectionMode,
+                                    isSelected = entry.timestamp in selectedTimestamps,
+                                    onToggleSelect = { toggleSelect(entry) },
+                                    onRetry = { viewModel.retryHistoryEntry(entry) },
+                                )
+                            }
                         }
                     }
                 }
@@ -371,10 +379,9 @@ fun HistoryScreen(
             MangaReaderDialog(
                 pagePaths = readerPages!!,
                 initialIndex = readerInitialIndex,
-                bookKey = bookGroupKey(readerPages!!.first()),
                 targetLanguage = viewModel.settings.value.targetLanguage,
                 customFontPath = viewModel.settings.value.customFontPath,
-                onDismiss = { readerPages = null }
+                onDismiss = { readerPages = null },
             )
         }
 
@@ -428,33 +435,22 @@ fun HistoryScreen(
         )
     }
 
-    if (showDateRangePicker) {
-        HistoryDateRangeDialog(
-            state = dateRangeState,
-            onDismiss = { showDateRangePicker = false },
-        )
-    }
 }
 
-/** History header: title + selection actions, search field and filter chips. */
+/** History header: title + selection actions, search field and sort controls. */
 @Composable
 private fun HistoryFilterHeader(
     selectionMode: Boolean,
     selectedCount: Int,
     query: String,
     onQueryChange: (String) -> Unit,
-    providerFilter: String?,
-    onProviderFilterChange: (String?) -> Unit,
-    providerOptions: List<String>,
-    languageFilter: String?,
-    onLanguageFilterChange: (String?) -> Unit,
-    languageOptions: List<String>,
-    hasDateFilter: Boolean,
-    onDateFilterClick: () -> Unit,
-    onClearDateFilter: () -> Unit,
     onSelectMode: () -> Unit,
     onExitSelectMode: () -> Unit,
     onClearAllClick: () -> Unit,
+    sortMode: HistorySortMode,
+    onSortModeChange: (HistorySortMode) -> Unit,
+    sortDescending: Boolean,
+    onToggleSortDirection: () -> Unit,
 ) {
     Column {
         Row(
@@ -509,71 +505,51 @@ private fun HistoryFilterHeader(
             shape = RoundedCornerShape(16.dp),
         )
 
-        // Provider filter chips
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterChip(
-                selected = providerFilter == null,
-                onClick = { onProviderFilterChange(null) },
-                label = { Text("All") },
-                leadingIcon = if (providerFilter == null) {
-                    { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-                } else null,
-            )
-            providerOptions.forEach { key ->
-                FilterChip(
-                    selected = providerFilter == key,
-                    onClick = { onProviderFilterChange(key) },
-                    label = { Text(providerDisplayName(key)) },
-                    leadingIcon = if (providerFilter == key) {
-                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-                    } else null,
-                )
-            }
-        }
-
+        // Sort controls: by time or by file name, plus a direction toggle that
+        // flips the pages inside each batch (page 1 first ↔ last page first).
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
                 .padding(bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = onDateFilterClick) {
-                Icon(Icons.Outlined.DateRange, contentDescription = null, modifier = Modifier.padding(end = 4.dp).size(18.dp))
-                Text(if (hasDateFilter) "Custom Date" else "All Time")
-            }
-            if (hasDateFilter) {
-                IconButton(onClick = onClearDateFilter, modifier = Modifier.size(24.dp)) {
-                    Icon(Icons.Filled.Close, "Clear Date", modifier = Modifier.size(16.dp))
-                }
-            }
-            Divider(modifier = Modifier.height(24.dp).width(1.dp))
-
             FilterChip(
-                selected = languageFilter == null,
-                onClick = { onLanguageFilterChange(null) },
-                label = { Text("All Langs") },
-                leadingIcon = if (languageFilter == null) {
+                selected = sortMode == HistorySortMode.TIME,
+                onClick = { onSortModeChange(HistorySortMode.TIME) },
+                label = { Text("By Time") },
+                leadingIcon = if (sortMode == HistorySortMode.TIME) {
                     { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
                 } else null,
             )
-            languageOptions.forEach { lang ->
-                FilterChip(
-                    selected = languageFilter == lang,
-                    onClick = { onLanguageFilterChange(lang) },
-                    label = { Text(lang) },
-                    leadingIcon = if (languageFilter == lang) {
-                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-                    } else null,
+            FilterChip(
+                selected = sortMode == HistorySortMode.NAME,
+                onClick = { onSortModeChange(HistorySortMode.NAME) },
+                label = { Text("By Name") },
+                leadingIcon = if (sortMode == HistorySortMode.NAME) {
+                    { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                } else null,
+            )
+            Divider(modifier = Modifier.height(24.dp).width(1.dp))
+            // Direction toggle — flips the order in the list AND in the reader.
+            IconButton(onClick = onToggleSortDirection) {
+                Icon(
+                    if (sortDescending) Icons.Filled.ArrowDownward else Icons.Filled.ArrowUpward,
+                    contentDescription = if (sortDescending) "Sort descending" else "Sort ascending",
+                    tint = MaterialTheme.colorScheme.primary,
                 )
             }
+            Text(
+                when {
+                    sortMode == HistorySortMode.TIME && !sortDescending -> "Newest batch · P1 first"
+                    sortMode == HistorySortMode.TIME -> "Oldest batch · Last first"
+                    !sortDescending -> "A-Z · P1 first"
+                    else -> "Z-A · Last first"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
