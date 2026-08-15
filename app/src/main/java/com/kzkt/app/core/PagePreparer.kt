@@ -1,6 +1,7 @@
 package com.kzkt.app.core
 
 import android.graphics.Bitmap
+import com.kzkt.app.core.ocr.LocalOcrEngine
 
 /**
  * Page-level detection + cropping: runs the 3-stage YOLO cascade, filters the
@@ -43,6 +44,100 @@ class PagePreparer(
             sfxMat.release()
         }
         return filtered
+    }
+
+    /**
+     * ML Kit full-page text detection for the "translate free text" feature.
+     * Returns text-block boxes that are NOT inside (or heavily overlapping) a
+     * YOLO speech bubble — those are already handled by the bubble path. Runs
+     * only when [Config.TweakParams.EngineParams.translateFreeText] is enabled.
+     */
+    suspend fun detectFreeText(
+        bitmap: Bitmap,
+        bubbleBoxes: List<IntArray>,
+        isCancelled: () -> Boolean = { false },
+    ): List<IntArray> {
+        if (isCancelled()) return emptyList()
+        val regions = LocalOcrEngine.recognizeTextRegions(bitmap)
+        if (isCancelled()) return emptyList()
+
+        val filtered =
+            regions.mapNotNull { region ->
+                val box = region.box
+                val cx = (box[0] + box[2]) / 2
+                val cy = (box[1] + box[3]) / 2
+
+                // Region center inside a bubble → that text is the bubble dialogue.
+                val insideBubble = bubbleBoxes.any { b -> cx >= b[0] && cx <= b[2] && cy >= b[1] && cy <= b[3] }
+                if (insideBubble) return@mapNotNull null
+
+                // Heavy overlap with a bubble (e.g. caption box touching a bubble).
+                val overlapsBubble = bubbleBoxes.any { b -> ImageProcessor.rectIou(box, b) >= 0.3 }
+                if (overlapsBubble) return@mapNotNull null
+
+                box
+            }
+        if (filtered.isEmpty()) return emptyList()
+
+        // Merge text blocks that are close together so adjacent text (a caption
+        // box's lines, nearby SFX) becomes ONE region instead of many small boxes.
+        return ImageProcessor.mergeNearbyTextBoxes(filtered)
+    }
+
+    /**
+     * Crop each free-text box with light padding (no bubble masking — these are
+     * rectangular text regions). IDs are `idPrefix + "ft" + (order+1)`, e.g.
+     * `ft1` for single pages, `2_ft1` for batch pages — never colliding with
+     * the numeric bubble ids (`1`, `2_1`, ...).
+     */
+    fun cropFreeText(
+        bitmap: Bitmap,
+        boxes: List<IntArray>,
+        idPrefix: String = "",
+    ): CropResult {
+        val crops = mutableListOf<Pair<String, Bitmap>>()
+        val coordMap = mutableMapOf<String, IntArray>()
+        val bgColors = mutableMapOf<String, Int>()
+
+        val cropMatFull = ImageProcessor.bitmapToMat(bitmap)
+        try {
+            for ((order, box) in boxes.withIndex()) {
+                val (x1, y1, x2, y2) = box
+                val pad = maxOf(6, ((x2 - x1) * 0.06).toInt())
+                val cropX1 = maxOf(0, x1 - pad)
+                val cropY1 = maxOf(0, y1 - pad)
+                val cropX2 = minOf(bitmap.width, x2 + pad)
+                val cropY2 = minOf(bitmap.height, y2 + pad)
+                if (cropX2 - cropX1 <= 0 || cropY2 - cropY1 <= 0) continue
+
+                val id = "${idPrefix}ft${order + 1}"
+                bgColors[id] = ImageProcessor.sampleRegionBackgroundColor(cropMatFull, box)
+
+                val cropMat = cropMatFull.submat(org.opencv.core.Rect(cropX1, cropY1, cropX2 - cropX1, cropY2 - cropY1))
+                val scale = params.detection.skalaPotonganMosaik
+                val cropBitmap = ImageProcessor.matToBitmap(cropMat)
+                cropMat.release()
+
+                val scaledBitmap =
+                    if (scale != 1.0) {
+                        Bitmap.createScaledBitmap(
+                            cropBitmap,
+                            maxOf(1, (cropBitmap.width * scale).toInt()),
+                            maxOf(1, (cropBitmap.height * scale).toInt()),
+                            true,
+                        )
+                    } else {
+                        cropBitmap
+                    }
+                if (scaledBitmap !== cropBitmap && !cropBitmap.isRecycled) cropBitmap.recycle()
+
+                crops.add(id to scaledBitmap)
+                coordMap[id] = box
+            }
+        } finally {
+            cropMatFull.release()
+        }
+        return CropResult(crops, coordMap, bgColors)
     }
 
     data class CropResult(

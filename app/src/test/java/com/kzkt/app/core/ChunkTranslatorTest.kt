@@ -103,6 +103,25 @@ class ChunkTranslatorTest {
         assertNull(ChunkTranslator.normalizeIdKey("abc_def"))
     }
 
+    @Test
+    fun `normalizeIdKey passes through free-text ids`() {
+        assertEquals("ft1", ChunkTranslator.normalizeIdKey("ft1"))
+        assertEquals("2_ft1", ChunkTranslator.normalizeIdKey("2_ft1"))
+        assertEquals("7_ft3", ChunkTranslator.normalizeIdKey("7_ft3"))
+        assertEquals("ft12", ChunkTranslator.normalizeIdKey("ft12"))
+    }
+
+    @Test
+    fun `isFreeTextId detects free-text regions only`() {
+        assertTrue(ChunkTranslator.isFreeTextId("ft1"))
+        assertTrue(ChunkTranslator.isFreeTextId("2_ft1"))
+        assertTrue(ChunkTranslator.isFreeTextId("0_ft1"))
+        assertFalse(ChunkTranslator.isFreeTextId("1"))
+        assertFalse(ChunkTranslator.isFreeTextId("2_1"))
+        assertFalse(ChunkTranslator.isFreeTextId("_note"))
+        assertFalse(ChunkTranslator.isFreeTextId(""))
+    }
+
     // ── translateWithProviders core loop ───────────────────────────
 
     @Test

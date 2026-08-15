@@ -29,6 +29,7 @@ class ResultRenderer(
         bubbleColors: Map<String, Int> = emptyMap(),
         imgWidth: Int,
         imgHeight: Int,
+        freeTextIds: Set<String> = emptySet(),
     ): Int {
         // User-facing render settings: forced text colour ("auto"/"white"/"black")
         // and a global font-size multiplier, applied to every bubble.
@@ -50,15 +51,30 @@ class ResultRenderer(
             val ratio = w.toDouble() / h
             val areaRatio = (w * h).toDouble() / maxOf(1, imgWidth * imgHeight)
             val bgColor = bubbleColors[num] ?: Color.WHITE
+            val isFreeText = num in freeTextIds
 
-            if (ratio >= 3.2 && w >= imgWidth * 0.35) continue
-            if (areaRatio >= 0.035 && ratio >= 2.8) continue
+            // The "suspicious flat" skips exist to avoid re-rendering wide SFX/image
+            // boxes as bubbles; free-text regions must always be erased + rendered.
+            if (!isFreeText && ratio >= 3.2 && w >= imgWidth * 0.35) continue
+            if (!isFreeText && areaRatio >= 0.035 && ratio >= 2.8) continue
 
             val suspiciousFlat = ratio >= params.detection.rasioBoxGepeng &&
                 w >= imgWidth * params.detection.lebarBoxGepengRatio &&
                 h <= imgHeight * params.detection.tinggiBoxGepengRatio
 
-            if (!params.render.useInpainting && !(params.detection.pakaiPatchUntukBoxGepeng && suspiciousFlat)) {
+            if (isFreeText) {
+                // Erase the original text with a solid fill of the sampled page
+                // background (inpainting already erased it when enabled, so no fill).
+                if (!params.render.useInpainting) {
+                    val erasePaint =
+                        Paint().apply {
+                            color = bgColor
+                            isAntiAlias = false
+                        }
+                    val pad = 2f
+                    canvas.drawRect(x1 - pad, y1 - pad, x2 + pad, y2 + pad, erasePaint)
+                }
+            } else if (!params.render.useInpainting && !(params.detection.pakaiPatchUntukBoxGepeng && suspiciousFlat)) {
                 // Background: blurred adaptive patch, drawn on a bubble-sized overlay
                 val marginX = (w * params.detection.maskMarginRatio).toInt()
                 val marginY = (h * params.detection.maskMarginRatio).toInt()
@@ -104,9 +120,10 @@ class ResultRenderer(
             val ratio = w.toDouble() / h
             val areaRatio = (w * h).toDouble() / maxOf(1, imgWidth * imgHeight)
             val bgColor = bubbleColors[num] ?: Color.WHITE
+            val isFreeText = num in freeTextIds
 
-            if (ratio >= 3.2 && w >= imgWidth * 0.35) continue
-            if (areaRatio >= 0.035 && ratio >= 2.8) continue
+            if (!isFreeText && ratio >= 3.2 && w >= imgWidth * 0.35) continue
+            if (!isFreeText && areaRatio >= 0.035 && ratio >= 2.8) continue
 
             val suspiciousFlat = ratio >= params.detection.rasioBoxGepeng &&
                 w >= imgWidth * params.detection.lebarBoxGepengRatio &&

@@ -318,6 +318,148 @@ object ImageProcessor {
         }
     }
 
+    /**
+     * Average color of the ring of pixels around [box] (the page background the
+     * text sits on), used to erase free-text regions with a solid fill before
+     * rendering the translation. Samples the border strip only — never the text
+     * strokes inside the box. Returns an ARGB int (alpha=255).
+     */
+    fun sampleRegionBackgroundColor(
+        mat: Mat,
+        box: IntArray,
+        thickness: Int = 6,
+    ): Int {
+        val cols = mat.cols()
+        val rows = mat.rows()
+        val x1 = box[0].coerceIn(0, cols - 1)
+        val y1 = box[1].coerceIn(0, rows - 1)
+        val x2 = box[2].coerceIn(x1 + 1, cols)
+        val y2 = box[3].coerceIn(y1 + 1, rows)
+
+        val ex1 = maxOf(0, x1 - thickness)
+        val ey1 = maxOf(0, y1 - thickness)
+        val ex2 = minOf(cols, x2 + thickness)
+        val ey2 = minOf(rows, y2 + thickness)
+        val ew = ex2 - ex1
+        val eh = ey2 - ey1
+        if (ew <= 0 || eh <= 0) return android.graphics.Color.WHITE
+
+        val sub = mat.submat(org.opencv.core.Rect(ex1, ey1, ew, eh))
+        val buf = ByteArray(ew * eh * 4)
+        var r = 0L
+        var g = 0L
+        var b = 0L
+        var count = 0L
+        try {
+            sub.get(0, 0, buf)
+            for (row in 0 until eh) {
+                for (col in 0 until ew) {
+                    val px = col + ex1
+                    val py = row + ey1
+                    val inBox = px >= x1 && px < x2 && py >= y1 && py < y2
+                    if (inBox) continue
+                    val idx = (row * ew + col) * 4
+                    b += buf[idx].toInt() and 0xFF
+                    g += buf[idx + 1].toInt() and 0xFF
+                    r += buf[idx + 2].toInt() and 0xFF
+                    count++
+                }
+            }
+        } catch (_: Exception) {
+            return android.graphics.Color.WHITE
+        } finally {
+            sub.release()
+        }
+        if (count == 0L) return android.graphics.Color.WHITE
+        return android.graphics.Color.rgb((r / count).toInt(), (g / count).toInt(), (b / count).toInt())
+    }
+
+    /**
+     * Merge nearby free-text boxes into larger regions: a caption box's lines,
+     * adjacent SFX, or words split across ML Kit blocks become ONE box instead
+     * of many small ones. Iterative greedy — repeats until no two boxes can
+     * merge. Boxes merge when they sit on the same row (vertical overlap +
+     * small horizontal gap), are stacked closely (horizontal overlap + small
+     * vertical gap), or simply overlap.
+     */
+    fun mergeNearbyTextBoxes(
+        boxes: List<IntArray>,
+        gapRatio: Double = 0.7,
+        overlapRatio: Double = 0.25,
+    ): List<IntArray> {
+        if (boxes.size <= 1) return boxes
+        val work = boxes.map { it.copyOf() }.toMutableList()
+        var changed = true
+        while (changed) {
+            changed = false
+            outer@ for (i in work.indices) {
+                val a = work[i]
+                for (j in i + 1 until work.size) {
+                    val b = work[j]
+                    if (shouldMergeTextRegions(a, b, gapRatio, overlapRatio)) {
+                        work[i] =
+                            intArrayOf(
+                                minOf(a[0], b[0]),
+                                minOf(a[1], b[1]),
+                                maxOf(a[2], b[2]),
+                                maxOf(a[3], b[3]),
+                            )
+                        work.removeAt(j)
+                        changed = true
+                        break@outer
+                    }
+                }
+            }
+        }
+        return work
+    }
+
+    private fun shouldMergeTextRegions(
+        a: IntArray,
+        b: IntArray,
+        gapRatio: Double,
+        overlapRatio: Double,
+    ): Boolean {
+        val wA = maxOf(1, a[2] - a[0])
+        val hA = maxOf(1, a[3] - a[1])
+        val wB = maxOf(1, b[2] - b[0])
+        val hB = maxOf(1, b[3] - b[1])
+        val minH = minOf(hA, hB)
+        val minW = minOf(wA, wB)
+
+        val overlapX = overlap1D(a[0], a[2], b[0], b[2])
+        val overlapY = overlap1D(a[1], a[3], b[1], b[3])
+        val gapX = maxOf(0, maxOf(a[0], b[0]) - minOf(a[2], b[2]))
+        val gapY = maxOf(0, maxOf(a[1], b[1]) - minOf(a[3], b[3]))
+
+        val maxGap = maxOf(12, (gapRatio * minH).toInt())
+
+        // Same row: vertically overlapping + small horizontal gap → one wide box.
+        val sameRow = overlapY.toDouble() / minH >= overlapRatio && gapX <= maxGap
+        // Stacked: horizontally overlapping + small vertical gap → one tall box.
+        val stacked = overlapX.toDouble() / minW >= overlapRatio && gapY <= maxGap
+        // Overlapping boxes are part of the same text region.
+        val touching = overlapX > 0 && overlapY > 0
+        return sameRow || stacked || touching
+    }
+
+    /** Intersection-over-union of two [x1, y1, x2, y2] boxes. */
+    fun rectIou(
+        a: IntArray,
+        b: IntArray,
+    ): Double {
+        val ix1 = maxOf(a[0], b[0])
+        val iy1 = maxOf(a[1], b[1])
+        val ix2 = minOf(a[2], b[2])
+        val iy2 = minOf(a[3], b[3])
+        val interW = maxOf(0, ix2 - ix1)
+        val interH = maxOf(0, iy2 - iy1)
+        val inter = interW.toDouble() * interH
+        val areaA = maxOf(1, a[2] - a[0]) * maxOf(1, a[3] - a[1])
+        val areaB = maxOf(1, b[2] - b[0]) * maxOf(1, b[3] - b[1])
+        return inter / (areaA + areaB - inter)
+    }
+
     // ── Crop & Mask ────────────────────────────────────────────────
 
     /**

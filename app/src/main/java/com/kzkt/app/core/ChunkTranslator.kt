@@ -225,16 +225,27 @@ class ChunkTranslator(
     companion object {
         private val ID_KEY_REGEX = Regex("(\\d+)(?:_(\\d+))?|\\b(\\d+)\\b")
 
+        /** Free-text region ids: `ft1`, `2_ft1`, ... (never collide with numeric bubble ids). */
+        private val FT_KEY_REGEX = Regex("(\\d+_)?ft\\d+")
+
         /**
          * Normalize an LLM-returned JSON key to a stable bubble ID ("1", "1_2", …) or null if unmatched.
          * Handles int/string keys, leading underscores, prefixes like "ID 1", and trailing punctuation.
          */
         fun normalizeIdKey(key: String): String? {
             if (key.startsWith("_")) return key
+            // Free-text ids pass through verbatim (their numeric part is not a page ref).
+            if (FT_KEY_REGEX.matches(key)) return key
             val m = ID_KEY_REGEX.find(key) ?: return null
             val (a, b, c) = m.destructured
             val first = (a.ifEmpty { c }).toIntOrNull() ?: return null
             return if (b.isNotEmpty()) "${first}_${b.toIntOrNull() ?: b}" else first.toString()
+        }
+
+        /** True when the crop id belongs to a free-text region (`ft1`, `2_ft1`, ...). */
+        fun isFreeTextId(id: String): Boolean {
+            val last = id.substringAfterLast('_')
+            return last.startsWith("ft") && last.drop(2).toIntOrNull() != null
         }
     }
 }

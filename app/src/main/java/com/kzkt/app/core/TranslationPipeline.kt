@@ -219,7 +219,19 @@ class TranslationPipeline(
             onProgress("  Filtered to ${filtered.size} speech bubbles...")
         }
 
-        if (filtered.isEmpty()) {
+        // ── Free-text detection (outside bubbles, ML Kit) ──
+        val freeTextBoxes =
+            if (params.engine.translateFreeText) {
+                pagePreparer.detectFreeText(bitmap, filtered, isCancelled)
+            } else {
+                emptyList()
+            }
+        if (isCancelled()) return PipelineResult(null, failed = true)
+        if (params.engine.enableDevLogs && freeTextBoxes.isNotEmpty()) {
+            onProgress("  [Free Text] ML Kit found ${freeTextBoxes.size} text regions outside bubbles.")
+        }
+
+        if (filtered.isEmpty() && freeTextBoxes.isEmpty()) {
             onProgress("  No text bubbles found.")
             val outputPath = MosaicBuilder.makeOutputPath(inputPath, targetLanguage, outputDir)
             imageSaver.save(bitmap, outputPath)
@@ -228,9 +240,15 @@ class TranslationPipeline(
 
         // ── Crop extraction & background color detection ──
         val cropResult = pagePreparer.cropBubbles(bitmap, filtered, idPrefix = "")
-        val cropItems = cropResult.crops.map { MosaicBuilder.CropItem(it.first, it.second) }.toMutableList()
-        val coordinateMap = cropResult.coordMap
-        val bubbleColors = cropResult.bubbleColors
+        val ftResult =
+            if (freeTextBoxes.isNotEmpty()) {
+                pagePreparer.cropFreeText(bitmap, freeTextBoxes, idPrefix = "")
+            } else {
+                PagePreparer.CropResult(mutableListOf(), mutableMapOf(), mutableMapOf())
+            }
+        val cropItems = (cropResult.crops + ftResult.crops).map { MosaicBuilder.CropItem(it.first, it.second) }.toMutableList()
+        val coordinateMap = (cropResult.coordMap + ftResult.coordMap).toMutableMap()
+        val bubbleColors = (cropResult.bubbleColors + ftResult.bubbleColors).toMutableMap()
 
         // ── Mosaic → LLM Translate ──
         val allTranslations = mutableMapOf<String, String>()
@@ -318,6 +336,7 @@ class TranslationPipeline(
 
         val canvas = Canvas(resultBitmap)
 
+        val freeTextIds = coordinateMap.keys.filter { ChunkTranslator.isFreeTextId(it) }.toSet()
         val translatedCount = resultRenderer.render(
             canvas = canvas,
             translations = normalizedTranslations,
@@ -325,11 +344,16 @@ class TranslationPipeline(
             bubbleColors = bubbleColors,
             imgWidth = imgWidth,
             imgHeight = imgHeight,
+            freeTextIds = freeTextIds,
         )
 
         val outputPath = MosaicBuilder.makeOutputPath(inputPath, targetLanguage, outputDir)
         imageSaver.save(resultBitmap, outputPath)
-        onProgress("  Done! ${translatedCount}/${cropItems.size} bubbles translated.")
+        val ftCount = ftResult.crops.size
+        onProgress(
+            "  Done! $translatedCount/${cropItems.size} regions translated " +
+                "(${cropResult.crops.size} bubbles, $ftCount free text).",
+        )
 
         // Persist bubble data + original page so the touch-up editor works later
         // (e.g. when the reader is reopened from History).
@@ -472,8 +496,23 @@ class TranslationPipeline(
                             // ~23-93 MB per page × 3 concurrent pages in batch mode.
                             val cropResult = pagePreparer.cropBubbles(bitmap, filtered, idPrefix = "${actualPageNum}_")
 
-                            PageData(imgPath, bitmap, imgWidth, imgHeight,
-                                cropResult.crops, cropResult.coordMap, cropResult.bubbleColors)
+                            val ftResult =
+                                if (params.engine.translateFreeText) {
+                                    val ftBoxes = pagePreparer.detectFreeText(bitmap, filtered)
+                                    if (ftBoxes.isNotEmpty()) {
+                                        pagePreparer.cropFreeText(bitmap, ftBoxes, idPrefix = "${actualPageNum}_")
+                                    } else {
+                                        PagePreparer.CropResult(mutableListOf(), mutableMapOf(), mutableMapOf())
+                                    }
+                                } else {
+                                    PagePreparer.CropResult(mutableListOf(), mutableMapOf(), mutableMapOf())
+                                }
+
+                            val crops = (cropResult.crops + ftResult.crops).toMutableList()
+                            val coordMap = (cropResult.coordMap + ftResult.coordMap).toMutableMap()
+                            val colors = (cropResult.bubbleColors + ftResult.bubbleColors).toMutableMap()
+
+                            PageData(imgPath, bitmap, imgWidth, imgHeight, crops, coordMap, colors)
                         }
                     }
 
@@ -658,6 +697,10 @@ class TranslationPipeline(
             }
 
             val canvas = Canvas(renderBitmap)
+            val freeTextIds =
+                page.coordMap.keys
+                    .filter { ChunkTranslator.isFreeTextId(it) }
+                    .toSet()
             val translatedCount = resultRenderer.render(
                 canvas = canvas,
                 translations = allTranslations,
@@ -665,6 +708,7 @@ class TranslationPipeline(
                 bubbleColors = page.bubbleColors,
                 imgWidth = page.imgWidth,
                 imgHeight = page.imgHeight,
+                freeTextIds = freeTextIds,
             )
 
             imageSaver.save(renderBitmap, pageOutputPath)

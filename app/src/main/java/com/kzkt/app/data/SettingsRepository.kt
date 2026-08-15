@@ -65,6 +65,7 @@ class SettingsRepository(private val context: Context) {
         private val KEY_DEV_LOGS = booleanPreferencesKey("enable_dev_logs")
         private val KEY_USE_IMAGE_UPSCALER = booleanPreferencesKey("use_image_upscaler")
         private val KEY_TRANSLATE_SFX = booleanPreferencesKey("translate_sfx")
+        private val KEY_TRANSLATE_FREE_TEXT = booleanPreferencesKey("translate_free_text")
         private val KEY_AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
         // Rendered-text output settings
         private val KEY_JPEG_QUALITY = intPreferencesKey("jpeg_quality")
@@ -110,6 +111,7 @@ class SettingsRepository(private val context: Context) {
         val enableDevLogs: Boolean = false,
         val useImageUpscaler: Boolean = false,
         val translateSfx: Boolean = false,
+        val translateFreeText: Boolean = false,
         val autoCheckUpdates: Boolean = true,
         // "auto" = white text on dark bubbles / black on light (current behaviour),
         // "white" / "black" force the rendered text colour regardless of the bubble.
@@ -173,6 +175,7 @@ class SettingsRepository(private val context: Context) {
             enableDevLogs = prefs[KEY_DEV_LOGS] ?: Defaults.settings.enableDevLogs,
             useImageUpscaler = prefs[KEY_USE_IMAGE_UPSCALER] ?: Defaults.settings.useImageUpscaler,
             translateSfx = prefs[KEY_TRANSLATE_SFX] ?: Defaults.settings.translateSfx,
+            translateFreeText = prefs[KEY_TRANSLATE_FREE_TEXT] ?: Defaults.settings.translateFreeText,
             autoCheckUpdates = prefs[KEY_AUTO_CHECK_UPDATES] ?: Defaults.settings.autoCheckUpdates,
             renderTextColor = prefs[KEY_RENDER_TEXT_COLOR] ?: Defaults.settings.renderTextColor,
             renderFontScale = prefs[KEY_RENDER_FONT_SCALE] ?: Defaults.settings.renderFontScale,
@@ -278,6 +281,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun saveTranslateSfx(enabled: Boolean) {
         context.dataStore.edit { it[KEY_TRANSLATE_SFX] = enabled }
+    }
+
+    suspend fun saveTranslateFreeText(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_TRANSLATE_FREE_TEXT] = enabled }
     }
 
     suspend fun saveAutoCheckUpdates(enabled: Boolean) {
@@ -390,6 +397,7 @@ class SettingsRepository(private val context: Context) {
             prefs.remove(KEY_USE_LOCAL_OCR)
             prefs.remove(KEY_USE_IMAGE_UPSCALER)
             prefs.remove(KEY_TRANSLATE_SFX)
+            prefs.remove(KEY_TRANSLATE_FREE_TEXT)
             prefs.remove(KEY_AUTO_CHECK_UPDATES)
             prefs.remove(KEY_JPEG_QUALITY)
             prefs.remove(KEY_RENDER_TEXT_COLOR)

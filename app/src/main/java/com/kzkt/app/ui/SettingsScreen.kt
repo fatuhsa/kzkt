@@ -277,6 +277,7 @@ fun SettingsScreen(
                 // group — not the whole Settings screen (recomposition storm).
                 val useLocalOcr by remember { derivedStateOf { viewModel.settings.value.useLocalOcr } }
                 val translateSfx by remember { derivedStateOf { viewModel.settings.value.translateSfx } }
+                val translateFreeText by remember { derivedStateOf { viewModel.settings.value.translateFreeText } }
                 Material3SettingsGroup(
                     items = listOf(
                         Material3SettingsItem(
@@ -310,6 +311,28 @@ fun SettingsScreen(
                             onClick = {
                                 scope.launch { viewModel.settingsRepo.saveTranslateSfx(!translateSfx) }
                             }
+                        ),
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.TextFields) },
+                            title = { Text("Translate Free Text (outside bubbles)") },
+                            description = {
+                                val desc =
+                                    if (translateFreeText) {
+                                        "ON: caption boxes, signs & background text get translated too (ML Kit)."
+                                    } else {
+                                        "OFF: only speech bubbles are translated (default)."
+                                    }
+                                Text(desc)
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = translateFreeText,
+                                    onCheckedChange = { enabled -> scope.launch { viewModel.settingsRepo.saveTranslateFreeText(enabled) } },
+                                )
+                            },
+                            onClick = {
+                                scope.launch { viewModel.settingsRepo.saveTranslateFreeText(!translateFreeText) }
+                            },
                         ),
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.TextFields) },

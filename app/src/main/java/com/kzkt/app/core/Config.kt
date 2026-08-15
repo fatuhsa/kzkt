@@ -126,6 +126,7 @@ object Config {
             var enableDevLogs: Boolean = false,
             var useImageUpscaler: Boolean = false,
             var translateSfx: Boolean = false,
+            var translateFreeText: Boolean = false,
         )
     }
 

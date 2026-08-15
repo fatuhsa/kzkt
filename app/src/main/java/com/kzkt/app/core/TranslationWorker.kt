@@ -206,6 +206,7 @@ class TranslationWorker(
                         enableDevLogs = s.enableDevLogs,
                         useImageUpscaler = s.useImageUpscaler,
                         translateSfx = s.translateSfx,
+                        translateFreeText = s.translateFreeText,
                     ),
                 )
 
