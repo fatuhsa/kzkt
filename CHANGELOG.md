@@ -4,6 +4,26 @@ All notable changes to KZKT are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.36.7] - 2026-08-16
+
+### Added
+
+- **Per-batch output folders**: every translation run (folder, multi-select, ZIP/CBZ or PDF) now saves its translated pages into its own folder under `Downloads/KZKT`, named with the date, time and page count (e.g. `2026-08-16 14-32 (4 pages)`). Translated PDFs and ZIP/PDF exports stay in the main `Downloads/KZKT` folder.
+- **Batch separators in History**: translation runs are now visually separated in the History tab with a divider and a label showing page count, finish time, and any failed pages (e.g. `4 pages · 14:32`).
+- **By Time / By Name sorting in History**: sort the list by translation time or by file name, with a direction toggle — ascending flips pages within each batch so page 1 is always on top. The reader (gallery view) follows the same order.
+
+### Changed
+
+- **Reader opens on the tapped page**: opening a result from History or from a batch preview now starts the reader on the exact page you tapped, instead of jumping to a previously saved reading position.
+- **History filters simplified**: provider, language and date-range filters were removed; the search box and the new sort controls remain.
+- **History grouping is now per run**: entries are grouped by their translation run (batch ID) instead of by file-name heuristics, so pages stay together even when the source file names differ. Legacy entries fall back to the old name-based grouping.
+
+### Fixed
+
+- **History reader showed only "1/1"**: pages of a batch with unrelated file names no longer get split into one-page groups, so swiping and webtoon view work across the whole run.
+- **Reader pages appeared in random order**: pages are now ordered by translation time (oldest = page 1) rather than by file name, and the order matches the sort chosen in History.
+- **Progress UI stuck at "3/4"**: when a batch finished, the progress bar could stay at 3/4 with the Cancel button still visible — coalesced completion events are now drained, so the UI always settles on the final count and hides Cancel.
+
 ## [v1.35.0] - 2026-08-11
 
 ### Added
