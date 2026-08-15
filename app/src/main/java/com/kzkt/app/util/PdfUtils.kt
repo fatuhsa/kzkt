@@ -80,6 +80,28 @@ object PdfImporter {
         return imagePaths
     }
 
+    /**
+     * Count a PDF's pages without rendering them (cheap: opens the renderer and
+     * reads pageCount). Returns 0 when the PDF cannot be read. Used to name the
+     * per-batch output folder ("… (N pages)") before translation starts.
+     */
+    fun pdfPageCount(pdfFile: File, context: android.content.Context? = null): Int {
+        val fd = openPdfFileDescriptor(context, pdfFile) ?: return 0
+        try {
+            val renderer = PdfRenderer(fd)
+            try {
+                return renderer.pageCount
+            } finally {
+                renderer.close()
+            }
+        } catch (e: Exception) {
+            Log.w("KZKT/PDF", "Failed to count pages of ${pdfFile.absolutePath}: ${e.message}")
+            return 0
+        } finally {
+            try { fd.close() } catch (_: Exception) {}
+        }
+    }
+
     fun openPdfFileDescriptor(context: android.content.Context?, pdfFile: File): ParcelFileDescriptor? {
         if (pdfFile.exists() && pdfFile.canRead()) {
             try {
