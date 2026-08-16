@@ -3,10 +3,12 @@ package com.kzkt.app.core
 import android.content.Context
 import android.graphics.*
 import com.kzkt.app.core.Config.TweakParams
+import com.kzkt.app.core.ocr.LocalOcrEngine
 import com.kzkt.app.core.providers.LlmProvider
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.withPermit
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Main translation pipeline: detection → filter → mosaic → LLM → render → save.
@@ -425,7 +427,12 @@ class TranslationPipeline(
         }
 
         val semaphore = kotlinx.coroutines.sync.Semaphore(MAX_CONCURRENT_PAGE_LOADS)
-        val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
+        val completedCount = AtomicInteger(0)
+        // Globally unique free-text id counter across the whole batch. Bare `ftN`
+        // ids (no page prefix) are echoed reliably by vision LLMs — page-prefixed
+        // ids like `2_ft1` were dropped from batch responses, silently skipping
+        // free-text translation while single images worked fine.
+        val ftIdCounter = AtomicInteger(0)
 
         val pageDataList = coroutineScope {
             imagePaths.mapIndexed { idx, imgPath ->
@@ -500,7 +507,12 @@ class TranslationPipeline(
                                 if (params.engine.translateFreeText) {
                                     val ftBoxes = pagePreparer.detectFreeText(bitmap, filtered)
                                     if (ftBoxes.isNotEmpty()) {
-                                        pagePreparer.cropFreeText(bitmap, ftBoxes, idPrefix = "${actualPageNum}_")
+                                        pagePreparer.cropFreeText(
+                                            bitmap,
+                                            ftBoxes,
+                                            idPrefix = "",
+                                            idStart = ftIdCounter.getAndAdd(ftBoxes.size),
+                                        )
                                     } else {
                                         PagePreparer.CropResult(mutableListOf(), mutableMapOf(), mutableMapOf())
                                     }
@@ -529,6 +541,16 @@ class TranslationPipeline(
                     }
                     onProgress(msg)
                     onStepProgress(phase1Percent, msg)
+                    if (params.engine.enableDevLogs && params.engine.translateFreeText) {
+                        val ftCount = result.coordMap.keys.count { ChunkTranslator.isFreeTextId(it) }
+                        if (ftCount > 0) {
+                            onProgress("  [Free Text] Page $actualPageNum/$totalPages: detected $ftCount text regions.")
+                        } else {
+                            val ocrErr = LocalOcrEngine.lastError
+                            val ocrDetail = if (ocrErr != null) "error: $ocrErr" else "found none"
+                            onProgress("  [Free Text] Page $actualPageNum/$totalPages: no text regions (ML Kit $ocrDetail).")
+                        }
+                    }
                     result
                 }
             }.awaitAll()
@@ -646,6 +668,12 @@ class TranslationPipeline(
             }
         }
 
+        if (params.engine.enableDevLogs && params.engine.translateFreeText) {
+            val ftKeys = allTranslations.keys.filter { ChunkTranslator.isFreeTextId(it) }
+            val ftKeyText = if (ftKeys.isEmpty()) "NONE" else ftKeys.joinToString(", ")
+            onProgress("  [Free Text] Translated keys: $ftKeyText (total ${allTranslations.size})")
+        }
+
         if (allTranslations.isEmpty()) {
             onProgress("  [!] All translation attempts failed for this group. Skipping rendering.")
             for ((_, bmp) in allCrops) {
@@ -657,6 +685,24 @@ class TranslationPipeline(
         }
 
         // Phase 4: Render per-page
+        // Mirror the single-image path: normalize every LLM-returned key before
+        // rendering. Batch previously passed raw allTranslations keys, so a vision
+        // model that rewrote an id (e.g. "1_ft1" -> "ft1" or "1 ft1") silently
+        // dropped that free-text region at render — bubbles usually survived
+        // because plain numeric ids are echoed verbatim.
+        val normalizedAll = mutableMapOf<String, String>()
+        // "ft1" -> translation for ids the model returned WITHOUT the page prefix
+        // ("1_ft1" -> "ft1"). Page-prefixed ids always win; the bare form is only
+        // a fallback for exactly this rewrite.
+        val bareFtLookup = mutableMapOf<String, String>()
+        for ((key, text) in allTranslations) {
+            val id = ChunkTranslator.normalizeIdKey(key) ?: continue
+            normalizedAll[id] = text
+            if (ChunkTranslator.isFreeTextId(id)) {
+                bareFtLookup.putIfAbsent(id.substringAfterLast('_'), text)
+            }
+        }
+
         val results = mutableListOf<PipelineResult>()
         for ((pageIdx, page) in pageDataList.withIndex()) {
             val renderPercent = (PROGRESS_TRANSLATE_END + ((PROGRESS_RENDER_END - PROGRESS_TRANSLATE_END).toFloat() * (pageIdx + 1) / pageDataList.size)).toInt()
@@ -683,17 +729,40 @@ class TranslationPipeline(
                 continue
             }
 
+            // Resolve this page's translations from the normalized map. Every page
+            // coordinate id is looked up directly; free-text ids additionally fall
+            // back to the bare "ftN" form in case the model dropped the page prefix.
+            val pageTranslations = mutableMapOf<String, String>()
+            for (id in page.coordMap.keys) {
+                val text =
+                    if (ChunkTranslator.isFreeTextId(id)) {
+                        normalizedAll[id] ?: bareFtLookup[id.substringAfterLast('_')]
+                    } else {
+                        normalizedAll[id]
+                    }
+                if (text != null) pageTranslations[id] = text
+            }
+            if (params.engine.enableDevLogs && params.engine.translateFreeText) {
+                val ftInPage = page.coordMap.keys.count { ChunkTranslator.isFreeTextId(it) }
+                val ftMatched = pageTranslations.keys.count { ChunkTranslator.isFreeTextId(it) }
+                if (ftInPage > 0) {
+                    onProgress("  [Free Text] Page ${pageIdx + 1}: matched $ftMatched/$ftInPage free-text regions for render.")
+                }
+            }
+
             val renderBitmap = if (params.render.useInpainting) {
                 onProgress("  [OpenCV Inpainting] Erasing original text strokes for ${File(page.path).name}...")
                 val workingMat = ImageProcessor.bitmapToMat(page.pil)
                 try {
-                    ImageProcessor.inpaintTranslated(workingMat, allTranslations, page.coordMap)
+                    ImageProcessor.inpaintTranslated(workingMat, pageTranslations, page.coordMap)
                     ImageProcessor.matToBitmap(workingMat)
                 } finally {
                     workingMat.release()
                 }
             } else {
-                page.pil
+                // page.pil is an immutable decodeFile() bitmap; the Canvas below needs a
+                // mutable surface (regression from ed0031b4 which dropped the render copy).
+                page.pil.copy(Bitmap.Config.ARGB_8888, true)
             }
 
             val canvas = Canvas(renderBitmap)
@@ -703,7 +772,7 @@ class TranslationPipeline(
                     .toSet()
             val translatedCount = resultRenderer.render(
                 canvas = canvas,
-                translations = allTranslations,
+                translations = pageTranslations,
                 coordinateMap = page.coordMap,
                 bubbleColors = page.bubbleColors,
                 imgWidth = page.imgWidth,

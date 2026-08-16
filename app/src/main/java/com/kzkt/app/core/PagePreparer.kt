@@ -86,14 +86,18 @@ class PagePreparer(
 
     /**
      * Crop each free-text box with light padding (no bubble masking — these are
-     * rectangular text regions). IDs are `idPrefix + "ft" + (order+1)`, e.g.
-     * `ft1` for single pages, `2_ft1` for batch pages — never colliding with
-     * the numeric bubble ids (`1`, `2_1`, ...).
+     * rectangular text regions). IDs are `idPrefix + "ft" + (idStart + order + 1)`,
+     * e.g. `ft1` for single pages, `ft1`/`ft2`... globally unique across a batch
+     * (the caller advances [idStart] per page) — never colliding with the numeric
+     * bubble ids (`1`, `1_1`, ...). Bare `ftN` ids are used everywhere because
+     * vision LLMs reliably echo them back, while page-prefixed ids like `2_ft1`
+     * are frequently mangled or dropped in batch responses.
      */
     fun cropFreeText(
         bitmap: Bitmap,
         boxes: List<IntArray>,
         idPrefix: String = "",
+        idStart: Int = 0,
     ): CropResult {
         val crops = mutableListOf<Pair<String, Bitmap>>()
         val coordMap = mutableMapOf<String, IntArray>()
@@ -110,7 +114,7 @@ class PagePreparer(
                 val cropY2 = minOf(bitmap.height, y2 + pad)
                 if (cropX2 - cropX1 <= 0 || cropY2 - cropY1 <= 0) continue
 
-                val id = "${idPrefix}ft${order + 1}"
+                val id = "${idPrefix}ft${idStart + order + 1}"
                 val isCleanStyle = params.render.renderStyle.equals("clean", ignoreCase = true)
                 bgColors[id] =
                     if (isCleanStyle) {
