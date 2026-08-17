@@ -39,8 +39,8 @@ KZKT is a native Android application for automatic manga and comic translation. 
 
 - **Wide input support** - single images, whole folders, multi-image share, archives (ZIP / CBZ / EPUB), and PDF files — with **PDF in → translated PDF out**.
 - **Translate to 14 languages** - English, Indonesian, Japanese, Korean, Mandarin, Spanish, French, German, and more.
-- **Multi-provider LLM** - Google Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, or any OpenAI-compatible endpoint (Ollama, LM Studio, LocalAI, vLLM), with automatic fallback between providers.
-- **On-device AI pipeline** - a 3-stage YOLO cascade (ONNX Runtime) detects speech bubbles locally, optional ML Kit OCR (Japanese + Latin) supports non-vision models, and a **Smart Image Upscaler** doubles page resolution for sharper results.
+- **Multi-provider LLM** - Google Gemini, Anthropic, OpenAI, OpenRouter, Zen, OpenCode Go, or any OpenAI-compatible endpoint (Ollama, LM Studio, LocalAI, vLLM) — with SSE streaming, automatic fallback between providers, and on-device model detection.
+- **On-device AI pipeline** - a 3-stage YOLO cascade (ONNX Runtime) detects speech bubbles locally, optional ML Kit OCR (English, Japanese, Korean, Chinese, or auto) supports non-vision models and free-text detection, and a **Smart Image Upscaler** doubles page resolution for sharper results.
 - **Built-in reader** - view results page-by-page or as a scrollable **webtoon**, pinch-to-zoom up to 4x, and a **pencil editor** to touch up any bubble's text right in the app.
 - **Instant PDF reader** - translated PDFs open lazily, page by page, without waiting for the whole document to be rasterized.
 - **Glossary & translation memory** - keep your own term dictionary and avoid re-translating repeated bubbles.
@@ -55,7 +55,7 @@ KZKT is a native Android application for automatic manga and comic translation. 
 | Language & Core | Kotlin 2.4, Java 17, AGP 9.3 |
 | UI | Jetpack Compose (BOM 2026.01.01), Material 3 1.5.0-alpha25, MaterialKolor (dynamic Material You theming), Navigation Compose 2.9.8, Coil 2.7 |
 | Concurrency & State | Coroutines 1.9, Flow, ViewModel, DataStore Preferences 1.1.2 |
-| Machine Learning | ONNX Runtime 1.29 (YOLO), ML Kit Text Recognition 16.0.1 (Latin + Japanese) |
+| Machine Learning | ONNX Runtime 1.29 (YOLO), ML Kit Text Recognition 16.0.1 (Latin + Japanese + Korean + Chinese) |
 | Computer Vision | OpenCV 4.10.0 Android SDK (`libopencv_java4.so` C++ JNI) |
 | Networking & JSON | OkHttp 4.12, Gson 2.11 |
 | Persistence & Background | DataStore Preferences, WorkManager 2.11, MediaStore |
@@ -81,7 +81,7 @@ KZKT is a native Android application for automatic manga and comic translation. 
 [ 3. Mosaic builder ] --> pack crops into vertical RTL mosaic + red ID labels
            |
            v
-[ 4. Vision LLM ] --> Gemini / OpenAI / OpenRouter / local
+[ 4. Vision LLM ] --> Gemini / Anthropic / OpenAI / OpenRouter / local
            |            (or ML Kit OCR + text-only LLM when OCR is enabled)
            v
 [ 5. Text renderer & masking ] --> in-bubble mask + auto-scaled wrapped text
@@ -99,7 +99,7 @@ KZKT is a native Android application for automatic manga and comic translation. 
 │   └── src/main/
 │       ├── java/com/kzkt/app/
 │       │   ├── core/           # translation pipeline, YOLO ONNX engine, OpenCV, OCR, updater
-│       │   ├── core/providers/ # Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, custom
+│       │   ├── core/providers/ # Gemini, Anthropic, OpenAI, OpenRouter, Zen, custom
 │       │   ├── data/           # settings, history, glossary & caches (persistence)
 │       │   ├── ui/             # Compose screens (Translate, History, Settings)
 │       │   ├── ui/component/   # reusable Material 3 components
@@ -112,7 +112,9 @@ KZKT is a native Android application for automatic manga and comic translation. 
 ├── settings.gradle.kts
 ├── Dockerfile                  # self-contained Android build image (JDK 17 + SDK)
 ├── BUILD_RELEASE.md            # guide: custom keystore + publishing signed releases
+├── CONTRIBUTING.md             # how to contribute: branching, quality gates, releasing
 ├── CHANGELOG.md
+├── .editorconfig               # shared editor + ktlint settings (Compose-aware)
 └── README.md
 ```
 

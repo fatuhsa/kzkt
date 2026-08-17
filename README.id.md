@@ -39,8 +39,8 @@ KZKT adalah aplikasi Android untuk menerjemahkan manga dan komik secara otomatis
 
 - **Banyak format input** — gambar, satu folder penuh, share beberapa gambar sekaligus, arsip (ZIP / CBZ / EPUB), sampai file PDF — plus **PDF masuk, PDF terjemahan keluar**.
 - **14 bahasa target** — Inggris, Indonesia, Jepang, Korea, Mandarin, Spanyol, Prancis, Jerman, dan lainnya.
-- **Bebas pilih provider LLM** — Google Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, atau endpoint OpenAI-compatible mana pun (Ollama, LM Studio, LocalAI, vLLM), dengan fallback otomatis antargambar.
-- **Pipeline AI on-device** — kaskade YOLO 3 tahap (ONNX Runtime) mendeteksi balon kata, OCR opsional via ML Kit (Jepang + Latin) biar model non-vision tetap jalan, plus **Smart Image Upscaler** yang melipatgandakan resolusi halaman biar hasilnya makin tajam.
+- **Bebas pilih provider LLM** — Google Gemini, Anthropic, OpenAI, OpenRouter, Zen, OpenCode Go, atau endpoint OpenAI-compatible mana pun (Ollama, LM Studio, LocalAI, vLLM) — lengkap dengan streaming SSE, fallback otomatis antargambar, dan deteksi model langsung dari API.
+- **Pipeline AI on-device** — kaskade YOLO 3 tahap (ONNX Runtime) mendeteksi balon kata, OCR opsional via ML Kit (Inggris, Jepang, Korea, China, atau auto) biar model non-vision tetap jalan dan teks bebas ikut terdeteksi, plus **Smart Image Upscaler** yang melipatgandakan resolusi halaman biar hasilnya makin tajam.
 - **Reader bawaan** — lihat hasil per halaman atau mode **webtoon** yang bisa discroll, pinch-to-zoom sampai 4x, dan **editor pensil** buat mengubah teks balon langsung di aplikasi.
 - **Pembaca PDF instan** — PDF terjemahan langsung kebuka, dirender per halaman tanpa nunggu seluruh dokumen diproses.
 - **Glosarium & memory terjemahan** — istilah kustommu tersimpan, dan kalimat yang sama tidak diterjemahkan ulang.
@@ -55,7 +55,7 @@ KZKT adalah aplikasi Android untuk menerjemahkan manga dan komik secara otomatis
 | Bahasa & Inti | Kotlin 2.4, Java 17, AGP 9.3 |
 | UI | Jetpack Compose (BOM 2026.01.01), Material 3 1.5.0-alpha25, MaterialKolor (tema Material You dinamis), Navigation Compose 2.9.8, Coil 2.7 |
 | Konkurensi & State | Coroutines 1.9, Flow, ViewModel, DataStore Preferences 1.1.2 |
-| Machine Learning | ONNX Runtime 1.29 (YOLO), ML Kit Text Recognition 16.0.1 (Latin + Jepang) |
+| Machine Learning | ONNX Runtime 1.29 (YOLO), ML Kit Text Recognition 16.0.1 (Latin + Jepang + Korea + China) |
 | Computer Vision | OpenCV 4.10.0 Android SDK (`libopencv_java4.so` C++ JNI) |
 | Networking & JSON | OkHttp 4.12, Gson 2.11 |
 | Persistensi & Background | DataStore Preferences, WorkManager 2.11, MediaStore |
@@ -81,7 +81,7 @@ KZKT adalah aplikasi Android untuk menerjemahkan manga dan komik secara otomatis
 [ 3. Susun mozaik ] --> crop dikemas jadi mozaik RTL vertikal + label ID merah
            |
            v
-[ 4. Vision LLM ] --> Gemini / OpenAI / OpenRouter / lokal
+[ 4. Vision LLM ] --> Gemini / Anthropic / OpenAI / OpenRouter / lokal
            |            (atau OCR ML Kit + LLM teks kalau OCR aktif)
            v
 [ 5. Render teks & masking ] --> mask di dalam balon + teks menyesuaikan ukuran
@@ -99,7 +99,7 @@ KZKT adalah aplikasi Android untuk menerjemahkan manga dan komik secara otomatis
 │   └── src/main/
 │       ├── java/com/kzkt/app/
 │       │   ├── core/           # pipeline terjemahan, engine YOLO ONNX, OpenCV, OCR, updater
-│       │   ├── core/providers/ # provider Gemini, OpenAI, OpenRouter, Zen, OpenCode Go, kustom
+│       │   ├── core/providers/ # provider Gemini, Anthropic, OpenAI, OpenRouter, Zen, kustom
 │       │   ├── data/           # pengaturan, riwayat, glosarium & cache (persistensi)
 │       │   ├── ui/             # layar Compose (Terjemah, Riwayat, Pengaturan)
 │       │   ├── ui/component/   # komponen Material 3 yang bisa dipakai ulang
@@ -112,7 +112,9 @@ KZKT adalah aplikasi Android untuk menerjemahkan manga dan komik secara otomatis
 ├── settings.gradle.kts
 ├── Dockerfile                  # image build Android lengkap (JDK 17 + SDK)
 ├── BUILD_RELEASE.md            # panduan keystore custom + publish rilis signed
+├── CONTRIBUTING.md             # cara berkontribusi: branching, quality gate, rilis
 ├── CHANGELOG.md
+├── .editorconfig               # pengaturan editor + ktlint bersama (Compose-aware)
 └── README.md
 ```
 
