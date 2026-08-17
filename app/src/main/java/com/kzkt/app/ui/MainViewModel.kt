@@ -288,6 +288,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun startTranslation() {
         if (translationActive.value || selectedFiles.isEmpty()) return
 
+        val s = settings.value
+        val providerKey = s.llmProvider
+        val model = modelFor(s, providerKey)
+        val providerDisplay = Config.PROVIDER_REGISTRY[providerKey]?.displayName ?: providerKey
+
         translationActive.value = true
         canRetry.value = false
         com.kzkt.app.core.TranslationProgressTracker.clearCache()
@@ -303,8 +308,71 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         lastResultForEditing.value = null
         showInteractiveEditor.value = false
 
+        // Anti-error guard: a saved model name that does not exist on the provider
+        // endpoint would otherwise hang the whole run in retry/timeout loops. When a
+        // model list has already been detected, validate the saved model against it
+        // immediately; when nothing has been detected yet for this provider, fetch
+        // the model list first and validate against that before starting the worker.
+        val detected = providerModels[providerKey]
+        if (detected.isNullOrEmpty()) {
+            translationLog.add("[Provider] Checking available models for $providerKey...")
+            viewModelScope.launch(Dispatchers.IO) {
+                val models = fetchModelsBlocking(providerKey, s.getBaseUrl(providerKey), apiKeyFor(s, providerKey))
+                post {
+                    if (models.isNotEmpty()) {
+                        providerModels[providerKey] = models
+                        if (model.isNotBlank() && model !in models) {
+                            translationLog.add("[!] Model '$model' was not found on the $providerDisplay endpoint.")
+                            translationLog.add("    Open Settings → Fetch Models and pick the correct model, then translate again.")
+                            translationActive.value = false
+                            return@post
+                        }
+                    }
+                    launchTranslationWorker()
+                }
+            }
+        } else if (model.isNotBlank() && model !in detected) {
+            translationLog.add("[!] Model '$model' was not found on the $providerDisplay endpoint.")
+            translationLog.add("    Open Settings → Fetch Models and pick the correct model, then translate again.")
+            translationActive.value = false
+        } else {
+            launchTranslationWorker()
+        }
+    }
+
+    private fun launchTranslationWorker() {
         com.kzkt.app.core.TranslationWorker.startTranslation(getApplication(), selectedFiles.toList())
     }
+
+    private fun apiKeyFor(
+        s: SettingsRepository.Settings,
+        key: String,
+    ): String =
+        when (key) {
+            "gemini" -> s.geminiApiKey
+            "openai" -> s.openaiApiKey
+            "openrouter" -> s.openrouterApiKey
+            "zen" -> s.zenApiKey
+            "opencodego" -> s.opencodegoApiKey
+            "custom" -> s.customApiKey
+            "anthropic" -> s.anthropicApiKey
+            else -> ""
+        }
+
+    private fun modelFor(
+        s: SettingsRepository.Settings,
+        key: String,
+    ): String =
+        when (key) {
+            "gemini" -> s.modelGemini
+            "openai" -> s.modelOpenai
+            "openrouter" -> s.modelOpenrouter
+            "zen" -> s.modelZen
+            "opencodego" -> s.modelOpencodego
+            "custom" -> s.modelCustom
+            "anthropic" -> s.modelAnthropic
+            else -> Config.PROVIDER_REGISTRY[key]?.defaultModel ?: ""
+        }
 
     /**
      * Re-run ONLY the files that failed in the last batch (status "failed"),
@@ -538,57 +606,72 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         modelsLoading.value = true
 
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                var normalized = rawUrl.trimEnd('/')
-                if (normalized.endsWith("/chat/completions")) normalized = normalized.removeSuffix("/chat/completions")
-                if (normalized.endsWith("/v1")) normalized = normalized.removeSuffix("/v1")
-                val endpoint = if (providerKey == "gemini") {
-                    val base = if (normalized.endsWith("/v1beta")) normalized else "$normalized/v1beta"
-                    "$base/models"
+            val models = fetchModelsBlocking(providerKey, rawUrl, apiKey)
+            post {
+                if (models.isNotEmpty()) {
+                    val sorted = models.sorted()
+                    providerModels[providerKey] = sorted
+                    translationLog.add("Found ${models.size} models for ${meta?.displayName ?: providerKey}")
                 } else {
-                    "$normalized/v1/models"
+                    translationLog.add("[!] No models found at ${meta?.displayName ?: providerKey} endpoint")
                 }
+                modelsLoading.value = false
+            }
+        }
+    }
 
-                val requestBuilder = Request.Builder().url(endpoint)
-                if (apiKey.isNotBlank()) {
-                    when (providerKey) {
-                        "gemini" -> requestBuilder.header("x-goog-api-key", apiKey)
-                        "anthropic" -> requestBuilder.header("x-api-key", apiKey)
-                        else -> requestBuilder.header("Authorization", "Bearer $apiKey")
-                    }
-                }
-                val models = mutableListOf<String>()
-                // use{} closes the response so the pooled connection is released promptly.
-                httpClient.newCall(requestBuilder.build()).execute().use { response ->
-                    val body = response.body?.string() ?: ""
+    /**
+     * Refresh the detected model list for [providerKey] from its currently saved
+     * base URL + API key (used by the auto-detect-on-provider-switch in Settings).
+     */
+    fun refreshModelsForProvider(providerKey: String) {
+        val s = settings.value
+        fetchModelsForProvider(providerKey, s.getBaseUrl(providerKey), apiKeyFor(s, providerKey))
+    }
 
-                    val json = JsonParser.parseString(body).asJsonObject
-                    val data = json.getAsJsonArray("data") ?: json.getAsJsonArray("models")
-                    if (data != null) {
-                        for (elem in data) {
-                            val obj = elem.asJsonObject
-                            val id = obj.get("id")?.asString ?: obj.get("name")?.asString?.removePrefix("models/")
-                            if (id != null) models.add(id)
-                        }
-                    }
-                }
+    /**
+     * Blocking model-list fetch (returns the raw list, no state writes). Shared by
+     * the Settings "Fetch Models" button and the pre-flight model validation in
+     * [startTranslation] so the check lives in exactly one place.
+     */
+    private suspend fun fetchModelsBlocking(providerKey: String, baseUrl: String, apiKey: String): List<String> {
+        return try {
+            var normalized = baseUrl.trimEnd('/')
+            if (normalized.endsWith("/chat/completions")) normalized = normalized.removeSuffix("/chat/completions")
+            if (normalized.endsWith("/v1")) normalized = normalized.removeSuffix("/v1")
+            val endpoint = if (providerKey == "gemini") {
+                val base = if (normalized.endsWith("/v1beta")) normalized else "$normalized/v1beta"
+                "$base/models"
+            } else {
+                "$normalized/v1/models"
+            }
 
-                post {
-                    if (models.isNotEmpty()) {
-                        val sorted = models.sorted()
-                        providerModels[providerKey] = sorted
-                        translationLog.add("Found ${models.size} models for ${meta?.displayName ?: providerKey}")
-                    } else {
-                        translationLog.add("[!] No models found at $endpoint")
-                    }
-                    modelsLoading.value = false
-                }
-            } catch (e: Exception) {
-                post {
-                    translationLog.add("[!] Failed to fetch models for $providerKey: ${e.message}")
-                    modelsLoading.value = false
+            val requestBuilder = Request.Builder().url(endpoint)
+            if (apiKey.isNotBlank()) {
+                when (providerKey) {
+                    "gemini" -> requestBuilder.header("x-goog-api-key", apiKey)
+                    "anthropic" -> requestBuilder.header("x-api-key", apiKey)
+                    else -> requestBuilder.header("Authorization", "Bearer $apiKey")
                 }
             }
+            val models = mutableListOf<String>()
+            // use{} closes the response so the pooled connection is released promptly.
+            httpClient.newCall(requestBuilder.build()).execute().use { response ->
+                val body = response.body?.string() ?: ""
+                if (!response.isSuccessful) return emptyList()
+                val json = JsonParser.parseString(body).asJsonObject
+                val data = json.getAsJsonArray("data") ?: json.getAsJsonArray("models")
+                if (data != null) {
+                    for (elem in data) {
+                        val obj = elem.asJsonObject
+                        val id = obj.get("id")?.asString ?: obj.get("name")?.asString?.removePrefix("models/")
+                        if (id != null) models.add(id)
+                    }
+                }
+            }
+            models
+        } catch (e: Exception) {
+            emptyList()
         }
     }
 

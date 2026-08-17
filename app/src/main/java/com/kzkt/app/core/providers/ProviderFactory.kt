@@ -15,6 +15,7 @@ object ProviderFactory {
         modelName: String,
         baseUrl: String,
         customTimeoutSec: Int = 30,
+        useSse: Boolean = true,
     ): LlmProvider? {
         // Flexible auth from the registry — override ProviderMeta.authHeaderName /
         // authHeaderPrefix in Config.kt to support x-api-key style providers via
@@ -23,17 +24,18 @@ object ProviderFactory {
         val authHeaderName = meta?.authHeaderName ?: "Authorization"
         val authHeaderPrefix = meta?.authHeaderPrefix ?: "Bearer "
         return when (providerKey) {
-            "gemini" -> GeminiProvider(apiKey, modelName, baseUrl)
-            "openai" -> OpenAIProvider(apiKey, modelName, baseUrl)
-            "openrouter" -> OpenRouterProvider(apiKey, modelName, baseUrl)
-            "zen" -> ZenProvider(apiKey, modelName, baseUrl)
-            "opencodego" -> OpenCodeGoProvider(apiKey, modelName, baseUrl)
+            "gemini" -> GeminiProvider(apiKey, modelName, baseUrl, useSse)
+            "openai" -> OpenAIProvider(apiKey, modelName, baseUrl, useSse)
+            "openrouter" -> OpenRouterProvider(apiKey, modelName, baseUrl, useSse)
+            "zen" -> ZenProvider(apiKey, modelName, baseUrl, useSse)
+            "opencodego" -> OpenCodeGoProvider(apiKey, modelName, baseUrl, useSse)
             "custom" -> CustomProvider(
                 apiKey, modelName, baseUrl, customTimeoutSec,
                 authHeaderName = authHeaderName,
                 authHeaderPrefix = authHeaderPrefix,
+                useSse = useSse,
             )
-            "anthropic" -> AnthropicProvider(apiKey, modelName, baseUrl, customTimeoutSec)
+            "anthropic" -> AnthropicProvider(apiKey, modelName, baseUrl, customTimeoutSec, useSse)
             else -> null
         }
     }

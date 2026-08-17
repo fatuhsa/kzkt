@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 
 package com.kzkt.app.ui
 
@@ -17,7 +17,9 @@ import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Science
@@ -221,7 +223,15 @@ fun SettingsScreen(
                 ChipsRow(
                     chips = providerChips,
                     currentValue = selectedProvider,
-                    onValueUpdate = { key -> scope.launch { viewModel.settingsRepo.saveProvider(key) } },
+                    onValueUpdate = { key ->
+                        scope.launch {
+                            viewModel.settingsRepo.saveProvider(key)
+                            // Auto-detect the model list for the newly selected
+                            // provider so the dropdown is fresh and a stale model
+                            // name never reaches a translation run silently.
+                            viewModel.refreshModelsForProvider(key)
+                        }
+                    },
                 )
                 Config.PROVIDER_REGISTRY[selectedProvider]?.let { meta ->
                     Text(
@@ -270,6 +280,47 @@ fun SettingsScreen(
                 val useImageUpscaler by remember { derivedStateOf { viewModel.settings.value.useImageUpscaler } }
                 val translateSfx by remember { derivedStateOf { viewModel.settings.value.translateSfx } }
                 val translateFreeText by remember { derivedStateOf { viewModel.settings.value.translateFreeText } }
+                val useSse by remember { derivedStateOf { viewModel.settings.value.useSse } }
+                // OCR script picker: which ML Kit on-device model(s) run for local
+                // OCR + free-text detection. "jp" (default) keeps today's behavior;
+                // en/kr/cn/auto are opt-in. Only shown when the scripts apply.
+                val ocrScript by remember { derivedStateOf { viewModel.settings.value.ocrScript } }
+                val ocrScriptItem: Material3SettingsItem? =
+                    if (useLocalOcr || translateFreeText) {
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.Language) },
+                            title = { Text("OCR Script") },
+                            description = {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        "Which ML Kit model detects text (experimental)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        listOf(
+                                            "en" to "EN",
+                                            "jp" to "JP",
+                                            "kr" to "KR",
+                                            "cn" to "CN",
+                                            "auto" to "Auto",
+                                        ).forEach { (key, label) ->
+                                            FilterChip(
+                                                selected = ocrScript == key,
+                                                onClick = { scope.launch { viewModel.settingsRepo.saveOcrScript(key) } },
+                                                label = { Text(label) },
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                        )
+                    } else {
+                        null
+                    }
                 Material3SettingsGroup(
                     items = listOf(
                         Material3SettingsItem(
@@ -334,36 +385,30 @@ fun SettingsScreen(
                                 scope.launch { viewModel.settingsRepo.saveTranslateFreeText(!translateFreeText) }
                             },
                         ),
-                    )
-                )
-                // OCR script is auto-detected: the single bundled ML Kit model
-                // (Japanese + Latin) reads both scripts, so no selector is needed.
-                if (useLocalOcr) {
-                    Spacer(Modifier.height(4.dp))
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.Sync) },
+                            title = { Text("Streaming (SSE)") },
+                            description = {
+                                Text(
+                                    if (useSse) {
+                                        "ON: stream responses as they generate"
+                                    } else {
+                                        "OFF: always plain requests (safer for endpoints whose streams never finish)"
+                                    }
+                                )
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = useSse,
+                                    onCheckedChange = { enabled -> scope.launch { viewModel.settingsRepo.saveUseSse(enabled) } },
+                                )
+                            },
+                            onClick = {
+                                scope.launch { viewModel.settingsRepo.saveUseSse(!useSse) }
+                            },
                         ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            SettingsIcon(Icons.Outlined.Tune)
-                            Text(
-                                "Script auto-detected: Japanese + Latin (ML Kit)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
+                    ) + if (ocrScriptItem != null) listOf(ocrScriptItem) else emptyList(),
+                )
             }
         }
 
@@ -585,7 +630,7 @@ fun SettingsScreen(
                         Column {
                             Text("Advanced settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             Text(
-                                if (showAdvanced) "Hide sliders and custom configurations" else "Show bubble count, OCR padding, and API timeout tweaks",
+                                if (showAdvanced) "Hide developer logs and tweak parameters" else "Show developer logs, tweak parameters, and SFX filter mode",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

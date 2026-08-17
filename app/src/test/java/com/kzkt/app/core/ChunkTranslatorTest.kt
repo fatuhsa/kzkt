@@ -143,6 +143,31 @@ class ChunkTranslatorTest {
         assertFalse(ChunkTranslator.isFreeTextId(""))
     }
 
+    @Test
+    fun `hasTranslation matches normalized LLM keys`() {
+        val all = mapOf(
+            "1_1" to "a",
+            "2_ft1" to "b",
+            "ft3" to "c",
+        )
+        assertTrue(ChunkTranslator.hasTranslation("1_1", all))
+        // LLM rewrote the key with a prefix / extra text — still matches.
+        assertTrue(ChunkTranslator.hasTranslation("ft3", mapOf("ft3" to "c")))
+        assertTrue(ChunkTranslator.hasTranslation("2_ft1", mapOf("2_ft1" to "b")))
+    }
+
+    @Test
+    fun `hasTranslation is false when the LLM dropped the id`() {
+        val all = mapOf(
+            "1_1" to "a",
+            "2_1" to "b",
+        )
+        // Bubble 3_1 exists in the page but the LLM never echoed it.
+        assertFalse(ChunkTranslator.hasTranslation("3_1", all))
+        assertFalse(ChunkTranslator.hasTranslation("ft1", all))
+        assertFalse(ChunkTranslator.hasTranslation("4_2", all))
+    }
+
     // ── translateWithProviders core loop ───────────────────────────
 
     @Test

@@ -172,12 +172,27 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
                 )
             }
             // Model field — editable text with a dropdown of presets / detected models.
+            // The previously saved model stays in the dropdown (ModelDropdownInput
+            // always keeps the current value in the list), so re-detecting never
+            // loses the selected model — the warning below only flags a model that
+            // the endpoint really does not list.
             ModelDropdownInput(
                 label = meta.displayName,
                 value = currentModel,
                 presets = if (allModels.isNotEmpty()) allModels else listOf(meta.defaultModel),
                 onValue = { scope.launch { viewModel.settingsRepo.saveModel(providerKey, it) } },
             )
+            // Stale-model guard: when the endpoint's model list is known and the
+            // saved model is not in it, surface a clear warning here instead of
+            // letting the user start a run that would hang in retry/timeout loops.
+            if (detected.isNotEmpty() && currentModel.isNotBlank() && currentModel !in detected && currentModel !in presetList) {
+                Text(
+                    "Model \"$currentModel\" was not found on this endpoint. Tap \"Fetch Models\" and pick one from the list.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+            }
         }
     }
 
@@ -210,7 +225,7 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("Detect Models")
+                Text("Fetch Models")
             }
         }
         OutlinedButton(

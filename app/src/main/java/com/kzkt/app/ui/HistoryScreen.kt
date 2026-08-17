@@ -1,7 +1,7 @@
 package com.kzkt.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
@@ -56,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kzkt.app.data.HistoryEntry
 import com.kzkt.app.ui.component.EmptyHistoryPlaceholder
+import com.kzkt.app.ui.component.HistoryFolderCard
 import com.kzkt.app.ui.component.HistorySelectionBar
 import com.kzkt.app.ui.component.MangaReaderDialog
 import com.kzkt.app.ui.component.NoResultsItem
@@ -89,6 +91,11 @@ fun HistoryScreen(
 
     var confirmDelete by remember { mutableStateOf<HistoryEntry?>(null) }
     var confirmClearAll by remember { mutableStateOf(false) }
+    // Batch drill-down: which translation run (folder) is open. Null = main list.
+    // Stored as the batchKeyOf() value so the folder view can filter siblings.
+    var openBatchKey by rememberSaveable { mutableStateOf<String?>(null) }
+    // Whole-batch delete confirmation (long-press on a folder card).
+    var confirmDeleteBatch by remember { mutableStateOf<List<HistoryEntry>?>(null) }
     var readerPages by remember { mutableStateOf<List<String>?>(null) }
     var readerInitialIndex by remember { mutableIntStateOf(0) }
     // Translated PDFs open in the lazy in-app PDF reader (no upfront per-page rasterization).
@@ -115,6 +122,18 @@ fun HistoryScreen(
         sortHistoryEntries(filteredEntries, sortMode, sortDescending)
     }
     val groupedEntries = remember(sortedFiltered) { groupByDayAndBatch(sortedFiltered) }
+
+    // Total page count per translation run (from the unfiltered list) — used to
+    // show "X of Y pages match" on folder cards while a search is active.
+    val batchTotals = remember(entries, removedIds) {
+        entries.filterNot { it.timestamp in removedIds }
+            .groupingBy { batchKeyOf(it) }
+            .eachCount()
+    }
+    // Pages of the currently open folder (still query-filtered, still sorted).
+    val folderEntries = remember(openBatchKey, sortedFiltered) {
+        if (openBatchKey == null) emptyList() else sortedFiltered.filter { batchKeyOf(it) == openBatchKey }
+    }
 
     fun openReaderForEntry(entry: HistoryEntry) {
         val file = File(entry.outputPath)
@@ -187,6 +206,30 @@ fun HistoryScreen(
         }
     }
 
+    /** Toggle every page of a translation run at once (folder-card select). */
+    fun toggleSelectBatch(batchEntries: List<HistoryEntry>) {
+        val timestamps = batchEntries.map { it.timestamp }.toSet()
+        val allSelected = batchEntries.all { it.timestamp in selectedTimestamps }
+        selectedTimestamps = if (allSelected) selectedTimestamps - timestamps else selectedTimestamps + timestamps
+    }
+
+    /** Delete a whole translation run with one Undo (long-press on a folder card). */
+    fun deleteBatch(batchEntries: List<HistoryEntry>) {
+        removedIds = removedIds + batchEntries.map { it.timestamp }
+        batchEntries.forEach { viewModel.deleteHistoryEntry(it.timestamp) }
+        scope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = "Deleted ${batchEntries.size} entr${if (batchEntries.size == 1) "y" else "ies"}",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                removedIds = removedIds - batchEntries.map { it.timestamp }.toSet()
+                viewModel.restoreHistoryEntries(batchEntries)
+            }
+        }
+    }
+
     fun deleteSelected() {
         val doomed = entries.filter { it.timestamp in selectedTimestamps }
         // Batch delete must NOT go through deleteEntry(): that shows a per-item
@@ -215,13 +258,20 @@ fun HistoryScreen(
      */
     fun exportSelected(asPdf: Boolean) {
         val selected = entries.filter { it.timestamp in selectedTimestamps }
-        // Only image outputs can be packed — PDF entries stay out of the archive.
+        // Only image outputs can be packed — PDF entries stay out of the archive
+        // (they are already PDF files; packing them would nest a PDF inside a ZIP).
+        val pdfCount = selected.count { it.outputPath.endsWith(".pdf", ignoreCase = true) }
         val paths = selected.mapNotNull { e ->
             val p = e.outputPath
             if (!p.endsWith(".pdf", ignoreCase = true) && File(p).exists()) p else null
         }
         if (paths.isEmpty()) {
-            android.widget.Toast.makeText(context, "No image files selected to export", android.widget.Toast.LENGTH_SHORT).show()
+            val msg = if (pdfCount > 0) {
+                "PDF entr${if (pdfCount == 1) "y is" else "ies are"} already PDF files — only image pages can be packed"
+            } else {
+                "No image files selected to export"
+            }
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
             exitSelectionMode()
             return
         }
@@ -263,6 +313,11 @@ fun HistoryScreen(
         }
     }
 
+    // System back closes the open folder before leaving the screen.
+    BackHandler(enabled = openBatchKey != null) {
+        openBatchKey = null
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         if (entries.isEmpty()) {
             EmptyHistoryPlaceholder()
@@ -272,87 +327,128 @@ fun HistoryScreen(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                item(key = "header") {
-                    HistoryFilterHeader(
-                        selectionMode = selectionMode,
-                        selectedCount = selectedTimestamps.size,
-                        query = query,
-                        onQueryChange = { query = it },
-                        onSelectMode = { selectionMode = true },
-                        onExitSelectMode = { exitSelectionMode() },
-                        onClearAllClick = { confirmClearAll = true },
-                        sortMode = sortMode,
-                        onSortModeChange = { sortMode = it },
-                        sortDescending = sortDescending,
-                        onToggleSortDirection = { sortDescending = !sortDescending },
-                    )
-                }
-
-                if (filteredEntries.isEmpty()) {
-                    // Keep the search bar + chips visible so the query stays clearable.
-                    item(key = "no_results") {
-                        NoResultsItem()
+                if (openBatchKey == null) {
+                    // ── MAIN LIST ──
+                    item(key = "header") {
+                        HistoryFilterHeader(
+                            selectionMode = selectionMode,
+                            selectedCount = selectedTimestamps.size,
+                            query = query,
+                            onQueryChange = { query = it },
+                            onSelectMode = { selectionMode = true },
+                            onExitSelectMode = { exitSelectionMode() },
+                            onClearAllClick = { confirmClearAll = true },
+                            sortMode = sortMode,
+                            onSortModeChange = { sortMode = it },
+                            sortDescending = sortDescending,
+                            onToggleSortDirection = { sortDescending = !sortDescending },
+                        )
                     }
-                } else {
-                    // Day buckets ("Today", "Yesterday", ...), each split into its
-                    // translation runs (batchId) with a small separator header.
-                    groupedEntries.forEach { dayGroup ->
-                        item(key = "day_${dayGroup.batches.first().entries.first().timestamp}") {
-                            Text(
-                                dayGroup.label,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
-                            )
+
+                    if (filteredEntries.isEmpty()) {
+                        // Keep the search bar + chips visible so the query stays clearable.
+                        item(key = "no_results") {
+                            NoResultsItem()
                         }
-                        dayGroup.batches.forEach { batch ->
-                            // Batch separator: e.g. "4 pages · 14:32" — visually a thin
-                            // divider plus a muted label so runs are easy to tell apart.
-                            item(key = "batch_${batch.entries.first().timestamp}") {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
-                                ) {
-                                    HorizontalDivider(
-                                        modifier = Modifier.weight(1f),
-                                        thickness = 1.dp,
-                                        color = MaterialTheme.colorScheme.outlineVariant,
-                                    )
-                                    Text(
-                                        batch.label,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(horizontal = 8.dp),
-                                    )
-                                    HorizontalDivider(
-                                        modifier = Modifier.weight(1f),
-                                        thickness = 1.dp,
-                                        color = MaterialTheme.colorScheme.outlineVariant,
-                                    )
-                                }
-                            }
-                            // Stable key: timestamp alone can collide when a multi-file batch is
-                            // recorded in the same millisecond, which made LazyColumn throw
-                            // "key already used" and stall the list. contentType lets LazyColumn
-                            // reuse item composition while scrolling.
-                            items(
-                                batch.entries,
-                                key = { "${it.timestamp}_${it.fileName}_${it.pageCount}" },
-                                contentType = { "history_entry" },
-                            ) { entry ->
-                                SwipeToDismissHistoryItem(
-                                    entry = entry,
-                                    onClick = {
-                                        if (selectionMode) toggleSelect(entry) else openReaderForEntry(entry)
-                                    },
-                                    onLongClick = { if (selectionMode) toggleSelect(entry) else confirmDelete = entry },
-                                    onDelete = { deleteEntry(entry) },
-                                    selectionMode = selectionMode,
-                                    isSelected = entry.timestamp in selectedTimestamps,
-                                    onToggleSelect = { toggleSelect(entry) },
-                                    onRetry = { viewModel.retryHistoryEntry(entry) },
+                    } else {
+                        // Day buckets ("Today", "Yesterday", ...), each split into its
+                        // translation runs: multi-page runs collapse to a folder card,
+                        // single-page runs (one image / a PDF) stay as direct items.
+                        groupedEntries.forEach { dayGroup ->
+                            item(key = "day_${dayGroup.batches.first().entries.first().timestamp}") {
+                                Text(
+                                    dayGroup.label,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
                                 )
                             }
+                            dayGroup.batches.forEach { batch ->
+                                if (batch.entries.size > 1) {
+                                    val batchKey = batchKeyOf(batch.entries.first())
+                                    item(key = "folder_$batchKey") {
+                                        HistoryFolderCard(
+                                            entries = batch.entries,
+                                            title = batchFolderTitle(batch.entries),
+                                            matchNote = if (query.isNotBlank()) {
+                                                val total = batchTotals[batchKey] ?: batch.entries.size
+                                                if (batch.entries.size < total) "${batch.entries.size} of $total pages match" else null
+                                            } else {
+                                                null
+                                            },
+                                            selectionMode = selectionMode,
+                                            isSelected = batch.entries.all { it.timestamp in selectedTimestamps },
+                                            onClick = {
+                                                if (selectionMode) toggleSelectBatch(batch.entries) else openBatchKey = batchKey
+                                            },
+                                            onLongClick = {
+                                                if (selectionMode) toggleSelectBatch(batch.entries) else confirmDeleteBatch = batch.entries
+                                            },
+                                            onToggleSelect = { toggleSelectBatch(batch.entries) },
+                                        )
+                                    }
+                                } else {
+                                    // Single-page run: direct item (page-level select).
+                                    items(
+                                        batch.entries,
+                                        key = { "${it.timestamp}_${it.fileName}_${it.pageCount}" },
+                                        contentType = { "history_entry" },
+                                    ) { entry ->
+                                        SwipeToDismissHistoryItem(
+                                            entry = entry,
+                                            onClick = {
+                                                if (selectionMode) toggleSelect(entry) else openReaderForEntry(entry)
+                                            },
+                                            onLongClick = { if (selectionMode) toggleSelect(entry) else confirmDelete = entry },
+                                            onDelete = { deleteEntry(entry) },
+                                            selectionMode = selectionMode,
+                                            isSelected = entry.timestamp in selectedTimestamps,
+                                            onToggleSelect = { toggleSelect(entry) },
+                                            onRetry = { viewModel.retryHistoryEntry(entry) },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // ── FOLDER DRILL-DOWN: header (back + title + sort) then pages. ──
+                    item(key = "folder_header") {
+                        HistoryFolderHeader(
+                            title = batchFolderTitle(folderEntries),
+                            onBack = { openBatchKey = null },
+                            selectionMode = selectionMode,
+                            selectedCount = selectedTimestamps.size,
+                            onSelectMode = { selectionMode = true },
+                            onExitSelectMode = { exitSelectionMode() },
+                            sortMode = sortMode,
+                            onSortModeChange = { sortMode = it },
+                            sortDescending = sortDescending,
+                            onToggleSortDirection = { sortDescending = !sortDescending },
+                        )
+                    }
+                    if (folderEntries.isEmpty()) {
+                        item(key = "no_results") {
+                            NoResultsItem()
+                        }
+                    } else {
+                        items(
+                            folderEntries,
+                            key = { "${it.timestamp}_${it.fileName}_${it.pageCount}" },
+                            contentType = { "history_entry" },
+                        ) { entry ->
+                            SwipeToDismissHistoryItem(
+                                entry = entry,
+                                onClick = {
+                                    if (selectionMode) toggleSelect(entry) else openReaderForEntry(entry)
+                                },
+                                onLongClick = { if (selectionMode) toggleSelect(entry) else confirmDelete = entry },
+                                onDelete = { deleteEntry(entry) },
+                                selectionMode = selectionMode,
+                                isSelected = entry.timestamp in selectedTimestamps,
+                                onToggleSelect = { toggleSelect(entry) },
+                                onRetry = { viewModel.retryHistoryEntry(entry) },
+                            )
                         }
                     }
                 }
@@ -411,6 +507,28 @@ fun HistoryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { confirmDelete = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    confirmDeleteBatch?.let { batchEntries ->
+        AlertDialog(
+            onDismissRequest = { confirmDeleteBatch = null },
+            title = { Text("Delete batch?") },
+            text = { Text("Delete this batch (${batchEntries.size} entr${if (batchEntries.size == 1) "y" else "ies"}) from history?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        deleteBatch(batchEntries)
+                        confirmDeleteBatch = null
+                        if (openBatchKey != null) openBatchKey = null
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteBatch = null }) { Text("Cancel") }
             },
         )
     }
@@ -534,6 +652,88 @@ private fun HistoryFilterHeader(
             )
             Divider(modifier = Modifier.height(24.dp).width(1.dp))
             // Direction toggle — flips the order in the list AND in the reader.
+            IconButton(onClick = onToggleSortDirection) {
+                Icon(
+                    if (sortDescending) Icons.Filled.ArrowDownward else Icons.Filled.ArrowUpward,
+                    contentDescription = if (sortDescending) "Sort descending" else "Sort ascending",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
+/** Folder drill-down header: back button, folder title and the same sort controls. */
+@Composable
+private fun HistoryFolderHeader(
+    title: String,
+    onBack: () -> Unit,
+    selectionMode: Boolean,
+    selectedCount: Int,
+    onSelectMode: () -> Unit,
+    onExitSelectMode: () -> Unit,
+    sortMode: HistorySortMode,
+    onSortModeChange: (HistorySortMode) -> Unit,
+    sortDescending: Boolean,
+    onToggleSortDirection: () -> Unit,
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                )
+            }
+            Text(
+                if (selectionMode) "Select ($selectedCount)" else title,
+                style = MaterialTheme.typography.headlineSmall,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 8.dp),
+            )
+            if (selectionMode) {
+                TextButton(onClick = onExitSelectMode) {
+                    Text("Done")
+                }
+            } else {
+                TextButton(onClick = onSelectMode) {
+                    Text("Select")
+                }
+            }
+        }
+
+        // Same sort controls as the main list — the pages inside the folder (and
+        // the reader opened from them) follow the chosen order.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FilterChip(
+                selected = sortMode == HistorySortMode.TIME,
+                onClick = { onSortModeChange(HistorySortMode.TIME) },
+                label = { Text("By Time") },
+                leadingIcon = if (sortMode == HistorySortMode.TIME) {
+                    { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                } else null,
+                modifier = Modifier.weight(1f),
+            )
+            FilterChip(
+                selected = sortMode == HistorySortMode.NAME,
+                onClick = { onSortModeChange(HistorySortMode.NAME) },
+                label = { Text("By Name") },
+                leadingIcon = if (sortMode == HistorySortMode.NAME) {
+                    { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                } else null,
+                modifier = Modifier.weight(1f),
+            )
+            Divider(modifier = Modifier.height(24.dp).width(1.dp))
             IconButton(onClick = onToggleSortDirection) {
                 Icon(
                     if (sortDescending) Icons.Filled.ArrowDownward else Icons.Filled.ArrowUpward,

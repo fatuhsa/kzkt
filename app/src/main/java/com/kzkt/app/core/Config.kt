@@ -146,6 +146,11 @@ object Config {
             var useImageUpscaler: Boolean = false,
             var translateSfx: Boolean = false,
             var translateFreeText: Boolean = false,
+            // Which ML Kit OCR model(s) to run for local OCR + free-text detection.
+            // "jp" (default) = Japanese + Latin; "en" / "kr" / "cn" for those
+            // scripts; "auto" = union of all models. Legacy full names still
+            // resolve via OcrScript.fromKey. Default keeps today's behavior.
+            var ocrScript: String = "jp",
         )
     }
 

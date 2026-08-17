@@ -69,6 +69,8 @@ class SettingsRepository(private val context: Context) {
         private val KEY_USE_IMAGE_UPSCALER = booleanPreferencesKey("use_image_upscaler")
         private val KEY_TRANSLATE_SFX = booleanPreferencesKey("translate_sfx")
         private val KEY_TRANSLATE_FREE_TEXT = booleanPreferencesKey("translate_free_text")
+        private val KEY_OCR_SCRIPT = stringPreferencesKey("ocr_script")
+        private val KEY_USE_SSE = booleanPreferencesKey("use_sse")
         private val KEY_AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
         // Rendered-text output settings
         private val KEY_JPEG_QUALITY = intPreferencesKey("jpeg_quality")
@@ -119,6 +121,13 @@ class SettingsRepository(private val context: Context) {
         val useImageUpscaler: Boolean = false,
         val translateSfx: Boolean = false,
         val translateFreeText: Boolean = false,
+        // "jp" (default) = Japanese + Latin; "en" / "kr" / "cn" for those scripts;
+        // "auto" = union of all ML Kit OCR models. Legacy values like "japanese"
+        // are normalized to the short keys on load (see normalizeOcrScript).
+        val ocrScript: String = "jp",
+        // Stream responses via SSE when the provider supports it. Off = always
+        // plain requests (safer for endpoints whose streams never terminate).
+        val useSse: Boolean = true,
         val autoCheckUpdates: Boolean = true,
         // "auto" = white text on dark bubbles / black on light (current behaviour),
         // "white" / "black" force the rendered text colour regardless of the bubble.
@@ -190,6 +199,8 @@ class SettingsRepository(private val context: Context) {
             useImageUpscaler = prefs[KEY_USE_IMAGE_UPSCALER] ?: Defaults.settings.useImageUpscaler,
             translateSfx = prefs[KEY_TRANSLATE_SFX] ?: Defaults.settings.translateSfx,
             translateFreeText = prefs[KEY_TRANSLATE_FREE_TEXT] ?: Defaults.settings.translateFreeText,
+            ocrScript = (prefs[KEY_OCR_SCRIPT] ?: Defaults.settings.ocrScript).let { normalizeOcrScript(it) },
+            useSse = prefs[KEY_USE_SSE] ?: Defaults.settings.useSse,
             autoCheckUpdates = prefs[KEY_AUTO_CHECK_UPDATES] ?: Defaults.settings.autoCheckUpdates,
             renderTextColor = prefs[KEY_RENDER_TEXT_COLOR] ?: Defaults.settings.renderTextColor,
             renderFontScale = prefs[KEY_RENDER_FONT_SCALE] ?: Defaults.settings.renderFontScale,
@@ -304,6 +315,25 @@ class SettingsRepository(private val context: Context) {
     suspend fun saveTranslateFreeText(enabled: Boolean) {
         context.dataStore.edit { it[KEY_TRANSLATE_FREE_TEXT] = enabled }
     }
+
+    suspend fun saveOcrScript(script: String) {
+        context.dataStore.edit { it[KEY_OCR_SCRIPT] = normalizeOcrScript(script) }
+    }
+
+    suspend fun saveUseSse(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_USE_SSE] = enabled }
+    }
+
+    /** Map legacy full-name script values ("japanese") to the short keys ("jp"). */
+    private fun normalizeOcrScript(raw: String): String =
+        when (raw) {
+            "en", "jp", "kr", "cn", "auto" -> raw
+            "english" -> "en"
+            "japanese" -> "jp"
+            "korean" -> "kr"
+            "chinese" -> "cn"
+            else -> Defaults.settings.ocrScript
+        }
 
     suspend fun saveAutoCheckUpdates(enabled: Boolean) {
         context.dataStore.edit { it[KEY_AUTO_CHECK_UPDATES] = enabled }
@@ -420,6 +450,8 @@ class SettingsRepository(private val context: Context) {
             prefs.remove(KEY_USE_IMAGE_UPSCALER)
             prefs.remove(KEY_TRANSLATE_SFX)
             prefs.remove(KEY_TRANSLATE_FREE_TEXT)
+            prefs.remove(KEY_OCR_SCRIPT)
+            prefs.remove(KEY_USE_SSE)
             prefs.remove(KEY_AUTO_CHECK_UPDATES)
             prefs.remove(KEY_JPEG_QUALITY)
             prefs.remove(KEY_RENDER_TEXT_COLOR)

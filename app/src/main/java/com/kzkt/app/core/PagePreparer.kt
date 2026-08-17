@@ -2,6 +2,7 @@ package com.kzkt.app.core
 
 import android.graphics.Bitmap
 import com.kzkt.app.core.ocr.LocalOcrEngine
+import com.kzkt.app.core.ocr.OcrScript
 
 /**
  * Page-level detection + cropping: runs the 3-stage YOLO cascade, filters the
@@ -58,7 +59,8 @@ class PagePreparer(
         isCancelled: () -> Boolean = { false },
     ): List<IntArray> {
         if (isCancelled()) return emptyList()
-        val regions = LocalOcrEngine.recognizeTextRegions(bitmap)
+        val script = OcrScript.fromKey(params.engine.ocrScript)
+        val regions = LocalOcrEngine.recognizeTextRegions(bitmap, script)
         if (isCancelled()) return emptyList()
 
         val filtered =

@@ -20,6 +20,8 @@ class GeminiProvider(
     override val apiKey: String,
     override val modelName: String,
     val customUrl: String = "",
+    /** When false, skip the SSE stream and use the plain generateContent call. */
+    private val useSse: Boolean = true,
 ) : LlmProvider {
 
     override val providerName: String = "Google Gemini"
@@ -90,6 +92,7 @@ class GeminiProvider(
      */
     private suspend fun executeGeminiWithStream(endpoint: String, requestBody: String): String? {
         val plainUrl = "$endpoint:generateContent?key=$apiKey"
+        if (!useSse) return executeGeminiPlain(plainUrl, requestBody)
         val streamUrl = "$endpoint:streamGenerateContent?alt=sse&key=$apiKey"
         return try {
             executeGeminiStreaming(streamUrl, requestBody)?.takeIf { it.isNotBlank() }

@@ -307,7 +307,12 @@ class TranslationPipeline(
                         onProgress("  [Chunk ${chunkIdx + 1}/${chunks.size}] Processing bubbles ${chunk.first().id}..${chunk.last().id}")
                     }
 
-                    chunkTranslator.translateVisionChunk(chunk, cropItems, allTranslations)
+                    translateChunkWithCoverageRetry(
+                        chunk = chunk,
+                        cropItems = cropItems,
+                        allTranslations = allTranslations,
+                        chunkLabel = "Chunk ${chunkIdx + 1}/${chunks.size}",
+                    )
                 }
             }
         }
@@ -389,12 +394,59 @@ class TranslationPipeline(
         cropItems: List<MosaicBuilder.CropItem>,
     ): Boolean {
         if (isCancelled()) return false
-        return chunkTranslator.translateVisionChunk(
-            chunk = chunk,
-            cropItems = cropItems,
-            allTranslations = allTranslations,
-            logStart = { "  [OCR Fallback] Translating ${chunk.size} bubbles via ${it.providerName} vision..." },
+        // The fallback path must never abort the whole run: a provider error while
+        // building/sending the mosaic would otherwise bubble up to the worker and
+        // force a manual retry. Catch it here, log it, and move on — the remaining
+        // bubbles in later chunks still get translated.
+        return try {
+            chunkTranslator.translateVisionChunk(
+                chunk = chunk,
+                cropItems = cropItems,
+                allTranslations = allTranslations,
+                logStart = { "  [OCR Fallback] Translating ${chunk.size} bubbles via ${it.providerName} vision..." },
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            onProgress("  [!] Vision fallback failed (${e.message ?: "Unknown error"}) — skipping those bubbles.")
+            false
+        }
+    }
+
+    /**
+     * Translate [chunk] via vision and verify every sent bubble came back with a
+     * usable translation. A provider can return unparseable output (or a "repaired"
+     * JSON whose keys no longer match the sent ids), which would otherwise render
+     * as "Done! 0/N regions translated" with no error — the page gets saved with
+     * the original text. Missing ids are retried once, split into two smaller
+     * sub-chunks: smaller mosaics are far less likely to be truncated/unparseable
+     * than one large 11-bubble image.
+     */
+    private suspend fun translateChunkWithCoverageRetry(
+        chunk: List<MosaicBuilder.CropItem>,
+        cropItems: List<MosaicBuilder.CropItem>,
+        allTranslations: MutableMap<String, String>,
+        chunkLabel: String,
+        onWait: ((String) -> Unit)? = null,
+    ) {
+        if (chunk.isEmpty() || isCancelled()) return
+        chunkTranslator.translateVisionChunk(chunk, cropItems, allTranslations, onWait = onWait)
+        val missing = chunk.filter { !ChunkTranslator.hasTranslation(it.id, allTranslations) }
+        if (missing.isEmpty()) return
+
+        val missingIds = missing.joinToString(", ") { it.id }
+        onProgress(
+            "  [!] $chunkLabel: ${missing.size}/${chunk.size} bubbles missing from provider response (ids: $missingIds). Retrying in smaller chunks...",
         )
+        for (half in missing.chunked((missing.size + 1) / 2)) {
+            if (isCancelled()) break
+            chunkTranslator.translateVisionChunk(half, cropItems, allTranslations, onWait = onWait)
+        }
+        val stillMissing = missing.filter { !ChunkTranslator.hasTranslation(it.id, allTranslations) }
+        if (stillMissing.isNotEmpty()) {
+            val suffix = if (params.engine.enableDevLogs) " (${stillMissing.joinToString { it.id }})" else ""
+            onProgress("  [!] $chunkLabel: ${stillMissing.size}/${chunk.size} bubbles still missing after retry$suffix.")
+        }
     }
 
     /**
@@ -642,6 +694,33 @@ class TranslationPipeline(
 
                 if (!ocrResult.translated) {
                     onProgress("  [!] Batch ${chunkIdx + 1}/${chunks.size} failed all providers (no response received; skipping these bubbles).")
+                } else {
+                    // A provider may return valid JSON whose keys do not correspond to
+                    // the sent crop ids (e.g. it drops the page prefix or rewrites the
+                    // ids). Those translations can never be looked up at render time,
+                    // so the batch would silently vanish — detect it here and re-run
+                    // just the missing bubbles through the vision (mosaic) path.
+                    // Only ids that were actually sent to the LLM can be missing:
+                    // bubbles ML Kit found no text in were never part of the request,
+                    // so the provider cannot echo them — treating them as missing
+                    // would push every no-text bubble through a pointless vision
+                    // round-trip (and re-render the original script when the vision
+                    // model fails to translate it).
+                    val sentIds = ocrResult.ocrMap.keys.toHashSet()
+                    val missing = chunk.filter { it.id in sentIds && !ChunkTranslator.hasTranslation(it.id, allTranslations) }
+                    if (missing.isNotEmpty()) {
+                        if (params.engine.enableDevLogs) {
+                            val ids = missing.joinToString(", ") { it.id }
+                            val detail = "ids not echoed by provider (missing: $ids) — falling back to vision."
+                            onProgress("  [!] Batch ${chunkIdx + 1}/${chunks.size}: ${missing.size}/${chunk.size} $detail")
+                        } else {
+                            val summary = "ids not echoed by provider — falling back to vision."
+                            onProgress("  [!] Batch ${chunkIdx + 1}/${chunks.size}: ${missing.size}/${chunk.size} $summary")
+                        }
+                        translateChunkViaVision(missing, allTranslations, cropItems)
+                    } else if (params.engine.enableDevLogs) {
+                        onProgress("  [Local OCR] Batch ${chunkIdx + 1}/${chunks.size}: all ${chunk.size} ids echoed correctly.")
+                    }
                 }
             }
         } else {
@@ -655,16 +734,13 @@ class TranslationPipeline(
                 onProgress(batchMsg)
                 onStepProgress(batchPercent, batchMsg)
 
-                val succeeded = chunkTranslator.translateVisionChunk(
+                translateChunkWithCoverageRetry(
                     chunk = chunk,
                     cropItems = cropItems,
                     allTranslations = allTranslations,
+                    chunkLabel = "Batch ${chunkIdx + 1}/${chunks.size}",
                     onWait = { msg -> onStepProgress(batchPercent, msg) },
                 )
-                if (!succeeded) {
-                    val ids = chunk.joinToString(", ") { it.id }
-                    onProgress("  [!] Batch ${chunkIdx + 1} failed all providers. Skipping bubbles: $ids")
-                }
             }
         }
 
@@ -747,6 +823,15 @@ class TranslationPipeline(
                 val ftMatched = pageTranslations.keys.count { ChunkTranslator.isFreeTextId(it) }
                 if (ftInPage > 0) {
                     onProgress("  [Free Text] Page ${pageIdx + 1}: matched $ftMatched/$ftInPage free-text regions for render.")
+                }
+            }
+            if (params.engine.enableDevLogs && page.coordMap.isNotEmpty()) {
+                val matchedAll = pageTranslations.size
+                val totalAll = page.coordMap.size
+                if (matchedAll == 0) {
+                    onProgress("  [!] Page ${pageIdx + 1}: 0/$totalAll regions matched — page will be saved WITHOUT translations.")
+                } else {
+                    onProgress("  [Render] Page ${pageIdx + 1}: matched $matchedAll/$totalAll regions.")
                 }
             }
 

@@ -21,6 +21,8 @@ class AnthropicProvider(
     override val modelName: String,
     val customUrl: String = "",
     timeoutSec: Int = 30,
+    /** When false, skip the SSE stream and use the plain Messages call. */
+    private val useSse: Boolean = true,
 ) : LlmProvider {
 
     override val providerName: String = "Anthropic"
@@ -81,9 +83,10 @@ class AnthropicProvider(
      * the outcome is identical to a plain request in every case.
      */
     private suspend fun executeWithStreamFallback(payload: Map<String, Any>): String? {
+        val plainRequest = buildRequest(payload)
+        if (!useSse) return executePlain(plainRequest)
         val streamPayload = payload.toMutableMap().apply { put("stream", true) }
         val streamRequest = buildRequest(streamPayload)
-        val plainRequest = buildRequest(payload)
         return try {
             executeStreaming(streamRequest)?.takeIf { it.isNotBlank() } ?: executePlain(plainRequest)
         } catch (e: kotlinx.coroutines.CancellationException) {

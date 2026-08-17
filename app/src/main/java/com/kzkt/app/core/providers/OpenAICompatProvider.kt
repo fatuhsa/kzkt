@@ -24,6 +24,12 @@ abstract class OpenAICompatProvider(
     private val authHeaderPrefix: String = "Bearer ",
     /** Longest-side limit before the mosaic is downscaled (provider image limits). */
     private val maxImageDimension: Int = 4096,
+    /**
+     * When false, requests skip the SSE streaming attempt and go straight to the
+     * plain request. Streams that never terminate (keep-alive without [DONE])
+     * would otherwise hang a batch — see the Settings "Streaming (SSE)" toggle.
+     */
+    private val useSse: Boolean = true,
 ) : LlmProvider {
 
     /** The default chat-completions endpoint used when [customUrl] is blank. */
@@ -92,8 +98,9 @@ abstract class OpenAICompatProvider(
      * stream fails — the outcome is identical to the old behaviour in every case.
      */
     protected suspend fun executeWithStreamFallback(payload: MutableMap<String, Any>): String? {
-        val streamRequest = buildRequest(payload.toMutableMap().apply { put("stream", true) })
         val plainRequest = buildRequest(payload)
+        if (!useSse) return executeRequest(plainRequest)
+        val streamRequest = buildRequest(payload.toMutableMap().apply { put("stream", true) })
         return try {
             executeStreamingRequest(streamRequest)?.takeIf { it.isNotBlank() } ?: executeRequest(plainRequest)
         } catch (e: kotlinx.coroutines.CancellationException) {

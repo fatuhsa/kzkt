@@ -156,9 +156,10 @@ class HistoryListUtilsTest {
         // Single batch, TIME: page 1 on top by default, flipped when descending.
         assertEquals(listOf(e1, e2, e3), sortHistoryEntries(entries, HistorySortMode.TIME, descending = false))
         assertEquals(listOf(e3, e2, e1), sortHistoryEntries(entries, HistorySortMode.TIME, descending = true))
-        // Single batch, NAME: page 1 (first file) on top by default, flipped when descending.
-        assertEquals(listOf(e1, e2, e3), sortHistoryEntries(entries, HistorySortMode.NAME, descending = false))
-        assertEquals(listOf(e3, e2, e1), sortHistoryEntries(entries, HistorySortMode.NAME, descending = true))
+        // Single batch, NAME: pages follow numeric-aware file-name order
+        // (a.jpg, b.jpg, c.jpg), flipped when descending.
+        assertEquals(listOf(e2, e3, e1), sortHistoryEntries(entries, HistorySortMode.NAME, descending = false))
+        assertEquals(listOf(e1, e3, e2), sortHistoryEntries(entries, HistorySortMode.NAME, descending = true))
     }
 
     @Test
@@ -195,6 +196,23 @@ class HistoryListUtilsTest {
             listOf(run1p2, run1p1, run2p2, run2p1),
             sortHistoryEntries(entries, HistorySortMode.NAME, descending = true),
         )
+    }
+
+    @Test
+    fun `NAME mode sorts pages inside a batch with numeric-aware order`() {
+        val dir = createTempDirectory("kzkt_name_numeric").toFile()
+        val p1 = tmpFile(dir, "1.webp")
+        val p10 = tmpFile(dir, "10.webp")
+        val p2 = tmpFile(dir, "2.webp")
+        // Timestamps in processing order: 1, 10, 2 — NOT name order.
+        val e1 = HistoryEntry(1, "1.webp", p1, 1, "gemini", "Indonesian", inputPath = "a", status = "ok", batchId = "run1")
+        val e10 = HistoryEntry(2, "10.webp", p10, 1, "gemini", "Indonesian", inputPath = "b", status = "ok", batchId = "run1")
+        val e2 = HistoryEntry(3, "2.webp", p2, 1, "gemini", "Indonesian", inputPath = "c", status = "ok", batchId = "run1")
+        val entries = listOf(e1, e10, e2)
+
+        // By name: 1, 2, 10 (numeric-aware), not 1, 10, 2 (timestamp) nor 1, 10, 2 (lexicographic).
+        assertEquals(listOf(e1, e2, e10), sortHistoryEntries(entries, HistorySortMode.NAME, descending = false))
+        assertEquals(listOf(e10, e2, e1), sortHistoryEntries(entries, HistorySortMode.NAME, descending = true))
     }
 
     @Test

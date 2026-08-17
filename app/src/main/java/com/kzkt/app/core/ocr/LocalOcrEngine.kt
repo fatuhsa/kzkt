@@ -6,7 +6,10 @@ import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
+import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
+import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
@@ -21,21 +24,45 @@ data class TextRegion(
     val text: String,
 )
 
+/** Which ML Kit on-device OCR model(s) to run. AUTO unions every model's output. */
+enum class OcrScript(
+    val key: String,
+    val label: String,
+) {
+    ENGLISH("en", "English"),
+    JAPANESE("jp", "Japanese + Latin"),
+    KOREAN("kr", "Korean"),
+    CHINESE("cn", "Chinese"),
+    AUTO("auto", "Auto (all)"),
+    ;
+
+    companion object {
+        /**
+         * Resolve a stored script key ("jp", "en", ...) to an enum value. Legacy
+         * full names ("japanese", "korean", ...) saved by older builds still resolve.
+         */
+        fun fromKey(raw: String): OcrScript = entries.firstOrNull { it.key == raw || it.name.lowercase() == raw } ?: JAPANESE
+    }
+}
+
 /**
  * On-device local OCR engine powered by Google ML Kit.
  *
- * Uses a SINGLE recognizer — the Japanese model (gocrjapanese_and_latin) — for all
- * input. That model recognizes BOTH Japanese and Latin script, so one client covers
- * manga pages in either script with no script selector and no auto-detection pass.
+ * Holds one lazy recognizer per [OcrScript]. The Japanese model
+ * (gocrjapanese_and_latin) recognizes BOTH Japanese and Latin script, so it stays
+ * the default — English/Korean/Chinese models are opt-in via the Settings picker.
  *
- * Why only one client: creating a SECOND ML Kit client type in the same process
- * (e.g. Latin client, then Japanese client) crashes with an NPE inside
- * com.google.mlkit.vision.text.internal (TextRecognition.getClient reads a null
- * component field). Keeping exactly one client for the app's lifetime avoids that
- * path entirely while the bundled japanese_and_latin model still reads English/Latin.
+ * IMPORTANT (verified in the field): ML Kit crashes with an NPE inside
+ * com.google.mlkit.vision.text.internal when a SECOND client TYPE is created in
+ * the same process (TextRecognition.getClient reads a null component field). This
+ * engine therefore creates recognizers strictly lazily — a recognizer type is only
+ * instantiated the first time it is actually used, so the app never creates a
+ * second type unless the user explicitly enables Korean/Chinese/AUTO. If that NPE
+ * still fires on some devices, the whole multi-script experiment can be reverted
+ * by removing the non-Japanese branches (default stays Japanese-only).
  *
  * The free-text detection functions below (recognizeTextRegions) reuse the SAME
- * single recognizer, so no second client type is ever created.
+ * per-script recognizers as [recognizeText], so no extra client type is created.
  */
 object LocalOcrEngine {
     private const val TAG = "LocalOcrEngine"
@@ -48,8 +75,7 @@ object LocalOcrEngine {
     private const val MIN_REGION_W = 12
     private const val MIN_REGION_H = 8
 
-    @Volatile
-    private var recognizer: TextRecognizer? = null
+    private val recognizers = mutableMapOf<OcrScript, TextRecognizer>()
 
     /**
      * Last ML Kit error message (cleared by the pipeline after reporting), so a
@@ -58,51 +84,81 @@ object LocalOcrEngine {
     @Volatile
     var lastError: String? = null
 
-    private fun getRecognizer(): TextRecognizer =
-        recognizer ?: synchronized(this) {
-            recognizer ?: TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build()).also { recognizer = it }
+    private fun getRecognizer(script: OcrScript): TextRecognizer =
+        synchronized(this) {
+            recognizers[script] ?: createRecognizer(script).also { recognizers[script] = it }
+        }
+
+    private fun createRecognizer(script: OcrScript): TextRecognizer =
+        when (script) {
+            OcrScript.ENGLISH -> TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            OcrScript.JAPANESE -> TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
+            OcrScript.KOREAN -> TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build())
+            OcrScript.CHINESE -> TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
+            OcrScript.AUTO -> TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
         }
 
     /**
-     * [ocrScript] is accepted for API compatibility with the (removed) script
-     * selector but is no longer used — the Japanese model handles both scripts.
+     * Recognize the text inside a single crop (bubble / free-text region). With
+     * [OcrScript.AUTO], tries every model in order and returns the first non-blank
+     * result (Japanese first — it also covers Latin).
      */
-    suspend fun recognizeText(bitmap: Bitmap, ocrScript: String = "japanese"): String {
+    suspend fun recognizeText(
+        bitmap: Bitmap,
+        script: OcrScript = OcrScript.JAPANESE,
+    ): String {
         return withContext(Dispatchers.IO) {
-            runRecognition(bitmap, getRecognizer())
+            val scripts = script.resolve()
+            for (s in scripts) {
+                val text = runRecognition(bitmap, getRecognizer(s))
+                if (text.isNotBlank()) return@withContext text
+            }
+            ""
         }
     }
 
-    private fun runRecognition(bitmap: Bitmap, recognizer: TextRecognizer): String {
-        return try {
+    private fun runRecognition(
+        bitmap: Bitmap,
+        recognizer: TextRecognizer,
+    ): String =
+        try {
             val image = InputImage.fromBitmap(bitmap, 0)
             val task = recognizer.process(image)
             val visionText = Tasks.await(task, OCR_TIMEOUT_SEC, TimeUnit.SECONDS)
             lastError = null
-            visionText.text.trim().replace("\r\n", " ").replace("\n", " ")
+            visionText.text
+                .trim()
+                .replace("\r\n", " ")
+                .replace("\n", " ")
         } catch (e: Exception) {
             lastError = e.message
             Log.w(TAG, "ML Kit OCR failed or timed out: ${e.message}", e)
             ""
         }
-    }
 
     /**
-     * Full-page text-block detection for the free-text feature. Reuses the SAME
-     * Japanese recognizer as [recognizeText] (creating a second ML Kit client type
-     * in this process crashes — see the class doc). Returns text blocks with their
-     * bounding boxes scaled back to the original bitmap coordinates.
+     * Full-page text-block detection for the free-text feature. With
+     * [OcrScript.AUTO], runs every model and unions the detected regions (the
+     * caller's merge step collapses overlapping boxes).
      */
-    suspend fun recognizeTextRegions(bitmap: Bitmap): List<TextRegion> =
+    suspend fun recognizeTextRegions(
+        bitmap: Bitmap,
+        script: OcrScript = OcrScript.JAPANESE,
+    ): List<TextRegion> =
         withContext(Dispatchers.IO) {
-            runRegionRecognition(bitmap, getRecognizer())
+            val scripts = script.resolve()
+            val all = mutableListOf<TextRegion>()
+            for (s in scripts) {
+                all.addAll(runRegionRecognition(bitmap, getRecognizer(s)))
+            }
+            all
         }
 
     private fun runRegionRecognition(
         bitmap: Bitmap,
         recognizer: TextRecognizer,
-    ): List<TextRegion> {
-        return try {
+    ): List<TextRegion> =
+        try {
             val maxDim = maxOf(bitmap.width, bitmap.height)
             val scale = minOf(1f, MAX_DETECT_DIM.toFloat() / maxDim)
             val detectBmp =
@@ -150,5 +206,11 @@ object LocalOcrEngine {
             Log.w(TAG, "ML Kit region detection failed or timed out: ${e.message}", e)
             emptyList()
         }
-    }
+
+    /** Expand AUTO into the concrete model list to run, in priority order. */
+    private fun OcrScript.resolve(): List<OcrScript> =
+        when (this) {
+            OcrScript.AUTO -> listOf(OcrScript.JAPANESE, OcrScript.ENGLISH, OcrScript.KOREAN, OcrScript.CHINESE)
+            else -> listOf(this)
+        }
 }

@@ -3,6 +3,7 @@ package com.kzkt.app.core
 import android.graphics.Bitmap
 import com.google.gson.Gson
 import com.kzkt.app.core.ocr.LocalOcrEngine
+import com.kzkt.app.core.ocr.OcrScript
 import com.kzkt.app.core.providers.LlmProvider
 import com.kzkt.app.data.TranslationCacheRepository
 import com.kzkt.app.util.JsonUtils
@@ -159,8 +160,9 @@ class ChunkTranslator(
         logStart: (LlmProvider) -> String = { "  Translating text with ${it.providerName}..." },
     ): OcrResult {
         val ocrMap = mutableMapOf<String, String>()
+        val ocrScript = OcrScript.fromKey(params.engine.ocrScript)
         for (item in chunk) {
-            val recognized = LocalOcrEngine.recognizeText(item.bitmap)
+            val recognized = LocalOcrEngine.recognizeText(item.bitmap, ocrScript)
             if (recognized.isNotBlank()) {
                 ocrMap[item.id] = recognized
                 if (params.engine.enableDevLogs) onProgress("  [Local OCR] Bubble ${item.id} -> \"$recognized\"")
@@ -287,6 +289,21 @@ class ChunkTranslator(
         fun isFreeTextId(id: String): Boolean {
             val last = id.substringAfterLast('_')
             return last.startsWith("ft") && last.drop(2).toIntOrNull() != null
+        }
+
+        /**
+         * True when [allTranslations] already contains a usable translation for [id]
+         * (compared after normalizing both sides, so rewritten LLM keys still match).
+         * Used by the batch path to detect a provider that returned valid JSON whose
+         * keys do not correspond to the sent crop ids — those would silently vanish
+         * at render time without this check.
+         */
+        fun hasTranslation(
+            id: String,
+            allTranslations: Map<String, String>,
+        ): Boolean {
+            val normId = normalizeIdKey(id) ?: return false
+            return allTranslations.keys.any { normalizeIdKey(it) == normId }
         }
     }
 }

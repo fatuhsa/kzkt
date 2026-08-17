@@ -208,6 +208,7 @@ class TranslationWorker(
                         useImageUpscaler = s.useImageUpscaler,
                         translateSfx = s.translateSfx,
                         translateFreeText = s.translateFreeText,
+                        ocrScript = s.ocrScript,
                     ),
                 )
 
@@ -458,7 +459,17 @@ class TranslationWorker(
                         val result = pipeline.processSingleImage(path, outputDir)
                         if (result.outputPath != null) {
                             emitPageStatus(path, "done")
-                            val publicPath = com.kzkt.app.ui.FileUtils.saveToMediaStore(applicationContext, result.outputPath, batchFolderName)
+                            // A single image (not part of a PDF) lands directly in the
+                            // main Downloads/KZKT folder — it shows as a direct item in
+                            // History, not a one-page sub-folder. Multi-file batches
+                            // (folder / multi-select / PDF pages) keep their sub-folder.
+                            val isSingleImage = files.size == 1 && !path.endsWith(".pdf", ignoreCase = true)
+                            val publicPath =
+                                com.kzkt.app.ui.FileUtils.saveToMediaStore(
+                                    applicationContext,
+                                    result.outputPath,
+                                    if (isSingleImage) "" else batchFolderName,
+                                )
                             if (publicPath != null) {
                                 emitLog("[+] Image translated and saved to public folder: $publicPath")
                                 emitResultPath(publicPath)
@@ -645,8 +656,12 @@ class TranslationWorker(
     private fun createProvider(s: SettingsRepository.Settings): LlmProvider? {
         if (Config.PROVIDER_REGISTRY[s.llmProvider] == null) return null
         return ProviderFactory.create(
-            s.llmProvider, apiKeyFor(s, s.llmProvider), modelFor(s, s.llmProvider),
-            s.getBaseUrl(s.llmProvider), s.customTimeoutSec
+            s.llmProvider,
+            apiKeyFor(s, s.llmProvider),
+            modelFor(s, s.llmProvider),
+            s.getBaseUrl(s.llmProvider),
+            s.customTimeoutSec,
+            s.useSse,
         )
     }
 
@@ -686,19 +701,36 @@ class TranslationWorker(
         if (primaryKeyOk) {
             val altModels = (Config.PRESET_MODELS[primaryKey] ?: emptyList()).filter { it != primaryModel }
             for (alt in altModels) {
-                ProviderFactory.create(primaryKey, apiKeyFor(s, primaryKey), alt, s.getBaseUrl(primaryKey), s.customTimeoutSec)
-                    ?.let { fallbacks.add(it) }
+                val fb = ProviderFactory.create(
+                    primaryKey,
+                    apiKeyFor(s, primaryKey),
+                    alt,
+                    s.getBaseUrl(primaryKey),
+                    s.customTimeoutSec,
+                    s.useSse,
+                )
+                if (fb != null) fallbacks.add(fb)
             }
         }
 
-        if (primaryKey != "gemini" && s.geminiApiKey.isNotBlank()) fallbacks.add(GeminiProvider(s.geminiApiKey, s.modelGemini, s.baseUrlGemini))
-        if (primaryKey != "openai" && s.openaiApiKey.isNotBlank()) fallbacks.add(OpenAIProvider(s.openaiApiKey, s.modelOpenai, s.baseUrlOpenai))
-        if (primaryKey != "openrouter" && s.openrouterApiKey.isNotBlank()) fallbacks.add(OpenRouterProvider(s.openrouterApiKey, s.modelOpenrouter, s.baseUrlOpenrouter))
-        if (primaryKey != "zen" && s.zenApiKey.isNotBlank()) fallbacks.add(ZenProvider(s.zenApiKey, s.modelZen, s.baseUrlZen))
-        if (primaryKey != "opencodego" && s.opencodegoApiKey.isNotBlank()) fallbacks.add(OpenCodeGoProvider(s.opencodegoApiKey, s.modelOpencodego, s.baseUrlOpencodego))
+        if (primaryKey != "gemini" && s.geminiApiKey.isNotBlank()) {
+            fallbacks.add(GeminiProvider(s.geminiApiKey, s.modelGemini, s.baseUrlGemini, s.useSse))
+        }
+        if (primaryKey != "openai" && s.openaiApiKey.isNotBlank()) {
+            fallbacks.add(OpenAIProvider(s.openaiApiKey, s.modelOpenai, s.baseUrlOpenai, s.useSse))
+        }
+        if (primaryKey != "openrouter" && s.openrouterApiKey.isNotBlank()) {
+            fallbacks.add(OpenRouterProvider(s.openrouterApiKey, s.modelOpenrouter, s.baseUrlOpenrouter, s.useSse))
+        }
+        if (primaryKey != "zen" && s.zenApiKey.isNotBlank()) {
+            fallbacks.add(ZenProvider(s.zenApiKey, s.modelZen, s.baseUrlZen, s.useSse))
+        }
+        if (primaryKey != "opencodego" && s.opencodegoApiKey.isNotBlank()) {
+            fallbacks.add(OpenCodeGoProvider(s.opencodegoApiKey, s.modelOpencodego, s.baseUrlOpencodego, s.useSse))
+        }
         // Custom only makes sense as a fallback when a base URL is actually configured.
         if (primaryKey != "custom" && s.customBaseUrl.isNotBlank()) {
-            fallbacks.add(CustomProvider(s.customApiKey, s.modelCustom, s.customBaseUrl, s.customTimeoutSec))
+            fallbacks.add(CustomProvider(s.customApiKey, s.modelCustom, s.customBaseUrl, s.customTimeoutSec, useSse = s.useSse))
         }
         return fallbacks
     }

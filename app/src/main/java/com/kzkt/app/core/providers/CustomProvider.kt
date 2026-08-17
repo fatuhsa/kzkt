@@ -23,7 +23,8 @@ class CustomProvider(
     timeoutSec: Int = 30,
     authHeaderName: String = "Authorization",
     authHeaderPrefix: String = "Bearer ",
-) : OpenAICompatProvider(apiKey, modelName, baseUrl, authHeaderName, authHeaderPrefix) {
+    useSse: Boolean = true,
+) : OpenAICompatProvider(apiKey, modelName, baseUrl, authHeaderName, authHeaderPrefix, useSse = useSse) {
 
     override val providerName: String = "Custom"
     override val defaultEndpoint: String = "https://api.openai.com/v1/chat/completions"

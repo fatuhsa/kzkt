@@ -59,8 +59,22 @@ fun filterHistoryEntries(
     .toList()
 
 /** Grouping key for a translation run: batchId when present, legacy heuristic otherwise. */
-private fun batchKeyOf(entry: HistoryEntry): String =
-    entry.batchId.ifBlank { bookGroupKey(entry.outputPath) }
+fun batchKeyOf(entry: HistoryEntry): String = entry.batchId.ifBlank { bookGroupKey(entry.outputPath) }
+
+/**
+ * Display title for a batch folder card: the public sub-folder name when the
+ * batch was saved into one ("2026-08-17 02-46 (37 pages)"), otherwise a
+ * time-based fallback (legacy / single-file runs saved to the main folder).
+ */
+fun batchFolderTitle(entries: List<HistoryEntry>): String {
+    if (entries.isEmpty()) return "Batch"
+    val parent = File(entries.first().outputPath).parentFile?.name
+    return if (!parent.isNullOrBlank() && parent != "KZKT") {
+        parent
+    } else {
+        "Batch · ${TIME_FORMATTER.format(Date(entries.maxOf { it.timestamp }))}"
+    }
+}
 
 /** One translation run inside a day: label + its pages (already sorted). */
 data class HistoryBatchGroup(
@@ -143,10 +157,11 @@ enum class HistorySortMode { TIME, NAME }
  * Sort history entries for display.
  *
  * Both modes group entries by translation run (same [HistoryEntry.batchId], or
- * [bookGroupKey] for legacy entries). Inside every run the pages start with
- * page 1 (oldest timestamp) on top by default; [descending] flips them so the
- * last page comes first — so the toggle ALWAYS visibly changes the order, even
- * when History holds a single run.
+ * [bookGroupKey] for legacy entries). Pages INSIDE a run follow the mode:
+ * TIME = translation order with page 1 (oldest timestamp) on top by default,
+ * NAME = numeric-aware file-name order (1, 2, 10, ...). [descending] flips the
+ * pages so the last page comes first — so the toggle ALWAYS visibly changes
+ * the order, even when History holds a single run.
  *
  * The runs themselves are ordered by the mode: TIME = newest run first by
  * default (oldest first when [descending]), NAME = numeric-aware file name of
@@ -164,7 +179,12 @@ fun sortHistoryEntries(
         }
     val runs =
         grouped.values.map { run ->
-            val pages = run.sortedBy { it.timestamp }
+            val pages =
+                when (mode) {
+                    HistorySortMode.TIME -> run.sortedBy { it.timestamp }
+                    HistorySortMode.NAME ->
+                        run.sortedWith(Comparator { a, b -> compareNatural(a.fileName, b.fileName) })
+                }
             Triple(
                 if (descending) pages.reversed() else pages,
                 run.maxOf { it.timestamp },
@@ -174,7 +194,13 @@ fun sortHistoryEntries(
     val orderedRuns =
         when (mode) {
             HistorySortMode.TIME -> if (descending) runs.sortedBy { it.second } else runs.sortedByDescending { it.second }
-            HistorySortMode.NAME -> if (descending) runs.sortedByDescending { it.third } else runs.sortedBy { it.third }
+            HistorySortMode.NAME -> {
+                val nameComparator =
+                    Comparator<Triple<List<HistoryEntry>, Long, String>> { a, b ->
+                        compareNatural(a.third, b.third)
+                    }
+                if (descending) runs.sortedWith(nameComparator.reversed()) else runs.sortedWith(nameComparator)
+            }
         }
     return orderedRuns.flatMap { it.first }
 }

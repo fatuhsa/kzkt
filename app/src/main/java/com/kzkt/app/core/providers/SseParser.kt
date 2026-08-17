@@ -14,13 +14,24 @@ object SseParser {
     /**
      * Consume an SSE stream from [source] and return the concatenated content.
      * Stops at the OpenAI `data: [DONE]` sentinel or when the stream ends.
+     *
+     * Returns null when the stream does not terminate within [maxDurationMs] — a
+     * provider that keeps the connection alive without ever sending `[DONE]`
+     * (common with slow free-tier endpoints) would otherwise block this loop
+     * forever, because keep-alive lines count as received bytes and never trip
+     * the socket read timeout. The caller then falls back to a plain request.
      */
     fun readStream(
         source: BufferedSource,
         extractor: (String) -> String?,
+        maxDurationMs: Long = 120_000L,
     ): String? {
+        val startTime = System.currentTimeMillis()
         val sb = StringBuilder()
         while (true) {
+            if (System.currentTimeMillis() - startTime > maxDurationMs) {
+                return null
+            }
             val line = source.readUtf8Line() ?: break
             if (!line.startsWith("data:")) continue
             val data = line.removePrefix("data:").trim()
