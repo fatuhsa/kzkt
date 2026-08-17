@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Clean Render Style**: new flat render preset (solid patch, no stroke/uppercase) alongside the default manga style, selectable from the Render Style setting.
 - **Multi-Script Local OCR**: OCR script options for English, Japanese, Korean, Chinese and Auto — ML Kit loads the matching recognizer, so bubble and free-text OCR works on Korean/Chinese comics too.
 - **Auto-Detect & Verify Provider Models**: switching providers in Settings automatically fetches the endpoint's model list (no manual Detect needed); before a run starts, the saved model is checked against that list — an unknown model aborts fast with a clear log message instead of hanging for minutes, and is flagged under the model dropdown.
+- **In-App System Error Logs**: background failures (OpenCV init, YOLO model load, corrupted history, backup/restore, PDF MediaStore, API-key encryption) are no longer silent — Settings → Advanced → **System Logs** opens a bottom-sheet viewer with copy and clear buttons. The entry only appears while *Verbose Developer Logs* is enabled.
 
 ### Changed
 

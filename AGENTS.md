@@ -221,7 +221,34 @@ docker cp <CID>:/app/app/build/outputs/apk/release/app-arm64-v8a-release.apk .
 If you add release/CI features, keep this structure: `prepare → build (matrix) →
 release`, and always pass `-PabiFilter` + `-PversionName` to Gradle.
 
-### 6.1 Cutting a release (ALWAYS in this order)
+### 6.1 Branch workflow (dev-kz-debug → dev-kz → main)
+
+The repo uses a 3-stage branch pipeline. Every change moves through it in this
+order — never merge directly into `main` without passing `dev-kz` first:
+
+| Branch | Stage | What lives here |
+|---|---|---|
+| `dev-kz-debug` | **Local experiments** | First pass of any feature/refactor. Free to break, history can be rewritten, nothing is guaranteed. Debug APKs for the phone are built from this branch. |
+| `dev-kz` | **Under consideration** | Work that already passed local testing (build + phone test) but the owner is still deciding whether it ships. Promote here once satisfied. |
+| `main` | **Final / release** | Only what is approved to ship. Merging to `main` is a release decision; the CI debug build and the Auto Release workflow both operate on `main`. |
+
+Rules:
+
+1. **Experiment first on `dev-kz-debug`**, never on `dev-kz` or `main`. When the
+   owner is satisfied after on-phone testing, merge `dev-kz-debug → dev-kz`.
+2. **CI only runs on `main`** (`kzkt-trigger-debug.yml` triggers on push/PR to
+   `main`). Pushes to `dev-kz-debug` / `dev-kz` do NOT trigger any build — verify
+   locally (`ktlint`, `compileDebugKotlin`, `testDebugUnitTest`, and a debug APK
+   when asked) before promoting.
+3. **Promotion merges use `--no-ff`** so each stage is visible in history
+   (`dev-kz-debug → dev-kz`, then `dev-kz → main` when the owner approves).
+4. **`CHANGELOG.md` entries stay in `[Unreleased]`** during experiments; they are
+   moved into a versioned section only when cutting a release on `main` (see
+   section 6.2).
+5. Keep `dev-kz` aligned with `main` (merge `main → dev-kz` after every release)
+   so promotions never drag old code back in.
+
+### 6.2 Cutting a release (ALWAYS in this order)
 
 1. **Add a section to `CHANGELOG.md`**: `## [v1.30.0] - YYYY-MM-DD` with
    `### Added` / `### Changed` / `### Fixed` bullets. This exact text becomes the
