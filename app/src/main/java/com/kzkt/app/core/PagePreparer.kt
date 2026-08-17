@@ -135,13 +135,8 @@ class PagePreparer(
                 val cropBitmap = ImageProcessor.matToBitmap(cropMat)
                 cropMat.release()
 
-                // Large regions (notably tall vertical text columns) are already
-                // readable at native size — scaling them up only makes the mosaic
-                // taller, which providers downscale again and shrinks every other
-                // region along with it.
-                val needsScaleUp = scale != 1.0 && maxOf(cropBitmap.width, cropBitmap.height) < Constants.FREE_TEXT_SCALE_UP_MAX_DIM
                 val scaledBitmap =
-                    if (needsScaleUp) {
+                    if (scale != 1.0) {
                         Bitmap.createScaledBitmap(
                             cropBitmap,
                             maxOf(1, (cropBitmap.width * scale).toInt()),

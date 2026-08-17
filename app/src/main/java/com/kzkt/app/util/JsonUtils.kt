@@ -12,24 +12,11 @@ import java.io.StringReader
  */
 object JsonUtils {
     /**
-     * Raw control characters that are illegal inside JSON strings even under
-     * Strictness.LENIENT (U+0000–U+0008, U+000B, U+000C, U+000E–U+001F). \n, \r
-     * and \t are legal JSON escapes and are kept. LLMs occasionally echo control
-     * chars from odd source text (vertical columns of manga text included), which
-     * would otherwise make BOTH the strict and tolerant parses fail.
-     */
-    private val CONTROL_CHARS_REGEX = Regex("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]")
-
-    /**
      * Strip markdown code fences and extract the first JSON object from raw text.
      * Handles ```json ... ```, ``` ... ```, and plain JSON.
      */
     fun sanitizeJson(rawText: String): String {
         var text = rawText.trim()
-
-        // Remove control characters that are invalid inside JSON strings before
-        // anything else, so they cannot break the strict or tolerant parse below.
-        text = text.replace(CONTROL_CHARS_REGEX, "")
 
         // Strip Reasoning / Thinking blocks (<think>...</think>)
         text = text.replace(Regex("(?i)<think>[\\s\\S]*?</think>"), "").trim()
