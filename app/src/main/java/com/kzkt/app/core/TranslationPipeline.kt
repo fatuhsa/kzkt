@@ -38,19 +38,6 @@ class TranslationPipeline(
     private val onStepProgress: (Int, String) -> Unit = callbacks.onStepProgress
     private val isCancelled: () -> Boolean = callbacks.isCancelled
 
-    companion object {
-        /** Peak page bitmaps loaded / detected concurrently (bounds memory). */
-        private const val MAX_CONCURRENT_PAGE_LOADS = 3
-
-        /** ML Kit recognizes at most this many bubbles per OCR request. */
-        private const val OCR_MAX_BATCH_SIZE = 12
-
-        // Overall progress bar (0-100) phase boundaries for single + batch paths.
-        private const val PROGRESS_DETECTION_END = 25
-        private const val PROGRESS_TRANSLATE_END = 90
-        private const val PROGRESS_RENDER_END = 100
-    }
-
     /**
      * Process a single manga page image.
      */
@@ -66,7 +53,7 @@ class TranslationPipeline(
         var bitmap = ImageProcessor.loadBitmap(inputPath) ?: return PipelineResult(null, failed = true)
 
         if (params.engine.useImageUpscaler) {
-            val upscaled = ImageProcessor.upscaleBitmap(bitmap)
+            val upscaled = ImageInpainting.upscaleBitmap(bitmap)
             bitmap.recycle()
             bitmap = upscaled
             if (params.engine.enableDevLogs) onProgress("  Image upscaled (resolution doubled).")
@@ -284,7 +271,7 @@ class TranslationPipeline(
                 onProgress(
                     "  [Local OCR Engine] Extracting text from ${cropsToTranslate.size} speech bubbles via Google ML Kit (auto: Japanese + Latin)...",
                 )
-                val maxPerBatch = minOf(params.engine.maxBubblesPerRequest, OCR_MAX_BATCH_SIZE)
+                val maxPerBatch = minOf(params.engine.maxBubblesPerRequest, Constants.OCR_MAX_BATCH_SIZE)
                 val ocrCropItems = cropsToTranslate.map { MosaicBuilder.CropItem(it.id, it.bitmap) }
                 val chunks = MosaicBuilder.chunkCrops(ocrCropItems, maxPerBatch)
 
@@ -361,7 +348,7 @@ class TranslationPipeline(
             try {
                 if (params.render.useInpainting) {
                     onProgress("  [OpenCV Inpainting] Erasing original text strokes (Parallel)...")
-                    ImageProcessor.inpaintTranslated(workingMat, normalizedTranslations, coordinateMap)
+                    ImageInpainting.inpaintTranslated(workingMat, normalizedTranslations, coordinateMap)
                 }
                 ImageProcessor.matToBitmap(workingMat)
             } finally {
@@ -507,7 +494,7 @@ class TranslationPipeline(
             )
         }
 
-        val semaphore = kotlinx.coroutines.sync.Semaphore(MAX_CONCURRENT_PAGE_LOADS)
+        val semaphore = kotlinx.coroutines.sync.Semaphore(Constants.MAX_CONCURRENT_PAGE_LOADS)
         val completedCount = AtomicInteger(0)
         // Globally unique free-text id counter across the whole batch. Bare `ftN`
         // ids (no page prefix) are echoed reliably by vision LLMs — page-prefixed
@@ -551,9 +538,9 @@ class TranslationPipeline(
                                     }
                                 onProgress(msg)
                                 onStepProgress(
-                                    (PROGRESS_DETECTION_END.toFloat() * doneCount / imagePaths.size).toInt().coerceIn(
+                                    (Constants.PROGRESS_DETECTION_END.toFloat() * doneCount / imagePaths.size).toInt().coerceIn(
                                         1,
-                                        PROGRESS_DETECTION_END,
+                                        Constants.PROGRESS_DETECTION_END,
                                     ),
                                     msg,
                                 )
@@ -582,7 +569,7 @@ class TranslationPipeline(
                             var bitmap = ImageProcessor.loadBitmap(imgPath)
 
                             if (bitmap != null && params.engine.useImageUpscaler) {
-                                val upscaled = ImageProcessor.upscaleBitmap(bitmap)
+                                val upscaled = ImageInpainting.upscaleBitmap(bitmap)
                                 bitmap.recycle()
                                 bitmap = upscaled
                             }
@@ -651,9 +638,9 @@ class TranslationPipeline(
 
                             val doneCount = completedCount.incrementAndGet()
                             val phase1Percent =
-                                (PROGRESS_DETECTION_END.toFloat() * doneCount / imagePaths.size).toInt().coerceIn(
+                                (Constants.PROGRESS_DETECTION_END.toFloat() * doneCount / imagePaths.size).toInt().coerceIn(
                                     1,
-                                    PROGRESS_DETECTION_END,
+                                    Constants.PROGRESS_DETECTION_END,
                                 )
                             val msg =
                                 if (!result.failed) {
@@ -823,10 +810,10 @@ class TranslationPipeline(
                 if (isCancelled()) return emptyList()
                 val batchPercent =
                     (
-                        PROGRESS_DETECTION_END +
-                            ((PROGRESS_TRANSLATE_END - PROGRESS_DETECTION_END).toFloat() * (chunkIdx + 1) / chunks.size)
+                        Constants.PROGRESS_DETECTION_END +
+                            ((Constants.PROGRESS_TRANSLATE_END - Constants.PROGRESS_DETECTION_END).toFloat() * (chunkIdx + 1) / chunks.size)
                     ).toInt()
-                        .coerceIn(PROGRESS_DETECTION_END, PROGRESS_TRANSLATE_END)
+                        .coerceIn(Constants.PROGRESS_DETECTION_END, Constants.PROGRESS_TRANSLATE_END)
                 val batchMsg = "  [Batch ${chunkIdx + 1}/${chunks.size}] ${chunk.size} bubbles..."
                 onProgress(batchMsg)
                 onStepProgress(batchPercent, batchMsg)
@@ -910,10 +897,10 @@ class TranslationPipeline(
     ): PipelineResult {
         val renderPercent =
             (
-                PROGRESS_TRANSLATE_END +
-                    ((PROGRESS_RENDER_END - PROGRESS_TRANSLATE_END).toFloat() * (pageIdx + 1) / pageCount)
+                Constants.PROGRESS_TRANSLATE_END +
+                    ((Constants.PROGRESS_RENDER_END - Constants.PROGRESS_TRANSLATE_END).toFloat() * (pageIdx + 1) / pageCount)
             ).toInt()
-                .coerceIn(PROGRESS_TRANSLATE_END, PROGRESS_RENDER_END)
+                .coerceIn(Constants.PROGRESS_TRANSLATE_END, Constants.PROGRESS_RENDER_END)
         val renderMsg = "  Rendering page ${pageIdx + 1}/$pageCount..."
         onStepProgress(renderPercent, renderMsg)
 
@@ -959,7 +946,7 @@ class TranslationPipeline(
                 onProgress("  [OpenCV Inpainting] Erasing original text strokes for ${File(page.path).name}...")
                 val workingMat = ImageProcessor.bitmapToMat(page.pil)
                 try {
-                    ImageProcessor.inpaintTranslated(workingMat, pageTranslations, page.coordMap)
+                    ImageInpainting.inpaintTranslated(workingMat, pageTranslations, page.coordMap)
                     ImageProcessor.matToBitmap(workingMat)
                 } finally {
                     workingMat.release()

@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Internal stability improvements**: refactored the monolithic image-processing and History UI modules into smaller focused units for easier maintenance — no behavior change.
 - **Settings Screen Reorganization**: streamlined settings into 5 structured categories (*AI & Provider*, *Detection & Engine*, *Text & Rendering*, *Appearance*, *Data & Updates*) with dedicated section icons and card containers.
 - **Full English Localization**: unified all UI labels, action buttons, descriptions, and empty state placeholders into standard English.
 - **History Screen Visual Upgrade**: pill-shaped search bar with clear button, pill sort chips, and updated folder/item card styling.

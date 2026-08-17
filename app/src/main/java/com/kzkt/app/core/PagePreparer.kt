@@ -125,9 +125,9 @@ class PagePreparer(
                     if (isCleanStyle) {
                         // Median is robust to stray strokes at the ring — the flat erase
                         // fill blends with the real page background in clean style.
-                        ImageProcessor.sampleRegionBackgroundColorMedian(cropMatFull, box)
+                        ImageRegion.sampleRegionBackgroundColorMedian(cropMatFull, box)
                     } else {
-                        ImageProcessor.sampleRegionBackgroundColor(cropMatFull, box)
+                        ImageRegion.sampleRegionBackgroundColor(cropMatFull, box)
                     }
 
                 val cropMat = cropMatFull.submat(org.opencv.core.Rect(cropX1, cropY1, cropX2 - cropX1, cropY2 - cropY1))
@@ -192,11 +192,11 @@ class PagePreparer(
                 val id = "$idPrefix${order + 1}"
 
                 // Detect background color (dark vs white)
-                val bgColor = ImageProcessor.detectBubbleBackgroundColor(cropMatFull, box)
+                val bgColor = ImageRegion.detectBubbleBackgroundColor(cropMatFull, box)
                 bubbleColors[id] = bgColor
 
                 val (cropX1, cropY1, cropX2, cropY2) =
-                    ImageProcessor.smartCropBounds(
+                    ImageRegion.smartCropBounds(
                         box,
                         boxes,
                         imgWidth,
@@ -207,7 +207,7 @@ class PagePreparer(
                     )
 
                 val cropMat = cropMatFull.submat(org.opencv.core.Rect(cropX1, cropY1, cropX2 - cropX1, cropY2 - cropY1))
-                val maskedMat = ImageProcessor.maskOutsideBubble(cropMat, cropX1, cropY1, x1, y1, x2, y2, params)
+                val maskedMat = ImageRegion.maskOutsideBubble(cropMat, cropX1, cropY1, x1, y1, x2, y2, params)
                 cropMat.release()
 
                 // Scale up

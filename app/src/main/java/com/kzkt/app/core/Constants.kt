@@ -28,6 +28,19 @@ object Constants {
     const val MODEL_DECRYPT_KEY_STR = "indravoyager"
     val MODEL_DECRYPT_KEY: Int get() = MODEL_DECRYPT_KEY_STR.length * 7 + 6 // = 90
 
+    // ── Translation pipeline batching / progress ───────────────────
+
+    /** Peak page bitmaps loaded / detected concurrently (bounds memory). */
+    const val MAX_CONCURRENT_PAGE_LOADS = 3
+
+    /** ML Kit recognizes at most this many bubbles per OCR request. */
+    const val OCR_MAX_BATCH_SIZE = 12
+
+    // Overall progress bar (0-100) phase boundaries for single + batch paths.
+    const val PROGRESS_DETECTION_END = 25
+    const val PROGRESS_TRANSLATE_END = 90
+    const val PROGRESS_RENDER_END = 100
+
     // ── YOLO settings ──────────────────────────────────────────────
     const val YOLO_INPUT_SIZE: Int = 640
     val YOLO_PREDICTION_STAGES: List<Pair<Double, Double>> =

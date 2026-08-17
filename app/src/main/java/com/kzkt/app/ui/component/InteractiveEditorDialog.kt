@@ -169,7 +169,7 @@ fun InteractiveEditorDialog(
                         com.kzkt.app.core.ImageProcessor
                             .bitmapToMat(originalBitmap)
                     for (bubble in bubbles.values) {
-                        com.kzkt.app.core.ImageProcessor
+                        com.kzkt.app.core.ImageInpainting
                             .inpaintBubbleText(mat, bubble.box)
                     }
                     val newBmp =
