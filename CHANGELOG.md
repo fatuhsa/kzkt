@@ -14,6 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Integrated Inter UI Font**: bundled the Inter font family (Regular, Medium, SemiBold, Bold) across all Material 3 typography tokens for a crisp, modern UI.
 - **Top Jump Chips in Settings**: horizontal quick navigation bar to jump directly to any settings category.
 - **Back Navigation in Glossary**: integrated top navigation bar with back arrow in the Custom Glossary screen.
+- **Streaming (SSE) Responses**: all providers (OpenAI-compatible, Gemini, Anthropic) now stream responses over SSE with automatic fallback to plain requests when streaming is unsupported; a new *Streaming (SSE)* toggle in Settings disables streaming entirely, and stalled streams fall back after a 120-second deadline instead of hanging.
+- **Native Anthropic Provider**: dedicated Anthropic provider using the Messages API with `x-api-key` auth, vision + text support, and `content_block_delta` SSE parsing — no longer needs the Custom-endpoint workaround.
+- **Clean Render Style**: new flat render preset (solid patch, no stroke/uppercase) alongside the default manga style, selectable from the Render Style setting.
+- **Multi-Script Local OCR**: OCR script options for English, Japanese, Korean, Chinese and Auto — ML Kit loads the matching recognizer, so bubble and free-text OCR works on Korean/Chinese comics too.
+- **Auto-Detect & Verify Provider Models**: switching providers in Settings automatically fetches the endpoint's model list (no manual Detect needed); before a run starts, the saved model is checked against that list — an unknown model aborts fast with a clear log message instead of hanging for minutes, and is flagged under the model dropdown.
 
 ### Changed
 
@@ -21,11 +26,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Full English Localization**: unified all UI labels, action buttons, descriptions, and empty state placeholders into standard English.
 - **History Screen Visual Upgrade**: pill-shaped search bar with clear button, pill sort chips, and updated folder/item card styling.
 - **Result Preview Card**: modernized result container with pill action buttons (*View in App*, *Gallery*, *Edit*, *Share*).
+- **History Folder View**: translation batches now render as folder cards with drill-down, two-level selection (folder selects all pages, page-level selection inside), and search result counts; single-image runs save directly to Downloads/KZKT.
+- **Numeric-Aware Sorting in History**: sorting by name now orders pages naturally (1, 2, 10) inside each batch instead of lexicographically.
+- **Coverage-Checked Vision Retry**: when a vision batch still misses bubbles after translation, the failed mosaic is split in half and retried for better coverage.
 
 ### Fixed
 
 - **Theme Mode Auto Persistence**: resolved issue where selecting `Auto` (system theme) was immediately overwritten with `dark` or `light` in DataStore.
 - **Appearance Spacing & Squeezed Labels**: resolved cramped layout in Theme Mode and Accent Color settings by moving selectors into full-width card description rows.
+- **Free Text Not Rendered in PDF Batches**: free-text crops in the batch path used page-prefixed ids that vision models dropped from their responses — they now use globally unique bare `ftN` ids (matching the working single-image format) with key normalization before render.
+- **"Immutable bitmap passed to Canvas" Crash**: the non-inpainting batch render path crashed with this error on translated pages — the bitmap is now copied before drawing.
+- **Silently Dropped OCR Batches**: when the LLM did not echo crop ids in its JSON, a batch was marked successful but pages were saved without translations — batches now detect missing ids and automatically fall back to the vision path (only for ids actually sent, so no-text bubbles no longer trigger pointless fallbacks or cancel/retry loops).
+- **Vision Fallback Crash Aborted the Whole Run**: an error inside the vision fallback (mosaic build) killed the run and forced a manual retry — it is now caught and logged, and the remaining batches continue.
 
 ## [v1.36.7] - 2026-08-16
 
