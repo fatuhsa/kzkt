@@ -33,6 +33,10 @@ update checker.
 2. **Never run `git push` / `git commit` / destructive commands** unless the user
    explicitly asks. When asked to commit, use a clear conventional message
    (`feat:`/`fix:`/`refactor:`/`ci:`/`docs:`) and push to `main`.
+   **Never add a `Co-Authored-By` / "Generated with ..." trailer or any other
+   attribution footer to commit messages** — commits are authored by the owner
+   alone. The commit body is just the conventional subject plus a concise
+   bullet list of what changed.
 3. **`versionCode` must always increase** — never build a release with a lower
    version than what's installed (Android rejects the update). Prefer the auto bump
    (below) over hand-editing `app/build.gradle.kts`.
