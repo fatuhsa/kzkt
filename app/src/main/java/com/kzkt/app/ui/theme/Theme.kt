@@ -37,35 +37,43 @@ fun KzktTheme(
     val context = LocalContext.current
     val useSystemDynamicColor = (themeColor == DefaultThemeColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
 
-    val baseColorScheme = if (useSystemDynamicColor) {
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-    } else {
-        rememberDynamicColorScheme(
-            seedColor = themeColor,
-            isDark = darkTheme,
-            specVersion = ColorSpec.SpecVersion.SPEC_2025,
-            style = PaletteStyle.TonalSpot
-        )
-    }
+    val baseColorScheme =
+        if (useSystemDynamicColor) {
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        } else {
+            rememberDynamicColorScheme(
+                seedColor = themeColor,
+                isDark = darkTheme,
+                specVersion = ColorSpec.SpecVersion.SPEC_2025,
+                style = PaletteStyle.TonalSpot,
+            )
+        }
 
-    val colorScheme = remember(baseColorScheme, pureBlack, darkTheme) {
-        if (darkTheme && pureBlack) baseColorScheme.pureBlack(true) else baseColorScheme
-    }
+    val colorScheme =
+        remember(baseColorScheme, pureBlack, darkTheme) {
+            if (darkTheme && pureBlack) baseColorScheme.pureBlack(true) else baseColorScheme
+        }
 
     MaterialTheme(
         colorScheme = colorScheme,
         typography = AppTypography,
-        content = content
+        content = content,
     )
 }
 
 fun ColorScheme.pureBlack(apply: Boolean) =
-    if (apply) copy(
-        surface = Color.Black,
-        background = Color.Black
-    ) else this
+    if (apply) {
+        copy(
+            surface = Color.Black,
+            background = Color.Black,
+        )
+    } else {
+        this
+    }
 
-val ColorSaver = object : Saver<Color, Int> {
-    override fun restore(value: Int): Color = Color(value)
-    override fun SaverScope.save(value: Color): Int = value.toArgb()
-}
+val ColorSaver =
+    object : Saver<Color, Int> {
+        override fun restore(value: Int): Color = Color(value)
+
+        override fun SaverScope.save(value: Color): Int = value.toArgb()
+    }

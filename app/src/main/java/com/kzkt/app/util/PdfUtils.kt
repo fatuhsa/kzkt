@@ -6,6 +6,7 @@ import android.graphics.pdf.PdfDocument
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import com.kzkt.app.util.KLog
 import java.io.File
 import java.io.FileOutputStream
 
@@ -15,24 +16,31 @@ import java.io.FileOutputStream
  * Output: PdfDocument (assemble translated page images back into a PDF)
  */
 object PdfImporter {
-
     /**
      * Render every page of a PDF to PNG files in [outputDir].
      * Returns the list of generated image paths (empty if the PDF could not be read).
      *
      * [dpiScale] 1.5–2.0 keeps bubble text sharp enough for YOLO detection.
      */
-    fun extractPdfToImages(pdfFile: File, outputDir: File, dpiScale: Float = 1.5f, context: android.content.Context? = null): List<String> {
+    fun extractPdfToImages(
+        pdfFile: File,
+        outputDir: File,
+        dpiScale: Float = 1.5f,
+        context: android.content.Context? = null,
+    ): List<String> {
         val imagePaths = mutableListOf<String>()
         try {
             outputDir.mkdirs()
             outputDir.listFiles()?.forEach { if (it.isFile) it.delete() }
-        } catch (_: Exception) {}
-
-        val fd = openPdfFileDescriptor(context, pdfFile) ?: run {
-            Log.e("KZKT/PDF", "Unable to open ParcelFileDescriptor for PDF: ${pdfFile.absolutePath}")
-            return emptyList()
+        } catch (e: Exception) {
+            KLog.w("KZKT/PDF", "Failed to prepare output dir ${outputDir.absolutePath}: ${e.message}")
         }
+
+        val fd =
+            openPdfFileDescriptor(context, pdfFile) ?: run {
+                Log.e("KZKT/PDF", "Unable to open ParcelFileDescriptor for PDF: ${pdfFile.absolutePath}")
+                return emptyList()
+            }
 
         try {
             val renderer = PdfRenderer(fd)
@@ -75,7 +83,10 @@ object PdfImporter {
         } catch (e: Exception) {
             Log.e("KZKT/PDF", "PdfRenderer error: ${e.message}")
         } finally {
-            try { fd.close() } catch (_: Exception) {}
+            try {
+                fd.close()
+            } catch (_: Exception) {
+            }
         }
         return imagePaths
     }
@@ -85,7 +96,10 @@ object PdfImporter {
      * reads pageCount). Returns 0 when the PDF cannot be read. Used to name the
      * per-batch output folder ("… (N pages)") before translation starts.
      */
-    fun pdfPageCount(pdfFile: File, context: android.content.Context? = null): Int {
+    fun pdfPageCount(
+        pdfFile: File,
+        context: android.content.Context? = null,
+    ): Int {
         val fd = openPdfFileDescriptor(context, pdfFile) ?: return 0
         try {
             val renderer = PdfRenderer(fd)
@@ -98,11 +112,17 @@ object PdfImporter {
             Log.w("KZKT/PDF", "Failed to count pages of ${pdfFile.absolutePath}: ${e.message}")
             return 0
         } finally {
-            try { fd.close() } catch (_: Exception) {}
+            try {
+                fd.close()
+            } catch (_: Exception) {
+            }
         }
     }
 
-    fun openPdfFileDescriptor(context: android.content.Context?, pdfFile: File): ParcelFileDescriptor? {
+    fun openPdfFileDescriptor(
+        context: android.content.Context?,
+        pdfFile: File,
+    ): ParcelFileDescriptor? {
         if (pdfFile.exists() && pdfFile.canRead()) {
             try {
                 return ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
@@ -115,37 +135,41 @@ object PdfImporter {
             // MediaStore.Downloads only exists on Android 10+ (API 29) — skip the
             // fallback entirely on older devices (accessing the field would crash).
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            // 1. Try querying MediaStore Downloads by DATA path
-            try {
-                val projection = arrayOf(android.provider.MediaStore.MediaColumns._ID)
-                val selection = "${android.provider.MediaStore.MediaColumns.DATA} = ?"
-                val selectionArgs = arrayOf(pdfFile.absolutePath)
-                val contentUri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                // 1. Try querying MediaStore Downloads by DATA path
+                try {
+                    val projection = arrayOf(android.provider.MediaStore.MediaColumns._ID)
+                    val selection = "${android.provider.MediaStore.MediaColumns.DATA} = ?"
+                    val selectionArgs = arrayOf(pdfFile.absolutePath)
+                    val contentUri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
 
-                context.contentResolver.query(contentUri, projection, selection, selectionArgs, null)?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val id = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns._ID))
-                        val itemUri = android.content.ContentUris.withAppendedId(contentUri, id)
-                        return context.contentResolver.openFileDescriptor(itemUri, "r")
+                    context.contentResolver.query(contentUri, projection, selection, selectionArgs, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val id = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns._ID))
+                            val itemUri = android.content.ContentUris.withAppendedId(contentUri, id)
+                            return context.contentResolver.openFileDescriptor(itemUri, "r")
+                        }
                     }
+                } catch (e: Exception) {
+                    KLog.w("KZKT/PDF", "MediaStore query by DATA path failed for ${pdfFile.name}: ${e.message}")
                 }
-            } catch (_: Exception) {}
 
-            // 2. Try querying MediaStore Downloads by DISPLAY_NAME
-            try {
-                val projection = arrayOf(android.provider.MediaStore.MediaColumns._ID)
-                val selection = "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME} = ?"
-                val selectionArgs = arrayOf(pdfFile.name)
-                val contentUri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                // 2. Try querying MediaStore Downloads by DISPLAY_NAME
+                try {
+                    val projection = arrayOf(android.provider.MediaStore.MediaColumns._ID)
+                    val selection = "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME} = ?"
+                    val selectionArgs = arrayOf(pdfFile.name)
+                    val contentUri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
 
-                context.contentResolver.query(contentUri, projection, selection, selectionArgs, null)?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val id = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns._ID))
-                        val itemUri = android.content.ContentUris.withAppendedId(contentUri, id)
-                        return context.contentResolver.openFileDescriptor(itemUri, "r")
+                    context.contentResolver.query(contentUri, projection, selection, selectionArgs, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val id = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns._ID))
+                            val itemUri = android.content.ContentUris.withAppendedId(contentUri, id)
+                            return context.contentResolver.openFileDescriptor(itemUri, "r")
+                        }
                     }
+                } catch (e: Exception) {
+                    KLog.w("KZKT/PDF", "MediaStore query by DISPLAY_NAME failed for ${pdfFile.name}: ${e.message}")
                 }
-            } catch (_: Exception) {}
             }
         }
 
@@ -154,12 +178,14 @@ object PdfImporter {
 }
 
 object PdfExporter {
-
     /**
      * Assemble a list of page images into a single PDF file.
      * Each page gets its own PDF page sized to the image dimensions.
      */
-    fun createPdfFromImages(imagePaths: List<String>, outputPdfFile: File) {
+    fun createPdfFromImages(
+        imagePaths: List<String>,
+        outputPdfFile: File,
+    ) {
         val pdf = PdfDocument()
         try {
             for ((index, imagePath) in imagePaths.withIndex()) {

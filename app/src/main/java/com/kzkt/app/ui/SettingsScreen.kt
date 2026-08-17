@@ -58,6 +58,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -74,6 +75,8 @@ import androidx.compose.ui.unit.dp
 import com.kzkt.app.core.Config
 import com.kzkt.app.ui.component.AccentColorRow
 import com.kzkt.app.ui.component.ActiveProviderConfigCard
+import com.kzkt.app.ui.component.AppLogsBottomSheet
+import com.kzkt.app.ui.component.AppLogsButton
 import com.kzkt.app.ui.component.ChipsRow
 import com.kzkt.app.ui.component.Material3SettingsGroup
 import com.kzkt.app.ui.component.Material3SettingsItem
@@ -81,6 +84,7 @@ import com.kzkt.app.ui.component.SettingsIcon
 import com.kzkt.app.ui.component.SfxFilterSection
 import com.kzkt.app.ui.component.TweakParamsSection
 import com.kzkt.app.ui.theme.DefaultThemeColor
+import com.kzkt.app.util.KLog
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -203,6 +207,7 @@ fun SettingsScreen(
     val providerChips = remember { Config.PROVIDER_REGISTRY.values.map { it.key to it.displayName } }
     val languageChips = remember { Config.LANGUAGE_CHOICES.map { it to it } }
     var showAdvanced by remember { mutableStateOf(false) }
+    val enableDevLogs by remember { derivedStateOf { viewModel.settings.value.enableDevLogs } }
     val listState =
         androidx.compose.foundation.lazy
             .rememberLazyListState()
@@ -851,7 +856,6 @@ fun SettingsScreen(
 
         if (showAdvanced) {
             item(key = "dev_logs") {
-                val enableDevLogs by remember { derivedStateOf { viewModel.settings.value.enableDevLogs } }
                 Material3SettingsGroup(
                     items =
                         listOf(
@@ -877,6 +881,20 @@ fun SettingsScreen(
                             ),
                         ),
                 )
+            }
+
+            if (enableDevLogs) {
+                item(key = "app_logs") {
+                    val appLogCount by KLog.entries.collectAsState()
+                    var showAppLogs by remember { mutableStateOf(false) }
+                    AppLogsButton(
+                        logCount = appLogCount.size,
+                        onClick = { showAppLogs = true },
+                    )
+                    if (showAppLogs) {
+                        AppLogsBottomSheet(onDismiss = { showAppLogs = false })
+                    }
+                }
             }
 
             item(key = "tweak_params") {
@@ -962,81 +980,119 @@ fun SettingsScreen(
     }
 
     confirmRestoreUri?.let { uri ->
-        AlertDialog(
-            onDismissRequest = { if (!isRestoring) confirmRestoreUri = null },
-            title = { Text("Restore backup?") },
-            text = {
-                Text(
-                    "This will overwrite your current settings, glossary, history and translation " +
-                        "memory with the contents of the backup file.",
-                )
+        RestoreBackupDialog(
+            isRestoring = isRestoring,
+            onConfirm = {
+                confirmRestoreUri = null
+                restoreBackup(uri)
             },
-            confirmButton = {
-                TextButton(
-                    enabled = !isRestoring,
-                    onClick = {
-                        confirmRestoreUri = null
-                        restoreBackup(uri)
-                    },
-                ) { Text("Restore", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(
-                    enabled = !isRestoring,
-                    onClick = { confirmRestoreUri = null },
-                ) { Text("Cancel") }
-            },
+            onDismiss = { confirmRestoreUri = null },
         )
     }
 
     if (showFontDialog) {
-        AlertDialog(
-            onDismissRequest = { showFontDialog = false },
-            title = { Text("Select Custom Font") },
-            text = {
-                val fontsDir = java.io.File(context.filesDir, "custom_fonts")
-                val fonts =
-                    fontsDir.listFiles()?.filter { it.isFile && (it.name.endsWith(".ttf") || it.name.endsWith(".otf")) } ?: emptyList()
-
-                LazyColumn {
-                    item {
-                        TextButton(
-                            onClick = {
-                                scope.launch { viewModel.settingsRepo.saveCustomFontPath("") }
-                                showFontDialog = false
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(
-                                "Default Font",
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Start,
-                            )
-                        }
-                    }
-                    items(fonts) { font ->
-                        TextButton(
-                            onClick = {
-                                scope.launch { viewModel.settingsRepo.saveCustomFontPath(font.absolutePath) }
-                                showFontDialog = false
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(font.name, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
-                        }
-                    }
-                }
+        FontPickerDialog(
+            context = context,
+            onPickDefault = {
+                scope.launch { viewModel.settingsRepo.saveCustomFontPath("") }
+                showFontDialog = false
             },
-            confirmButton = {
-                TextButton(onClick = { fontPickerLauncher.launch("*/*") }) {
-                    Text("Import New Font")
-                }
+            onPickFont = { path ->
+                scope.launch { viewModel.settingsRepo.saveCustomFontPath(path) }
+                showFontDialog = false
             },
-            dismissButton = {
-                TextButton(onClick = { showFontDialog = false }) {
-                    Text("Close")
-                }
-            },
+            onImport = { fontPickerLauncher.launch("*/*") },
+            onDismiss = { showFontDialog = false },
         )
     }
+}
+
+/**
+ * Confirmation dialog before restoring a backup. Blocks dismissal while the
+ * restore is running so the user cannot cancel mid-restore.
+ */
+@Composable
+private fun RestoreBackupDialog(
+    isRestoring: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { if (!isRestoring) onDismiss() },
+        title = { Text("Restore backup?") },
+        text = {
+            Text(
+                "This will overwrite your current settings, glossary, history and translation " +
+                    "memory with the contents of the backup file.",
+            )
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !isRestoring,
+                onClick = onConfirm,
+            ) { Text("Restore", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = {
+            TextButton(
+                enabled = !isRestoring,
+                onClick = onDismiss,
+            ) { Text("Cancel") }
+        },
+    )
+}
+
+/**
+ * Font picker: list fonts bundled in the app's custom_fonts dir, with an option
+ * to reset to the default font or import a new one via the system picker.
+ */
+@Composable
+private fun FontPickerDialog(
+    context: android.content.Context,
+    onPickDefault: () -> Unit,
+    onPickFont: (String) -> Unit,
+    onImport: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Custom Font") },
+        text = {
+            val fontsDir = java.io.File(context.filesDir, "custom_fonts")
+            val fonts =
+                fontsDir.listFiles()?.filter { it.isFile && (it.name.endsWith(".ttf") || it.name.endsWith(".otf")) } ?: emptyList()
+
+            LazyColumn {
+                item {
+                    TextButton(
+                        onClick = onPickDefault,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            "Default Font",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                        )
+                    }
+                }
+                items(fonts) { font ->
+                    TextButton(
+                        onClick = { onPickFont(font.absolutePath) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(font.name, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onImport) {
+                Text("Import New Font")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        },
+    )
 }

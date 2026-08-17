@@ -2,39 +2,40 @@ package com.kzkt.app.core
 
 /**
  * Translation prompt template and constants.
- * Ported from the original Python translator mosaic prompt
  */
 object Constants {
     // ── Example translations per language ──────────────────────────
-    val TRANSLATION_EXAMPLES: Map<String, Pair<String, String>> = mapOf(
-        "english" to Pair("Hello!", "Mother... wait..."),
-        "indonesian" to Pair("Cepat bangun!", "Ibu... tunggu..."),
-        "japanese" to Pair("早く起きて！", "お母さん…待って…"),
-        "mandarin" to Pair("快点起床！", "妈妈……等等……"),
-        "chinese (simplified)" to Pair("快点起床！", "妈妈……等等……"),
-        "spanish" to Pair("¡Despierta rápido!", "Madre... espera..."),
-        "french" to Pair("Réveille-toi vite !", "Mère... attends..."),
-        "german" to Pair("Wach schnell auf!", "Mutter... warte..."),
-        "vietnamese" to Pair("Dậy nhanh lên!", "Mẹ... chờ đã..."),
-        "portuguese" to Pair("Acorde rápido!", "Mãe... espere..."),
-        "javanese" to Pair("Ndang tangi!", "Ibu... enteni..."),
-        "korean" to Pair("어서 일어나라!", "엄마... 잠깐..."),
-        "russian" to Pair("Быстро просыпайся!", "Мама... подожди..."),
-        "arabic" to Pair("استيقظ بسرعة!", "أمي... انتظري..."),
-        "thai" to Pair("ตื่นเร็วเข้า!", "แม่... เดี๋ยวก่อน..."),
-    )
+    val TRANSLATION_EXAMPLES: Map<String, Pair<String, String>> =
+        mapOf(
+            "english" to Pair("Hello!", "Mother... wait..."),
+            "indonesian" to Pair("Cepat bangun!", "Ibu... tunggu..."),
+            "japanese" to Pair("早く起きて！", "お母さん…待って…"),
+            "mandarin" to Pair("快点起床！", "妈妈……等等……"),
+            "chinese (simplified)" to Pair("快点起床！", "妈妈……等等……"),
+            "spanish" to Pair("¡Despierta rápido!", "Madre... espera..."),
+            "french" to Pair("Réveille-toi vite !", "Mère... attends..."),
+            "german" to Pair("Wach schnell auf!", "Mutter... warte..."),
+            "vietnamese" to Pair("Dậy nhanh lên!", "Mẹ... chờ đã..."),
+            "portuguese" to Pair("Acorde rápido!", "Mãe... espere..."),
+            "javanese" to Pair("Ndang tangi!", "Ibu... enteni..."),
+            "korean" to Pair("어서 일어나라!", "엄마... 잠깐..."),
+            "russian" to Pair("Быстро просыпайся!", "Мама... подожди..."),
+            "arabic" to Pair("استيقظ بسرعة!", "أمي... انتظري..."),
+            "thai" to Pair("ตื่นเร็วเข้า!", "แม่... เดี๋ยวก่อน..."),
+        )
 
     // ── Model decryption ───────────────────────────────────────────
     const val MODEL_DECRYPT_KEY_STR = "indravoyager"
-    val MODEL_DECRYPT_KEY: Int get() = MODEL_DECRYPT_KEY_STR.length * 7 + 6  // = 90
+    val MODEL_DECRYPT_KEY: Int get() = MODEL_DECRYPT_KEY_STR.length * 7 + 6 // = 90
 
     // ── YOLO settings ──────────────────────────────────────────────
     const val YOLO_INPUT_SIZE: Int = 640
-    val YOLO_PREDICTION_STAGES: List<Pair<Double, Double>> = listOf(
-        Pair(0.28, 0.45),
-        Pair(0.18, 0.55),
-        Pair(0.10, 0.65),
-    )
+    val YOLO_PREDICTION_STAGES: List<Pair<Double, Double>> =
+        listOf(
+            Pair(0.28, 0.45),
+            Pair(0.18, 0.55),
+            Pair(0.10, 0.65),
+        )
 
     // ── Prompt template (populated at runtime) ─────────────────────
     fun buildPrompt(
@@ -43,8 +44,9 @@ object Constants {
         translateSfx: Boolean = false,
     ): String {
         val langKey = targetLanguage.lowercase().trim()
-        val examples = TRANSLATION_EXAMPLES[langKey]
-            ?: TRANSLATION_EXAMPLES["english"]!!
+        val examples =
+            TRANSLATION_EXAMPLES[langKey]
+                ?: TRANSLATION_EXAMPLES["english"]!!
         val (exampleVal1, exampleVal3) = examples
 
         return buildString {
@@ -71,9 +73,13 @@ object Constants {
             appendLine("7. For long sentences, keep all parts of the meaning. Do not truncate.")
             appendLine("8. If unsure about some text, use [?] for that part.")
             if (translateSfx) {
-                appendLine("9. If the bubble contains sound effects (SFX) like ドドド, バキ, ガシャーン or scribbles, translate the onomatopoeia into $targetLanguage comic style instead of 'SKIP'.")
+                appendLine(
+                    "9. If the bubble contains sound effects (SFX) like ドドド, バキ, ガシャーン or scribbles, translate the onomatopoeia into $targetLanguage comic style instead of 'SKIP'.",
+                )
             } else {
-                appendLine("9. If the bubble only contains SFX, scribbles, is empty, or is background art and not a meaningful dialogue, reply with 'SKIP'.")
+                appendLine(
+                    "9. If the bubble only contains SFX, scribbles, is empty, or is background art and not a meaningful dialogue, reply with 'SKIP'.",
+                )
             }
             appendLine()
             if (glossary.isNotEmpty()) {
@@ -85,13 +91,17 @@ object Constants {
                 appendLine()
             }
             appendLine("HONORIFICS RULE:")
-            appendLine("1. If the original text contains Japanese honorifics (san, kun, chan, sama, senpai, sensei, etc.), keep them as-is in the translation. Do NOT translate honorifics.")
+            appendLine(
+                "1. If the original text contains Japanese honorifics (san, kun, chan, sama, senpai, sensei, etc.), keep them as-is in the translation. Do NOT translate honorifics.",
+            )
             appendLine("2. Examples: -san stays as -san, -kun stays as -kun, -chan stays as -chan.")
             appendLine("3. This applies even when translating to non-Japanese languages.")
             appendLine()
             appendLine("SFX RULE:")
             if (translateSfx) {
-                appendLine("1. Sound effects (SFX) ARE translatable. Translate them into $targetLanguage onomatopoeia (e.g. ドドド → 'DOKO DOKO' or an equivalent sound word in $targetLanguage).")
+                appendLine(
+                    "1. Sound effects (SFX) ARE translatable. Translate them into $targetLanguage onomatopoeia (e.g. ドドド → 'DOKO DOKO' or an equivalent sound word in $targetLanguage).",
+                )
                 appendLine("2. SFX examples: ドドド, ゴゴゴ, バキ, ギュウ, キラキラ, etc. Always translate them, never reply 'SKIP' for pure SFX.")
                 appendLine("3. Keep SFX short, impactful, and stylized (e.g. repeated letters like 'BOOM!!').")
             } else {
@@ -110,7 +120,9 @@ object Constants {
             appendLine("Provide the response ONLY in valid JSON without markdown formatting.")
             appendLine("Keys must be the red ID numbers as strings.")
             appendLine("Values must be the $targetLanguage translation or 'SKIP'.")
-            append("Example output: {\"1\": \"$exampleVal1\", \"2\": \"SKIP\", \"3\": \"$exampleVal3\", \"4\": \"SKIP\", \"5\": \"$exampleVal1\"}")
+            append(
+                "Example output: {\"1\": \"$exampleVal1\", \"2\": \"SKIP\", \"3\": \"$exampleVal3\", \"4\": \"SKIP\", \"5\": \"$exampleVal1\"}",
+            )
         }
     }
 }

@@ -15,7 +15,6 @@ class PagePreparer(
     private val yolo: YoloOnnx?,
     private val params: Config.TweakParams,
 ) {
-
     /**
      * 3-stage YOLO cascade (each stage: distinct conf/iou threshold) followed by
      * the box filters (false giants, overlaps, nonsense, SFX/images).
@@ -23,13 +22,17 @@ class PagePreparer(
      * The input tensor is identical across all 3 stages — preprocess once and reuse.
      * [isCancelled] is checked between stages so a user cancel stops detection promptly.
      */
-    fun detectBubbles(bitmap: Bitmap, isCancelled: () -> Boolean = { false }): List<IntArray> {
+    fun detectBubbles(
+        bitmap: Bitmap,
+        isCancelled: () -> Boolean = { false },
+    ): List<IntArray> {
         val prepared = yolo?.prepareInput(bitmap)
         val rawBoxes = mutableListOf<IntArray>()
         for ((conf, iou) in Constants.YOLO_PREDICTION_STAGES) {
             if (isCancelled()) break
-            val detections = yolo?.predict(bitmap, confThreshold = conf, iouThreshold = iou, prepared = prepared)
-                ?: continue
+            val detections =
+                yolo?.predict(bitmap, confThreshold = conf, iouThreshold = iou, prepared = prepared)
+                    ?: continue
             for (d in detections) {
                 rawBoxes.add(intArrayOf(d.x1, d.y1, d.x2, d.y2))
             }
@@ -192,9 +195,16 @@ class PagePreparer(
                 val bgColor = ImageProcessor.detectBubbleBackgroundColor(cropMatFull, box)
                 bubbleColors[id] = bgColor
 
-                val (cropX1, cropY1, cropX2, cropY2) = ImageProcessor.smartCropBounds(
-                    box, boxes, imgWidth, imgHeight, padX, padY, params
-                )
+                val (cropX1, cropY1, cropX2, cropY2) =
+                    ImageProcessor.smartCropBounds(
+                        box,
+                        boxes,
+                        imgWidth,
+                        imgHeight,
+                        padX,
+                        padY,
+                        params,
+                    )
 
                 val cropMat = cropMatFull.submat(org.opencv.core.Rect(cropX1, cropY1, cropX2 - cropX1, cropY2 - cropY1))
                 val maskedMat = ImageProcessor.maskOutsideBubble(cropMat, cropX1, cropY1, x1, y1, x2, y2, params)
@@ -206,14 +216,17 @@ class PagePreparer(
                 // maskOutsideBubble returns `crop` itself when maskAreaLuarBox is off —
                 // releasing the same Mat twice would corrupt its refcount.
                 if (maskedMat !== cropMat) maskedMat.release()
-                val scaledBitmap = if (scale != 1.0) {
-                    Bitmap.createScaledBitmap(
-                        cropBitmap,
-                        maxOf(1, (cropBitmap.width * scale).toInt()),
-                        maxOf(1, (cropBitmap.height * scale).toInt()),
-                        true
-                    )
-                } else cropBitmap
+                val scaledBitmap =
+                    if (scale != 1.0) {
+                        Bitmap.createScaledBitmap(
+                            cropBitmap,
+                            maxOf(1, (cropBitmap.width * scale).toInt()),
+                            maxOf(1, (cropBitmap.height * scale).toInt()),
+                            true,
+                        )
+                    } else {
+                        cropBitmap
+                    }
                 // Free the unscaled crop copy explicitly (GC would reclaim it eventually,
                 // but explicit recycle keeps the transient spike flat on bubble-heavy pages).
                 if (scaledBitmap !== cropBitmap && !cropBitmap.isRecycled) cropBitmap.recycle()

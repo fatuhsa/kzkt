@@ -37,10 +37,10 @@ fun <E> ChipsRow(
 ) {
     Row(
         modifier =
-        modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)),
+            modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)),
     ) {
         Spacer(Modifier.width(4.dp))
 
@@ -48,12 +48,13 @@ fun <E> ChipsRow(
             FilterChip(
                 label = { Text(label) },
                 selected = currentValue == value,
-                colors = FilterChipDefaults.filterChipColors(
-                    containerColor = containerColor,
-                ),
+                colors =
+                    FilterChipDefaults.filterChipColors(
+                        containerColor = containerColor,
+                    ),
                 onClick = { onValueUpdate(value) },
                 shape = RoundedCornerShape(50),
-                border = null
+                border = null,
             )
 
             Spacer(Modifier.width(8.dp))

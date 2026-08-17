@@ -4,7 +4,6 @@
 
 package com.kzkt.app.ui.component
 
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,11 +41,12 @@ import androidx.compose.ui.unit.dp
 fun Material3SettingsGroup(
     title: String? = null,
     items: List<Material3SettingsItem>,
-    useLowContrast: Boolean = false
+    useLowContrast: Boolean = false,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier =
+            Modifier
+                .fillMaxWidth(),
     ) {
         // Section title
         title?.let {
@@ -54,29 +54,37 @@ fun Material3SettingsGroup(
                 text = it,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
+                modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
             )
         }
 
         // Settings items
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             items.forEachIndexed { index, item ->
-                val shape = when {
-                    items.size == 1 -> RoundedCornerShape(16.dp)
-                    index == 0 -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 4.dp, bottomEnd = 4.dp)
-                    index == items.size - 1 -> RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
-                    else -> RoundedCornerShape(4.dp)
-                }
+                val shape =
+                    when {
+                        items.size == 1 -> RoundedCornerShape(16.dp)
+                        index == 0 -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 4.dp, bottomEnd = 4.dp)
+                        index == items.size - 1 ->
+                            RoundedCornerShape(
+                                topStart = 4.dp,
+                                topEnd = 4.dp,
+                                bottomStart = 16.dp,
+                                bottomEnd = 16.dp,
+                            )
+                        else -> RoundedCornerShape(4.dp)
+                    }
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = shape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    ),
+                    colors =
+                        CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 ) {
                     Material3SettingsItemRow(item = item)

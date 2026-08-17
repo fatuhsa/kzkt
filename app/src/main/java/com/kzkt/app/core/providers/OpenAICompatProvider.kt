@@ -31,7 +31,6 @@ abstract class OpenAICompatProvider(
      */
     private val useSse: Boolean = true,
 ) : LlmProvider {
-
     /** The default chat-completions endpoint used when [customUrl] is blank. */
     abstract val defaultEndpoint: String
 
@@ -52,8 +51,9 @@ abstract class OpenAICompatProvider(
     companion object {
         // One shared client + connection pool across all OpenAI-compatible providers
         // (previously every provider instance built its own OkHttpClient).
-        private val sharedClient: OkHttpClient by lazy {
-            OkHttpClient.Builder()
+        internal val sharedClient: OkHttpClient by lazy {
+            OkHttpClient
+                .Builder()
                 .connectTimeout(com.kzkt.app.core.Config.CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
                 .readTimeout(com.kzkt.app.core.Config.READ_TIMEOUT_SEC, TimeUnit.SECONDS)
                 .writeTimeout(com.kzkt.app.core.Config.READ_TIMEOUT_SEC, TimeUnit.SECONDS)
@@ -70,23 +70,31 @@ abstract class OpenAICompatProvider(
         return "$base/v1/chat/completions"
     }
 
-    override suspend fun translateImage(image: Bitmap, prompt: String): String? {
+    override suspend fun translateImage(
+        image: Bitmap,
+        prompt: String,
+    ): String? {
         // Downscale oversized mosaics so provider image-size limits are respected.
         val prepared = ImageProcessor.prepareImageForProvider(image, maxImageDimension)
         val dataUri = ImageProcessor.bitmapToBase64DataUri(prepared)
         if (prepared !== image && !prepared.isRecycled) prepared.recycle()
-        val imagePart: Map<String, Any> = if (imageDetail != null) {
-            mapOf("type" to "image_url", "image_url" to mapOf("url" to dataUri, "detail" to imageDetail))
-        } else {
-            mapOf("type" to "image_url", "image_url" to mapOf("url" to dataUri))
-        }
-        val payload = buildPayload(
-            content = listOf(imagePart, mapOf("type" to "text", "text" to prompt))
-        )
+        val imagePart: Map<String, Any> =
+            if (imageDetail != null) {
+                mapOf("type" to "image_url", "image_url" to mapOf("url" to dataUri, "detail" to imageDetail))
+            } else {
+                mapOf("type" to "image_url", "image_url" to mapOf("url" to dataUri))
+            }
+        val payload =
+            buildPayload(
+                content = listOf(imagePart, mapOf("type" to "text", "text" to prompt)),
+            )
         return executeWithStreamFallback(payload)
     }
 
-    override suspend fun translateText(textJson: String, prompt: String): String? {
+    override suspend fun translateText(
+        textJson: String,
+        prompt: String,
+    ): String? {
         val payload = buildPayload(content = prompt)
         textMaxTokens?.let { payload["max_tokens"] = it }
         return executeWithStreamFallback(payload)
@@ -124,13 +132,14 @@ abstract class OpenAICompatProvider(
                     if (response.code in listOf(401, 402)) throw ValueError("API_KEY_ERROR")
                     if (!response.isSuccessful) {
                         val body = response.body?.string() ?: ""
-                        val detail = try {
-                            val errorObj = JsonParser.parseString(body).asJsonObject.getAsJsonObject("error")
-                            errorObj.get("message")?.asString ?: body.take(200)
-                        } catch (_: Exception) {
-                            body.take(200)
-                        }
-                        throw RuntimeException("${providerName} API error ${response.code}: ${detail}")
+                        val detail =
+                            try {
+                                val errorObj = JsonParser.parseString(body).asJsonObject.getAsJsonObject("error")
+                                errorObj.get("message")?.asString ?: body.take(200)
+                            } catch (_: Exception) {
+                                body.take(200)
+                            }
+                        throw RuntimeException("$providerName API error ${response.code}: $detail")
                     }
                     val contentType = response.header("Content-Type") ?: ""
                     if (!contentType.contains("text/event-stream", ignoreCase = true)) {
@@ -140,27 +149,30 @@ abstract class OpenAICompatProvider(
                     SseParser.readStream(body.source(), SseParser::extractContentDelta)
                 }
             } catch (e: java.io.IOException) {
-                throw RuntimeException("${providerName} network error: ${e.message}")
+                throw RuntimeException("$providerName network error: ${e.message}")
             }
         }
     }
 
     private fun buildPayload(content: Any): MutableMap<String, Any> {
-        val payload = mutableMapOf<String, Any>(
-            "model" to modelName,
-            "temperature" to 0,
-            "top_p" to 0.1,
-            "messages" to listOf(mapOf("role" to "user", "content" to content)),
-        )
+        val payload =
+            mutableMapOf<String, Any>(
+                "model" to modelName,
+                "temperature" to 0,
+                "top_p" to 0.1,
+                "messages" to listOf(mapOf("role" to "user", "content" to content)),
+            )
         if (forceJsonResponse) payload["response_format"] = mapOf("type" to "json_object")
         return payload
     }
 
     private fun buildRequest(payload: Map<String, Any>): Request {
-        val builder = Request.Builder()
-            .url(buildEndpoint())
-            .addHeader("Content-Type", "application/json")
-            .post(gson.toJson(payload).toRequestBody("application/json".toMediaTypeOrNull()))
+        val builder =
+            Request
+                .Builder()
+                .url(buildEndpoint())
+                .addHeader("Content-Type", "application/json")
+                .post(gson.toJson(payload).toRequestBody("application/json".toMediaTypeOrNull()))
         if (apiKey.isNotBlank()) builder.addHeader(authHeaderName, authHeaderPrefix + apiKey)
         return builder.build()
     }
@@ -174,30 +186,38 @@ abstract class OpenAICompatProvider(
 
                     if (response.code in listOf(401, 402)) throw ValueError("API_KEY_ERROR")
                     if (!response.isSuccessful) {
-                        val detail = try {
-                            JsonParser.parseString(body).asJsonObject
-                                .getAsJsonObject("error")
-                                .get("message")?.asString ?: body.take(200)
-                        } catch (_: Exception) {
-                            body.take(200)
-                        }
-                        throw RuntimeException("${providerName} API error ${response.code}: $detail")
+                        val detail =
+                            try {
+                                JsonParser
+                                    .parseString(body)
+                                    .asJsonObject
+                                    .getAsJsonObject("error")
+                                    .get("message")
+                                    ?.asString ?: body.take(200)
+                            } catch (_: Exception) {
+                                body.take(200)
+                            }
+                        throw RuntimeException("$providerName API error ${response.code}: $detail")
                     }
 
                     val json = JsonParser.parseString(body).asJsonObject
                     val choices = json.getAsJsonArray("choices")
                     if (choices != null && choices.size() > 0) {
-                        return@withContext choices[0].asJsonObject
+                        return@withContext choices[0]
+                            .asJsonObject
                             .getAsJsonObject("message")
-                            .get("content")?.asString
+                            .get("content")
+                            ?.asString
                     }
                     body
                 }
             } catch (e: java.io.IOException) {
-                throw RuntimeException("${providerName} network error: ${e.message}")
+                throw RuntimeException("$providerName network error: ${e.message}")
             }
         }
     }
 }
 
-class ValueError(message: String) : Exception(message)
+class ValueError(
+    message: String,
+) : Exception(message)

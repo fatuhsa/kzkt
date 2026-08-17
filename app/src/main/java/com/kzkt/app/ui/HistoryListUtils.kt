@@ -16,11 +16,9 @@ private val DAY_HEADER_FORMATTER by lazy { SimpleDateFormat("EEE, dd MMM yyyy", 
 val TIME_FORMATTER by lazy { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
 /** Human-readable provider name for a provider key (falls back to the key). */
-fun providerDisplayName(key: String): String =
-    Config.PROVIDER_REGISTRY[key]?.displayName ?: key
+fun providerDisplayName(key: String): String = Config.PROVIDER_REGISTRY[key]?.displayName ?: key
 
-private fun dayOf(ts: Long): LocalDate =
-    Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault()).toLocalDate()
+private fun dayOf(ts: Long): LocalDate = Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault()).toLocalDate()
 
 // ── Filtering / grouping ───────────────────────────────────────────
 
@@ -37,26 +35,28 @@ fun filterHistoryEntries(
     languageFilter: String? = null,
     startMillis: Long? = null,
     endMillis: Long? = null,
-): List<HistoryEntry> = entries.asSequence()
-    .filterNot { it.timestamp in removedIds }
-    .filter { providerFilter == null || it.provider == providerFilter }
-    .filter { languageFilter == null || it.targetLanguage == languageFilter }
-    .filter {
-        if (startMillis != null && endMillis != null) {
-            it.timestamp in startMillis..endMillis
-        } else if (startMillis != null) {
-            it.timestamp >= startMillis
-        } else if (endMillis != null) {
-            it.timestamp <= endMillis
-        } else true
-    }
-    .filter {
-        query.isBlank() ||
-            it.fileName.contains(query, ignoreCase = true) ||
-            providerDisplayName(it.provider).contains(query, ignoreCase = true) ||
-            it.targetLanguage.contains(query, ignoreCase = true)
-    }
-    .toList()
+): List<HistoryEntry> =
+    entries
+        .asSequence()
+        .filterNot { it.timestamp in removedIds }
+        .filter { providerFilter == null || it.provider == providerFilter }
+        .filter { languageFilter == null || it.targetLanguage == languageFilter }
+        .filter {
+            if (startMillis != null && endMillis != null) {
+                it.timestamp in startMillis..endMillis
+            } else if (startMillis != null) {
+                it.timestamp >= startMillis
+            } else if (endMillis != null) {
+                it.timestamp <= endMillis
+            } else {
+                true
+            }
+        }.filter {
+            query.isBlank() ||
+                it.fileName.contains(query, ignoreCase = true) ||
+                providerDisplayName(it.provider).contains(query, ignoreCase = true) ||
+                it.targetLanguage.contains(query, ignoreCase = true)
+        }.toList()
 
 /** Grouping key for a translation run: batchId when present, legacy heuristic otherwise. */
 fun batchKeyOf(entry: HistoryEntry): String = entry.batchId.ifBlank { bookGroupKey(entry.outputPath) }
@@ -102,11 +102,12 @@ fun groupByDayAndBatch(entries: List<HistoryEntry>): List<HistoryDayGroup> {
         .groupBy { dayOf(it.timestamp) }
         .toSortedMap(compareByDescending { it })
         .map { (day, dayEntries) ->
-            val dayLabel = when (day) {
-                today -> "Today"
-                yesterday -> "Yesterday"
-                else -> DAY_HEADER_FORMATTER.format(Date(day.toEpochDay() * 86_400_000L))
-            }
+            val dayLabel =
+                when (day) {
+                    today -> "Today"
+                    yesterday -> "Yesterday"
+                    else -> DAY_HEADER_FORMATTER.format(Date(day.toEpochDay() * 86_400_000L))
+                }
             val batches =
                 dayEntries
                     .groupBy(::batchKeyOf)
@@ -251,7 +252,10 @@ fun orderedPagesFor(
 }
 
 /** Natural (numeric-aware) string comparison for page ordering. */
-fun compareNatural(a: String, b: String): Int {
+fun compareNatural(
+    a: String,
+    b: String,
+): Int {
     val regex = Regex("(\\d+)|(\\D+)")
     val ca = regex.findAll(a).map { it.value }.toList()
     val cb = regex.findAll(b).map { it.value }.toList()
@@ -259,14 +263,15 @@ fun compareNatural(a: String, b: String): Int {
     while (i < ca.size && i < cb.size) {
         val x = ca[i]
         val y = cb[i]
-        val cmp = if (x.all(Char::isDigit) && y.all(Char::isDigit)) {
-            // toLongOrNull guards against digit runs that overflow Long (e.g.
-            // temp-dir names like "kzkt_batch12345678901234567890"); treat those
-            // as equal so ordering falls through to the next segment.
-            (x.toLongOrNull() ?: 0L).compareTo(y.toLongOrNull() ?: 0L)
-        } else {
-            x.compareTo(y)
-        }
+        val cmp =
+            if (x.all(Char::isDigit) && y.all(Char::isDigit)) {
+                // toLongOrNull guards against digit runs that overflow Long (e.g.
+                // temp-dir names like "kzkt_batch12345678901234567890"); treat those
+                // as equal so ordering falls through to the next segment.
+                (x.toLongOrNull() ?: 0L).compareTo(y.toLongOrNull() ?: 0L)
+            } else {
+                x.compareTo(y)
+            }
         if (cmp != 0) return cmp
         i++
     }

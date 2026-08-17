@@ -5,51 +5,62 @@ import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
 import com.kzkt.app.core.Config.TweakParams
+import com.kzkt.app.util.KLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
-import org.opencv.core.*
+import org.opencv.core.Core
+import org.opencv.core.Mat
+import org.opencv.core.Rect
+import org.opencv.core.Scalar
+import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import java.io.ByteArrayOutputStream
 
 /**
  * Image processing: box filtering, crop/mask, SFX detection, image I/O.
- * Ported from the original Python image service
  */
 object ImageProcessor {
-
     init {
         try {
             System.loadLibrary("opencv_java4")
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            KLog.e("KZKT", "CRITICAL: System.loadLibrary(\"opencv_java4\") failed: ${e.message}")
+        }
         try {
             OpenCVLoader.initLocal()
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            KLog.e("KZKT", "CRITICAL: OpenCVLoader.initLocal() failed: ${e.message}")
+        }
     }
-
 
     // ── Image I/O ──────────────────────────────────────────────────
 
-    fun bitmapToBase64(bitmap: Bitmap, format: Bitmap.CompressFormat = Bitmap.CompressFormat.JPEG, quality: Int = 85): String {
+    fun bitmapToBase64(
+        bitmap: Bitmap,
+        format: Bitmap.CompressFormat = Bitmap.CompressFormat.JPEG,
+        quality: Int = 85,
+    ): String {
         val stream = ByteArrayOutputStream()
         bitmap.compress(format, quality, stream)
         val bytes = stream.toByteArray()
         return Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
 
-    fun bitmapToBase64DataUri(bitmap: Bitmap): String {
-        return "data:image/jpeg;base64,${bitmapToBase64(bitmap, Bitmap.CompressFormat.JPEG, 85)}"
-    }
+    fun bitmapToBase64DataUri(bitmap: Bitmap): String = "data:image/jpeg;base64,${bitmapToBase64(bitmap, Bitmap.CompressFormat.JPEG, 85)}"
 
     /**
      * Downscale [bitmap] when its longest side exceeds [maxDimension] so provider
      * image-size limits are respected. Returns the same bitmap instance when it is
      * already small enough — the caller must not recycle the original in that case.
      */
-    fun prepareImageForProvider(bitmap: Bitmap, maxDimension: Int): Bitmap {
+    fun prepareImageForProvider(
+        bitmap: Bitmap,
+        maxDimension: Int,
+    ): Bitmap {
         val longest = maxOf(bitmap.width, bitmap.height)
         if (longest <= maxDimension) return bitmap
         val scale = maxDimension.toFloat() / longest
@@ -70,9 +81,7 @@ object ImageProcessor {
         return mat
     }
 
-    fun loadBitmap(path: String): Bitmap? {
-        return BitmapFactory.decodeFile(path)
-    }
+    fun loadBitmap(path: String): Bitmap? = BitmapFactory.decodeFile(path)
 
     /**
      * Smart Image Upscaler using OpenCV
@@ -101,35 +110,6 @@ object ImageProcessor {
         }
     }
 
-    // ── Box Geometry ───────────────────────────────────────────────
-
-    private fun areaBox(box: IntArray): Int {
-        return maxOf(0, box[2] - box[0]) * maxOf(0, box[3] - box[1])
-    }
-
-    private fun intersectionArea(a: IntArray, b: IntArray): Int {
-        val ix1 = maxOf(a[0], b[0])
-        val iy1 = maxOf(a[1], b[1])
-        val ix2 = minOf(a[2], b[2])
-        val iy2 = minOf(a[3], b[3])
-        return maxOf(0, ix2 - ix1) * maxOf(0, iy2 - iy1)
-    }
-
-    private fun shouldMerge(a: IntArray, b: IntArray): Boolean {
-        val areaA = areaBox(a)
-        val areaB = areaBox(b)
-        if (areaA == 0 || areaB == 0) return false
-        val inter = intersectionArea(a, b)
-        if (inter == 0) return false
-        val iou = inter.toDouble() / (areaA + areaB - inter)
-        val coverSmall = inter.toDouble() / minOf(areaA, areaB)
-        return iou >= 0.20 || coverSmall >= 0.60
-    }
-
-    private fun overlap1D(a1: Int, a2: Int, b1: Int, b2: Int): Int {
-        return maxOf(0, minOf(a2, b2) - maxOf(a1, b1))
-    }
-
     // ── Box Filtering ──────────────────────────────────────────────
 
     /**
@@ -140,17 +120,17 @@ object ImageProcessor {
     fun removeFalseGiants(boxes: List<IntArray>): List<IntArray> {
         if (boxes.isEmpty()) return boxes
 
-        val withArea = boxes.sortedByDescending { areaBox(it) }
+        val withArea = boxes.sortedByDescending { BoxGeometry.areaBox(it) }
         val keep = BooleanArray(withArea.size) { true }
 
         for (i in withArea.indices) {
             if (!keep[i]) continue
-            val (boxI, areaI) = withArea[i] to areaBox(withArea[i])
+            val (boxI, areaI) = withArea[i] to BoxGeometry.areaBox(withArea[i])
             for (j in i + 1 until withArea.size) {
                 if (!keep[j]) continue
-                val (boxJ, areaJ) = withArea[j] to areaBox(withArea[j])
+                val (boxJ, areaJ) = withArea[j] to BoxGeometry.areaBox(withArea[j])
                 if (areaI > 6.0 * areaJ) {
-                    val inter = intersectionArea(boxI, boxJ)
+                    val inter = BoxGeometry.intersectionArea(boxI, boxJ)
                     if (inter >= 0.8 * areaJ) {
                         keep[i] = false
                         break
@@ -182,7 +162,7 @@ object ImageProcessor {
                 for (j in i + 1 until result.size) {
                     if (used[j]) continue
                     if (result[j][0] > x2) break
-                    if (shouldMerge(intArrayOf(x1, y1, x2, y2), result[j])) {
+                    if (BoxGeometry.shouldMerge(intArrayOf(x1, y1, x2, y2), result[j])) {
                         x1 = minOf(x1, result[j][0])
                         y1 = minOf(y1, result[j][1])
                         x2 = maxOf(x2, result[j][2])
@@ -204,22 +184,11 @@ object ImageProcessor {
      * Remove boxes that are too wide, flat, or thin.
      * buang_kotak_ngawur()
      */
-    fun removeNonsense(boxes: List<IntArray>, imgWidth: Int, imgHeight: Int): List<IntArray> {
-        val totalArea = maxOf(1, imgWidth * imgHeight)
-        return boxes.filter { box ->
-            val (x1, y1, x2, y2) = box
-            val w = maxOf(1, x2 - x1)
-            val h = maxOf(1, y2 - y1)
-            val ratio = w.toDouble() / h
-            val areaRatio = (w * h).toDouble() / totalArea
-
-            val tooWide = ratio >= 3.2 && w >= imgWidth * 0.35
-            val tooFlat = w >= imgWidth * 0.50 && h <= imgHeight * 0.16
-            val tooThin = areaRatio >= 0.035 && ratio >= 2.8
-
-            !(tooWide || tooFlat || tooThin)
-        }
-    }
+    fun removeNonsense(
+        boxes: List<IntArray>,
+        imgWidth: Int,
+        imgHeight: Int,
+    ): List<IntArray> = boxes.filterNot { BoxGeometry.isNonsenseBox(it, imgWidth, imgHeight) }
 
     /**
      * SFX / noise removal filter based on pixel analysis.
@@ -236,11 +205,12 @@ object ImageProcessor {
         val imgWidth = mat.cols()
         val totalArea = maxOf(1, imgHeight * imgWidth)
 
-        val (blackThr, edgeThr, whiteSafe) = when (params.detection.filterSfxMode.lowercase()) {
-            "relaxed", "longgar" -> Triple(0.20, 0.14, 0.58)
-            "strict", "ketat" -> Triple(0.13, 0.09, 0.68)
-            else -> Triple(0.16, 0.11, 0.62) // balanced
-        }
+        val (blackThr, edgeThr, whiteSafe) =
+            when (params.detection.filterSfxMode.lowercase()) {
+                "relaxed", "longgar" -> Triple(0.20, 0.14, 0.58)
+                "strict", "ketat" -> Triple(0.13, 0.09, 0.68)
+                else -> Triple(0.16, 0.11, 0.62) // balanced
+            }
 
         return boxes.filter { box ->
             val (x1, y1, x2, y2) = box
@@ -283,8 +253,11 @@ object ImageProcessor {
                     if (whiteRatio >= whiteSafe) return@filter true
 
                     val isSfxOrImage = areaRatio > 0.018 && blackRatio > blackThr && edgeRatio > edgeThr
-                    val isFlatSuspicious = ratio > 2.2 && w > imgWidth * 0.30 &&
-                        edgeRatio > maxOf(0.07, edgeThr - 0.03) && whiteRatio < whiteSafe
+                    val isFlatSuspicious =
+                        ratio > 2.2 &&
+                            w > imgWidth * 0.30 &&
+                            edgeRatio > maxOf(0.07, edgeThr - 0.03) &&
+                            whiteRatio < whiteSafe
                     val isLargeSuspicious = areaRatio > 0.045 && whiteRatio < 0.55 && edgeRatio > 0.075
 
                     !(isSfxOrImage || isFlatSuspicious || isLargeSuspicious)
@@ -304,7 +277,10 @@ object ImageProcessor {
      * Detect bubble background color (light/white vs dark/black).
      * Returns android.graphics.Color (Color.WHITE or Color.BLACK).
      */
-    fun detectBubbleBackgroundColor(mat: Mat, box: IntArray): Int {
+    fun detectBubbleBackgroundColor(
+        mat: Mat,
+        box: IntArray,
+    ): Int {
         val (x1, y1, x2, y2) = box
         val w = maxOf(1, x2 - x1)
         val h = maxOf(1, y2 - y1)
@@ -324,7 +300,8 @@ object ImageProcessor {
             } else {
                 android.graphics.Color.WHITE
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            KLog.w("KZKT", "Failed to detect bubble background color: ${e.message}")
             return android.graphics.Color.WHITE
         } finally {
             gray.release()
@@ -379,7 +356,8 @@ object ImageProcessor {
                     count++
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            KLog.w("KZKT", "Failed to sample region background color: ${e.message}")
             return android.graphics.Color.WHITE
         } finally {
             sub.release()
@@ -438,7 +416,8 @@ object ImageProcessor {
                     count++
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            KLog.w("KZKT", "Failed to sample median region background color: ${e.message}")
             return android.graphics.Color.WHITE
         } finally {
             sub.release()
@@ -507,8 +486,8 @@ object ImageProcessor {
         val minH = minOf(hA, hB)
         val minW = minOf(wA, wB)
 
-        val overlapX = overlap1D(a[0], a[2], b[0], b[2])
-        val overlapY = overlap1D(a[1], a[3], b[1], b[3])
+        val overlapX = BoxGeometry.overlap1D(a[0], a[2], b[0], b[2])
+        val overlapY = BoxGeometry.overlap1D(a[1], a[3], b[1], b[3])
         val gapX = maxOf(0, maxOf(a[0], b[0]) - minOf(a[2], b[2]))
         val gapY = maxOf(0, maxOf(a[1], b[1]) - minOf(a[3], b[3]))
 
@@ -527,18 +506,7 @@ object ImageProcessor {
     fun rectIou(
         a: IntArray,
         b: IntArray,
-    ): Double {
-        val ix1 = maxOf(a[0], b[0])
-        val iy1 = maxOf(a[1], b[1])
-        val ix2 = minOf(a[2], b[2])
-        val iy2 = minOf(a[3], b[3])
-        val interW = maxOf(0, ix2 - ix1)
-        val interH = maxOf(0, iy2 - iy1)
-        val inter = interW.toDouble() * interH
-        val areaA = maxOf(1, a[2] - a[0]) * maxOf(1, a[3] - a[1])
-        val areaB = maxOf(1, b[2] - b[0]) * maxOf(1, b[3] - b[1])
-        return inter / (areaA + areaB - inter)
-    }
+    ): Double = BoxGeometry.rectIou(a, b)
 
     // ── Crop & Mask ────────────────────────────────────────────────
 
@@ -570,8 +538,8 @@ object ImageProcessor {
             val otherW = maxOf(1, ox2 - ox1)
             val otherH = maxOf(1, oy2 - oy1)
 
-            val overlapX = overlap1D(x1, x2, ox1, ox2).toDouble() / minOf(boxW, otherW)
-            val overlapY = overlap1D(y1, y2, oy1, oy2).toDouble() / minOf(boxH, otherH)
+            val overlapX = BoxGeometry.overlap1D(x1, x2, ox1, ox2).toDouble() / minOf(boxW, otherW)
+            val overlapY = BoxGeometry.overlap1D(y1, y2, oy1, oy2).toDouble() / minOf(boxH, otherH)
 
             if (overlapX >= params.detection.overlapBatasCrop) {
                 if (oy1 >= y2) { // other is below
@@ -603,8 +571,12 @@ object ImageProcessor {
      */
     fun maskOutsideBubble(
         crop: Mat,
-        cropX1: Int, cropY1: Int,
-        x1: Int, y1: Int, x2: Int, y2: Int,
+        cropX1: Int,
+        cropY1: Int,
+        x1: Int,
+        y1: Int,
+        x2: Int,
+        y2: Int,
         params: TweakParams,
     ): Mat {
         if (!params.detection.maskAreaLuarBox) return crop
@@ -656,19 +628,21 @@ object ImageProcessor {
         translations: Map<String, String>,
         coordinateMap: Map<String, IntArray>,
     ) {
-        val targets = coordinateMap.mapNotNull { (id, box) ->
-            val text = translations[id]
-            if (text != null && text.uppercase() != "SKIP" && text.isNotBlank()) box else null
-        }
+        val targets =
+            coordinateMap.mapNotNull { (id, box) ->
+                val text = translations[id]
+                if (text != null && text.uppercase() != "SKIP" && text.isNotBlank()) box else null
+            }
         if (targets.isEmpty()) return
         coroutineScope {
-            targets.map { box ->
-                async(Dispatchers.Default) {
-                    synchronized(mat) {
-                        inpaintBubbleText(mat, box)
+            targets
+                .map { box ->
+                    async(Dispatchers.Default) {
+                        synchronized(mat) {
+                            inpaintBubbleText(mat, box)
+                        }
                     }
-                }
-            }.awaitAll()
+                }.awaitAll()
         }
     }
 
@@ -676,7 +650,10 @@ object ImageProcessor {
      * Inpaint original text inside a speech bubble using OpenCV Photo.inpaint.
      * Erases dark text strokes seamlessly matching background screentone/texture.
      */
-    fun inpaintBubbleText(mat: Mat, box: IntArray): Mat {
+    fun inpaintBubbleText(
+        mat: Mat,
+        box: IntArray,
+    ): Mat {
         if (mat.empty() || box.size < 4) return mat
         val cols = mat.cols()
         val rows = mat.rows()
@@ -713,7 +690,8 @@ object ImageProcessor {
 
             val bgrCrop = Mat()
             Imgproc.cvtColor(crop, bgrCrop, Imgproc.COLOR_RGBA2BGR)
-            org.opencv.photo.Photo.inpaint(bgrCrop, textMask, inpainted, 3.0, org.opencv.photo.Photo.INPAINT_TELEA)
+            org.opencv.photo.Photo
+                .inpaint(bgrCrop, textMask, inpainted, 3.0, org.opencv.photo.Photo.INPAINT_TELEA)
             bgrCrop.release()
 
             val rgbaResult = Mat()

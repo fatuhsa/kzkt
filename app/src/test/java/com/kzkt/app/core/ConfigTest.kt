@@ -6,7 +6,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ConfigTest {
-
     @Test
     fun `language codes map correctly`() {
         assertEquals("en", Config.getLangCode("English"))
@@ -28,7 +27,11 @@ class ConfigTest {
     @Test
     fun `every provider in registry has a factory`() {
         for (key in Config.PROVIDER_REGISTRY.keys) {
-            assertNotNull("Provider '$key' should be creatable", com.kzkt.app.core.providers.ProviderFactory.create(key, "key", "model", ""))
+            assertNotNull(
+                "Provider '$key' should be creatable",
+                com.kzkt.app.core.providers.ProviderFactory
+                    .create(key, "key", "model", ""),
+            )
         }
     }
 
@@ -37,7 +40,7 @@ class ConfigTest {
         for (lang in Config.LANGUAGE_CHOICES) {
             assertTrue(
                 "Language '$lang' should have a prompt example",
-                Constants.TRANSLATION_EXAMPLES.containsKey(lang.lowercase())
+                Constants.TRANSLATION_EXAMPLES.containsKey(lang.lowercase()),
             )
         }
     }

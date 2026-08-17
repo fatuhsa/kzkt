@@ -35,21 +35,23 @@ class MainActivity : ComponentActivity() {
         val uris = mutableListOf<Uri>()
         when (action) {
             Intent.ACTION_SEND -> {
-                val uri: Uri? = if (Build.VERSION.SDK_INT >= 33) {
-                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra(Intent.EXTRA_STREAM)
-                }
+                val uri: Uri? =
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(Intent.EXTRA_STREAM)
+                    }
                 uri?.let { uris.add(it) }
             }
             Intent.ACTION_SEND_MULTIPLE -> {
-                val streams: ArrayList<Uri>? = if (Build.VERSION.SDK_INT >= 33) {
-                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
-                }
+                val streams: ArrayList<Uri>? =
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+                    }
                 if (!streams.isNullOrEmpty()) {
                     uris.addAll(streams)
                 } else {

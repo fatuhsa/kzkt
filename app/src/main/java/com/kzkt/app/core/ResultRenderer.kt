@@ -16,7 +16,6 @@ class ResultRenderer(
     private val params: Config.TweakParams,
     private val targetLanguage: String,
 ) {
-
     /**
      * Draw translations onto the canvas. Covers the original text with a
      * white/adaptive blurred patch (or a full patch for flat boxes).
@@ -33,11 +32,12 @@ class ResultRenderer(
     ): Int {
         // User-facing render settings: forced text colour ("auto"/"white"/"black")
         // and a global font-size multiplier, applied to every bubble.
-        val textColorHex = when (params.render.renderTextColor.lowercase()) {
-            "white" -> "#FFFFFF"
-            "black" -> "#000000"
-            else -> null
-        }
+        val textColorHex =
+            when (params.render.renderTextColor.lowercase()) {
+                "white" -> "#FFFFFF"
+                "black" -> "#000000"
+                else -> null
+            }
         val fontScale = params.render.renderFontScale.toFloat()
         val isCleanStyle = params.render.renderStyle.equals("clean", ignoreCase = true)
         var count = 0
@@ -47,21 +47,23 @@ class ResultRenderer(
             if (num !in coordinateMap || text.uppercase() == "SKIP" || text.isBlank()) continue
 
             val (x1, y1, x2, y2) = coordinateMap[num]!!
+            val box = coordinateMap[num]!!
             val w = maxOf(1, x2 - x1)
             val h = maxOf(1, y2 - y1)
             val ratio = w.toDouble() / h
-            val areaRatio = (w * h).toDouble() / maxOf(1, imgWidth * imgHeight)
             val bgColor = bubbleColors[num] ?: Color.WHITE
             val isFreeText = num in freeTextIds
 
             // The "suspicious flat" skips exist to avoid re-rendering wide SFX/image
             // boxes as bubbles; free-text regions must always be erased + rendered.
-            if (!isFreeText && ratio >= 3.2 && w >= imgWidth * 0.35) continue
-            if (!isFreeText && areaRatio >= 0.035 && ratio >= 2.8) continue
+            val totalArea = maxOf(1, imgWidth * imgHeight)
+            if (!isFreeText && BoxGeometry.isTooWide(box, imgWidth)) continue
+            if (!isFreeText && BoxGeometry.isTooThin(box, totalArea)) continue
 
-            val suspiciousFlat = ratio >= params.detection.rasioBoxGepeng &&
-                w >= imgWidth * params.detection.lebarBoxGepengRatio &&
-                h <= imgHeight * params.detection.tinggiBoxGepengRatio
+            val suspiciousFlat =
+                ratio >= params.detection.rasioBoxGepeng &&
+                    w >= imgWidth * params.detection.lebarBoxGepengRatio &&
+                    h <= imgHeight * params.detection.tinggiBoxGepengRatio
 
             if (isFreeText) {
                 // Erase the original text with a solid fill of the sampled page
@@ -93,31 +95,38 @@ class ResultRenderer(
                     val cornerRadius = maxOf(6, minOf(w, h) / 3)
                     val blur = 6f
 
-                    val overlay = Bitmap.createBitmap(
-                        (x2 - x1) + marginX * 2 + (blur * 2).toInt(),
-                        (y2 - y1) + marginY * 2 + (blur * 2).toInt(),
-                        Bitmap.Config.ARGB_8888
-                    )
+                    val overlay =
+                        Bitmap.createBitmap(
+                            (x2 - x1) + marginX * 2 + (blur * 2).toInt(),
+                            (y2 - y1) + marginY * 2 + (blur * 2).toInt(),
+                            Bitmap.Config.ARGB_8888,
+                        )
                     overlay.eraseColor(Color.TRANSPARENT)
                     val overlayCanvas = Canvas(overlay)
 
-                    val bgPaint = Paint().apply {
-                        color = bgColor
-                        isAntiAlias = true
-                    }
+                    val bgPaint =
+                        Paint().apply {
+                            color = bgColor
+                            isAntiAlias = true
+                        }
                     val pad = blur
                     overlayCanvas.drawRoundRect(
                         RectF(
-                            pad + marginX, pad + marginY,
-                            pad + marginX + (x2 - x1), pad + marginY + (y2 - y1)
+                            pad + marginX,
+                            pad + marginY,
+                            pad + marginX + (x2 - x1),
+                            pad + marginY + (y2 - y1),
                         ),
-                        cornerRadius.toFloat(), cornerRadius.toFloat(), bgPaint
+                        cornerRadius.toFloat(),
+                        cornerRadius.toFloat(),
+                        bgPaint,
                     )
 
                     // Apply blur
-                    val blurPaint = Paint().apply {
-                        maskFilter = BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL)
-                    }
+                    val blurPaint =
+                        Paint().apply {
+                            maskFilter = BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL)
+                        }
                     canvas.drawBitmap(overlay, x1 - marginX - pad, y1 - marginY - pad, blurPaint)
                 }
             }
@@ -128,35 +137,61 @@ class ResultRenderer(
             if (num !in coordinateMap || text.uppercase() == "SKIP" || text.isBlank()) continue
 
             val (x1, y1, x2, y2) = coordinateMap[num]!!
+            val box = coordinateMap[num]!!
             val w = maxOf(1, x2 - x1)
             val h = maxOf(1, y2 - y1)
             val ratio = w.toDouble() / h
-            val areaRatio = (w * h).toDouble() / maxOf(1, imgWidth * imgHeight)
             val bgColor = bubbleColors[num] ?: Color.WHITE
             val isFreeText = num in freeTextIds
 
-            if (!isFreeText && ratio >= 3.2 && w >= imgWidth * 0.35) continue
-            if (!isFreeText && areaRatio >= 0.035 && ratio >= 2.8) continue
+            val totalArea = maxOf(1, imgWidth * imgHeight)
+            if (!isFreeText && BoxGeometry.isTooWide(box, imgWidth)) continue
+            if (!isFreeText && BoxGeometry.isTooThin(box, totalArea)) continue
 
-            val suspiciousFlat = ratio >= params.detection.rasioBoxGepeng &&
-                w >= imgWidth * params.detection.lebarBoxGepengRatio &&
-                h <= imgHeight * params.detection.tinggiBoxGepengRatio
+            val suspiciousFlat =
+                ratio >= params.detection.rasioBoxGepeng &&
+                    w >= imgWidth * params.detection.lebarBoxGepengRatio &&
+                    h <= imgHeight * params.detection.tinggiBoxGepengRatio
 
             if (params.render.useInpainting) {
-                textRenderer.renderTextInBubble(canvas, coordinateMap[num]!!, text,
-                    backgroundPatch = false, targetLanguage = targetLanguage, bgColor = bgColor,
-                    customFontPath = params.render.customFontPath, fontScale = fontScale, textColorHex = textColorHex,
-                    renderStyle = params.render.renderStyle)
+                textRenderer.renderTextInBubble(
+                    canvas,
+                    coordinateMap[num]!!,
+                    text,
+                    backgroundPatch = false,
+                    targetLanguage = targetLanguage,
+                    bgColor = bgColor,
+                    customFontPath = params.render.customFontPath,
+                    fontScale = fontScale,
+                    textColorHex = textColorHex,
+                    renderStyle = params.render.renderStyle,
+                )
             } else if (params.detection.pakaiPatchUntukBoxGepeng && suspiciousFlat) {
-                textRenderer.renderTextInBubble(canvas, coordinateMap[num]!!, text,
-                    backgroundPatch = true, targetLanguage = targetLanguage, bgColor = bgColor,
-                    customFontPath = params.render.customFontPath, fontScale = fontScale, textColorHex = textColorHex,
-                    renderStyle = params.render.renderStyle)
+                textRenderer.renderTextInBubble(
+                    canvas,
+                    coordinateMap[num]!!,
+                    text,
+                    backgroundPatch = true,
+                    targetLanguage = targetLanguage,
+                    bgColor = bgColor,
+                    customFontPath = params.render.customFontPath,
+                    fontScale = fontScale,
+                    textColorHex = textColorHex,
+                    renderStyle = params.render.renderStyle,
+                )
             } else {
-                textRenderer.renderTextInBubble(canvas, coordinateMap[num]!!, text,
-                    backgroundPatch = false, targetLanguage = targetLanguage, bgColor = bgColor,
-                    customFontPath = params.render.customFontPath, fontScale = fontScale, textColorHex = textColorHex,
-                    renderStyle = params.render.renderStyle)
+                textRenderer.renderTextInBubble(
+                    canvas,
+                    coordinateMap[num]!!,
+                    text,
+                    backgroundPatch = false,
+                    targetLanguage = targetLanguage,
+                    bgColor = bgColor,
+                    customFontPath = params.render.customFontPath,
+                    fontScale = fontScale,
+                    textColorHex = textColorHex,
+                    renderStyle = params.render.renderStyle,
+                )
             }
             count++
         }

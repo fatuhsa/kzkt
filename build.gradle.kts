@@ -15,12 +15,11 @@ buildscript {
     }
 }
 
-// ── ktlint (style enforcement with baseline) ───────────────────────
+// ── ktlint (style enforcement) ─────────────────────────────────────
 // Runs the ktlint CLI directly (no Gradle plugin), so it is independent of AGP /
-// Kotlin plugin versions. A baseline file suppresses pre-existing violations so
-// the check only gates NEW code. Regenerate with:
-//   ./gradlew ktlint --args="--baseline=config/ktlint-baseline.xml"
-// (or delete the baseline and re-run — ktlint recreates it from current sources).
+// Kotlin plugin versions. No baseline: the whole repo must pass, so new code is
+// clean and edits never shift stale baseline line numbers (which used to break
+// CI on every touch of an old file).
 val ktlintVersion = "1.5.0"
 val ktlintConfig: Configuration by configurations.creating {
     // ktlint-cli ships a shadow (fat) jar; select it explicitly or Gradle cannot
@@ -36,7 +35,7 @@ dependencies {
 
 tasks.register<JavaExec>("ktlint") {
     group = "verification"
-    description = "Check Kotlin code style with ktlint (baseline-aware)"
+    description = "Check Kotlin code style with ktlint (no baseline)"
     classpath = ktlintConfig
     mainClass.set("com.pinterest.ktlint.Main")
     args(
@@ -44,6 +43,5 @@ tasks.register<JavaExec>("ktlint") {
         "app/src/test/**/*.kt",
         "buildSrc/src/main/**/*.kt",
         "buildSrc/src/test/**/*.kt",
-        "--baseline=config/ktlint-baseline.xml",
     )
 }

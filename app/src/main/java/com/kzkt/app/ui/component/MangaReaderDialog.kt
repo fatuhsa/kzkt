@@ -2,21 +2,24 @@ package com.kzkt.app.ui.component
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.pdf.PdfRenderer
-import android.os.ParcelFileDescriptor
-import android.util.LruCache
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculatePan
-import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -25,44 +28,60 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderZip
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material.icons.filled.ViewCarousel
-import androidx.compose.material.icons.filled.Compare
-import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.FullscreenExit
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.kzkt.app.ui.FileUtils
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * Decode a page bitmap downsampled so its longest edge is at most [maxDim] px.
  * Reading bounds first lets us pick an inSampleSize power-of-two before the
  * actual decode, keeping reader memory bounded.
  */
-private fun decodeSampledBitmap(path: String, maxDim: Int = 2048): Bitmap? {
-    return try {
+private fun decodeSampledBitmap(
+    path: String,
+    maxDim: Int = 2048,
+): Bitmap? =
+    try {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, bounds)
         var sampleSize = 1
@@ -73,21 +92,37 @@ private fun decodeSampledBitmap(path: String, maxDim: Int = 2048): Bitmap? {
     } catch (_: Exception) {
         null
     }
-}
 
-private fun loadReaderBitmap(context: android.content.Context, path: String, isSideBySide: Boolean): Bitmap? {
+private fun loadReaderBitmap(
+    context: android.content.Context,
+    path: String,
+    isSideBySide: Boolean,
+): Bitmap? {
     val translated = decodeSampledBitmap(path) ?: return null
     if (!isSideBySide) return translated
 
     val metaDir = java.io.File(context.filesDir, "edit_meta")
-    val digest = java.security.MessageDigest.getInstance("SHA-256").digest(java.io.File(path).name.toByteArray())
+    val digest =
+        java.security.MessageDigest
+            .getInstance("SHA-256")
+            .digest(
+                java.io
+                    .File(path)
+                    .name
+                    .toByteArray(),
+            )
     val key = digest.joinToString("") { "%02x".format(it.toInt() and 0xff) }.take(16)
     val origFile = java.io.File(metaDir, "$key.png")
-    
+
     val original = if (origFile.exists()) decodeSampledBitmap(origFile.absolutePath) else null
     if (original == null) return translated
 
-    val combined = Bitmap.createBitmap(original.width + translated.width, maxOf(original.height, translated.height), Bitmap.Config.ARGB_8888)
+    val combined =
+        Bitmap.createBitmap(
+            original.width + translated.width,
+            maxOf(original.height, translated.height),
+            Bitmap.Config.ARGB_8888,
+        )
     val canvas = android.graphics.Canvas(combined)
     canvas.drawBitmap(original, 0f, 0f, null)
     canvas.drawBitmap(translated, original.width.toFloat(), 0f, null)
@@ -124,8 +159,10 @@ fun MangaReaderDialog(
     // cached bitmap stayed until the page left composition, e.g. swipe away & back).
     var pageReloadTick by remember { mutableIntStateOf(0) }
     var isZoomed by remember { mutableStateOf(false) }
-    var isWebtoonMode by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
-    var isSideBySide by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var isWebtoonMode by androidx.compose.runtime.saveable
+        .rememberSaveable { mutableStateOf(false) }
+    var isSideBySide by androidx.compose.runtime.saveable
+        .rememberSaveable { mutableStateOf(false) }
     var isImmersive by remember { mutableStateOf(false) }
 
     // ── Immersive fullscreen (hide system bars) ──
@@ -133,19 +170,31 @@ fun MangaReaderDialog(
     val activityWindow = remember(context) { context.findActivity()?.window }
     LaunchedEffect(isImmersive) {
         val w = activityWindow ?: return@LaunchedEffect
-        val controller = androidx.core.view.WindowCompat.getInsetsController(w, dialogView)
+        val controller =
+            androidx.core.view.WindowCompat
+                .getInsetsController(w, dialogView)
         if (isImmersive) {
-            controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            controller.hide(
+                androidx.core.view.WindowInsetsCompat.Type
+                    .systemBars(),
+            )
             controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         } else {
-            controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            controller.show(
+                androidx.core.view.WindowInsetsCompat.Type
+                    .systemBars(),
+            )
         }
     }
     DisposableEffect(Unit) {
         onDispose {
             activityWindow?.let { w ->
-                androidx.core.view.WindowCompat.getInsetsController(w, dialogView)
-                    .show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                androidx.core.view.WindowCompat
+                    .getInsetsController(w, dialogView)
+                    .show(
+                        androidx.core.view.WindowInsetsCompat.Type
+                            .systemBars(),
+                    )
             }
         }
     }
@@ -170,15 +219,16 @@ fun MangaReaderDialog(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnBackPress = true,
-            dismissOnClickOutside = false
-        )
+        properties =
+            DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = false,
+            ),
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = Color.Black
+            color = Color.Black,
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 if (isWebtoonMode) {
@@ -188,35 +238,43 @@ fun MangaReaderDialog(
                         // a clickable on a scrollable container competes with the drag
                         // gesture and can freeze vertical scrolling. detectTapGestures
                         // only reacts to a clean tap and lets drag/fling pass through.
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(Unit) {
-                                detectTapGestures { showControls = !showControls }
-                            }
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .pointerInput(Unit) {
+                                    detectTapGestures { showControls = !showControls }
+                                },
                     ) {
                         items(pagePaths.size) { pageIndex ->
                             val path = pagePaths[pageIndex]
-                            val bitmap by produceState<Bitmap?>(initialValue = null, key1 = path, key2 = isSideBySide, key3 = pageReloadTick) {
-                                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                    loadReaderBitmap(context, path, isSideBySide)
-                                }
+                            val bitmap by produceState<Bitmap?>(
+                                initialValue = null,
+                                key1 = path,
+                                key2 = isSideBySide,
+                                key3 = pageReloadTick,
+                            ) {
+                                value =
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        loadReaderBitmap(context, path, isSideBySide)
+                                    }
                             }
                             val bmp = bitmap
                             // Reserve the page's aspect ratio while decoding so the list
                             // always has scrollable height (0-height items would make the
                             // list feel frozen until every page finishes loading).
                             Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(if (bmp != null) bmp.width.toFloat() / bmp.height else 3f / 4f)
-                                    .background(Color(0xFF1A1A1A))
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(if (bmp != null) bmp.width.toFloat() / bmp.height else 3f / 4f)
+                                        .background(Color(0xFF1A1A1A)),
                             ) {
                                 bmp?.let { loaded ->
                                     Image(
                                         bitmap = loaded.asImageBitmap(),
                                         contentDescription = "Page ${pageIndex + 1}",
                                         modifier = Modifier.fillMaxWidth(),
-                                        contentScale = ContentScale.FillWidth
+                                        contentScale = ContentScale.FillWidth,
                                     )
                                 }
                             }
@@ -227,20 +285,21 @@ fun MangaReaderDialog(
                     HorizontalPager(
                         state = pagerState,
                         userScrollEnabled = !isZoomed,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
                     ) { pageIndex ->
                         val path = pagePaths[pageIndex]
 
                         val bitmap by produceState<Bitmap?>(initialValue = null, key1 = path, key2 = isSideBySide, key3 = pageReloadTick) {
-                            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                loadReaderBitmap(context, path, isSideBySide)
-                            }
+                            value =
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    loadReaderBitmap(context, path, isSideBySide)
+                                }
                         }
 
                         ZoomablePageViewer(
                             bitmap = bitmap,
                             onTap = { showControls = !showControls },
-                            onZoomStateChanged = { zoomed -> isZoomed = zoomed }
+                            onZoomStateChanged = { zoomed -> isZoomed = zoomed },
                         )
                     }
                 }
@@ -250,14 +309,14 @@ fun MangaReaderDialog(
                     visible = showControls,
                     enter = fadeIn() + slideInVertically { -it },
                     exit = fadeOut() + slideOutVertically { -it },
-                    modifier = Modifier.align(Alignment.TopCenter)
+                    modifier = Modifier.align(Alignment.TopCenter),
                 ) {
                     TopAppBar(
                         title = {
                             Text(
                                 text = "Page ${currentPageIndex + 1} / ${pagePaths.size}",
                                 style = MaterialTheme.typography.titleMedium.copy(color = Color.White),
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
                             )
                         },
                         navigationIcon = {
@@ -265,7 +324,7 @@ fun MangaReaderDialog(
                                 Icon(
                                     Icons.AutoMirrored.Filled.ArrowBack,
                                     contentDescription = "Close Reader",
-                                    tint = Color.White
+                                    tint = Color.White,
                                 )
                             }
                         },
@@ -274,27 +333,28 @@ fun MangaReaderDialog(
                                 Icon(
                                     Icons.Default.Compare,
                                     contentDescription = "Side-by-side View",
-                                    tint = if (isSideBySide) MaterialTheme.colorScheme.primary else Color.White
+                                    tint = if (isSideBySide) MaterialTheme.colorScheme.primary else Color.White,
                                 )
                             }
                             IconButton(onClick = { isWebtoonMode = !isWebtoonMode }) {
                                 Icon(
                                     if (isWebtoonMode) Icons.Default.ViewAgenda else Icons.Default.ViewCarousel,
                                     contentDescription = "Toggle Webtoon Mode",
-                                    tint = Color.White
+                                    tint = Color.White,
                                 )
                             }
                             IconButton(onClick = { isImmersive = !isImmersive }) {
                                 Icon(
                                     if (isImmersive) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
                                     contentDescription = "Toggle Fullscreen",
-                                    tint = if (isImmersive) MaterialTheme.colorScheme.primary else Color.White
+                                    tint = if (isImmersive) MaterialTheme.colorScheme.primary else Color.White,
                                 )
                             }
                         },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Black.copy(alpha = 0.7f)
-                        )
+                        colors =
+                            TopAppBarDefaults.topAppBarColors(
+                                containerColor = Color.Black.copy(alpha = 0.7f),
+                            ),
                     )
                 }
 
@@ -303,21 +363,23 @@ fun MangaReaderDialog(
                     visible = showControls,
                     enter = fadeIn() + slideInVertically { it },
                     exit = fadeOut() + slideOutVertically { it },
-                    modifier = Modifier.align(Alignment.BottomCenter)
+                    modifier = Modifier.align(Alignment.BottomCenter),
                 ) {
                     Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
                         shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f)
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             // Edit Text Button — resolves the page's bubble data from the
                             // persisted edit metadata first (works from History too), then
@@ -327,9 +389,12 @@ fun MangaReaderDialog(
                             IconButton(onClick = {
                                 val currentPath = pagePaths[currentPageIndex]
                                 scope.launch {
-                                    val meta = withContext(Dispatchers.IO) {
-                                        com.kzkt.app.data.EditMetadataRepository(context).loadForOutput(currentPath)
-                                    }
+                                    val meta =
+                                        withContext(Dispatchers.IO) {
+                                            com.kzkt.app.data
+                                                .EditMetadataRepository(context)
+                                                .loadForOutput(currentPath)
+                                        }
                                     if (meta != null) {
                                         activeEditorBmp = meta.originalBitmap
                                         activeTranslations = meta.translations
@@ -345,9 +410,11 @@ fun MangaReaderDialog(
                                         activeStyles = pipelineResult.styles
                                         showEditor = true
                                     } else {
-                                        val pageBmp = withContext(Dispatchers.IO) {
-                                            com.kzkt.app.core.ImageProcessor.loadBitmap(currentPath)
-                                        }
+                                        val pageBmp =
+                                            withContext(Dispatchers.IO) {
+                                                com.kzkt.app.core.ImageProcessor
+                                                    .loadBitmap(currentPath)
+                                            }
                                         if (pageBmp != null) {
                                             activeEditorBmp = pageBmp
                                             activeTranslations = emptyMap()
@@ -362,7 +429,7 @@ fun MangaReaderDialog(
                                 Icon(
                                     Icons.Default.Edit,
                                     contentDescription = "Edit Text",
-                                    tint = MaterialTheme.colorScheme.primary
+                                    tint = MaterialTheme.colorScheme.primary,
                                 )
                             }
 
@@ -371,44 +438,65 @@ fun MangaReaderDialog(
                                 onClick = {
                                     val currentPath = pagePaths[currentPageIndex]
                                     FileUtils.shareFile(context, currentPath)
-                                }
+                                },
                             ) {
                                 Icon(
                                     Icons.Default.Share,
                                     contentDescription = "Share",
-                                    tint = MaterialTheme.colorScheme.onSurface
+                                    tint = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
-                            
+
                             // Export CBZ Button
                             if (pagePaths.size > 1) {
                                 IconButton(
                                     onClick = {
                                         scope.launch(Dispatchers.IO) {
                                             val fileName = "KZKT_Export_${System.currentTimeMillis()}.zip"
-                                            val cbzFile = com.kzkt.app.util.ArchiveExtractor.createCbz(context, pagePaths, fileName)
+                                            val cbzFile =
+                                                com.kzkt.app.util.ArchiveExtractor
+                                                    .createCbz(context, pagePaths, fileName)
                                             withContext(Dispatchers.Main) {
                                                 if (cbzFile != null) {
                                                     // Copy into the public Downloads/KZKT main folder (same
                                                     // pattern as the History export), then drop the temp copy.
-                                                    val publicPath = com.kzkt.app.ui.FileUtils.saveToMediaStore(context, cbzFile.absolutePath)
+                                                    val publicPath =
+                                                        com.kzkt.app.ui.FileUtils.saveToMediaStore(
+                                                            context,
+                                                            cbzFile.absolutePath,
+                                                        )
                                                     if (publicPath != null) {
                                                         cbzFile.delete()
-                                                        android.widget.Toast.makeText(context, "Saved to Downloads/KZKT: ${File(publicPath).name}", android.widget.Toast.LENGTH_LONG).show()
+                                                        android.widget.Toast
+                                                            .makeText(
+                                                                context,
+                                                                "Saved to Downloads/KZKT: ${File(publicPath).name}",
+                                                                android.widget.Toast.LENGTH_LONG,
+                                                            ).show()
                                                     } else {
-                                                        android.widget.Toast.makeText(context, "Exported to Downloads: ${cbzFile.name}", android.widget.Toast.LENGTH_LONG).show()
+                                                        android.widget.Toast
+                                                            .makeText(
+                                                                context,
+                                                                "Exported to Downloads: ${cbzFile.name}",
+                                                                android.widget.Toast.LENGTH_LONG,
+                                                            ).show()
                                                     }
                                                 } else {
-                                                    android.widget.Toast.makeText(context, "Export failed", android.widget.Toast.LENGTH_SHORT).show()
+                                                    android.widget.Toast
+                                                        .makeText(
+                                                            context,
+                                                            "Export failed",
+                                                            android.widget.Toast.LENGTH_SHORT,
+                                                        ).show()
                                                 }
                                             }
                                         }
-                                    }
+                                    },
                                 ) {
                                     Icon(
                                         Icons.Filled.FolderZip,
                                         contentDescription = "Export ZIP",
-                                        tint = MaterialTheme.colorScheme.onSurface
+                                        tint = MaterialTheme.colorScheme.onSurface,
                                     )
                                 }
                             }
@@ -422,7 +510,9 @@ fun MangaReaderDialog(
                         originalBitmap = activeEditorBmp!!,
                         translations = activeTranslations,
                         coordinateMap = activeCoords,
-                        textRenderer = com.kzkt.app.core.TextRenderer(context),
+                        textRenderer =
+                            com.kzkt.app.core
+                                .TextRenderer(context),
                         targetLanguage = targetLanguage,
                         customFontPath = customFontPath,
                         renderStyle = renderStyle,
@@ -448,8 +538,14 @@ fun MangaReaderDialog(
                                     if (pristineOriginal != null) {
                                         try {
                                             com.kzkt.app.data.EditMetadataRepository(context).saveForOutput(
-                                                currentPath, pristineOriginal, updatedTranslations,
-                                                updatedCoords, targetLanguage, activeRawTexts, updatedStyles)
+                                                currentPath,
+                                                pristineOriginal,
+                                                updatedTranslations,
+                                                updatedCoords,
+                                                targetLanguage,
+                                                activeRawTexts,
+                                                updatedStyles,
+                                            )
                                         } catch (e: Exception) {
                                             savedOk = false
                                             android.util.Log.w("KZKT", "Failed to save edit metadata: ${e.message}")
@@ -461,398 +557,26 @@ fun MangaReaderDialog(
                                         // onSaved() always runs so the editor never gets stuck.
                                         if (savedOk) {
                                             pageReloadTick++
-                                            android.widget.Toast.makeText(context, "Changes saved", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast
+                                                .makeText(
+                                                    context,
+                                                    "Changes saved",
+                                                    android.widget.Toast.LENGTH_SHORT,
+                                                ).show()
                                         } else {
-                                            android.widget.Toast.makeText(context, "Failed to save changes", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast
+                                                .makeText(
+                                                    context,
+                                                    "Failed to save changes",
+                                                    android.widget.Toast.LENGTH_SHORT,
+                                                ).show()
                                         }
                                         onSaved()
                                     }
                                 }
                             }
-                        }
+                        },
                     )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ZoomablePageViewer(
-    bitmap: Bitmap?,
-    onTap: () -> Unit,
-    onZoomStateChanged: (Boolean) -> Unit = {}
-) {
-    if (bitmap == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = Color.White)
-        }
-        return
-    }
-
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
-    // Viewport size (from layout) is used to clamp pan so the image can never be
-    // pushed fully off-screen while zoomed.
-    var viewportSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
-    // Pan multiplier: while zoomed, the image follows the finger more eagerly than
-    // 1:1 so small drags cover more ground (previous feel was sluggish).
-    val panSensitivity = 1.8f
-
-    LaunchedEffect(bitmap) {
-        scale = 1f
-        offset = Offset.Zero
-        onZoomStateChanged(false)
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .onSizeChanged { viewportSize = it }
-            .combinedClickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onTap,
-                onDoubleClick = {
-                    if (scale > 1f) {
-                        scale = 1f
-                        offset = Offset.Zero
-                        onZoomStateChanged(false)
-                    } else {
-                        scale = 2.5f
-                        onZoomStateChanged(true)
-                    }
-                }
-            )
-            .graphicsLayer(
-                scaleX = scale,
-                scaleY = scale,
-                translationX = offset.x,
-                translationY = offset.y
-            )
-            // Custom gesture handling replaces Modifier.transformable, which had
-            // `enabled = scale > 1f` — that made pinch-zoom dead at 1x (only the
-            // double-tap could zoom in). This handler:
-            //  - pinches (2+ fingers) always, even from 1x;
-            //  - pans with a single finger only once zoomed;
-            //  - leaves 1x single-finger swipes unconsumed so the pager still pages.
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    do {
-                        val event = awaitPointerEvent()
-                        val pointerCount = event.changes.count { it.pressed }
-                        if (pointerCount >= 2 || scale > 1f) {
-                            val zoomChange = event.calculateZoom()
-                            val panChange = event.calculatePan()
-                            event.changes.forEach { if (it.positionChanged()) it.consume() }
-
-                            val newScale = (scale * zoomChange).coerceIn(1f, 4f)
-                            scale = newScale
-                            onZoomStateChanged(newScale > 1f)
-                            if (newScale > 1f) {
-                                offset += panChange * panSensitivity
-                                // Keep the image on screen: limit pan to the extra
-                                // space the zoom reveals around the viewport center.
-                                if (viewportSize.width > 0 && viewportSize.height > 0) {
-                                    val maxX = viewportSize.width * (newScale - 1f) / 2f
-                                    val maxY = viewportSize.height * (newScale - 1f) / 2f
-                                    offset = Offset(
-                                        offset.x.coerceIn(-maxX, maxX),
-                                        offset.y.coerceIn(-maxY, maxY)
-                                    )
-                                }
-                            } else {
-                                offset = Offset.Zero
-                            }
-                        }
-                    } while (event.changes.any { it.pressed })
-                }
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        androidx.compose.foundation.Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Fit
-        )
-    }
-}
-
-/** Unwrap a (dialog/theme-wrapped) Context to the owning Activity, if any. */
-private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
-    is android.app.Activity -> this
-    is android.content.ContextWrapper -> baseContext.findActivity()
-    else -> null
-}
-
-/**
- * Holds the PdfRenderer for [PdfReaderDialog] plus a small LRU of rendered page
- * bitmaps so swiping back to an already-seen page is instant.
- *
- * Thread-safety: PdfRenderer is NOT thread-safe, and the pager/webtoon items
- * render on IO concurrently — every render call is therefore synchronized.
- *
- * Evicted bitmaps are deliberately NOT recycled here: a page composable may
- * still be drawing a bitmap during a fast fling, and recycling it would crash
- * with "Canvas: trying to use a recycled bitmap". The LRU bound keeps the live
- * set small, and page composables drop their references as they leave the
- * screen, letting GC reclaim the memory.
- */
-private class PdfReaderState(context: android.content.Context, pdfPath: String) {
-    private var fd: ParcelFileDescriptor? = null
-    private var renderer: PdfRenderer? = null
-    private val cache = LruCache<Int, Bitmap>(MAX_CACHED_PAGES)
-
-    val pageCount: Int
-        get() = renderer?.pageCount ?: 0
-
-    init {
-        com.kzkt.app.util.PdfImporter.openPdfFileDescriptor(context, File(pdfPath))?.let { pfd ->
-            fd = pfd
-            renderer = try {
-                PdfRenderer(pfd)
-            } catch (e: Exception) {
-                android.util.Log.w("KZKT/PDF", "PdfRenderer init failed: ${e.message}")
-                try { pfd.close() } catch (_: Exception) {}
-                fd = null
-                null
-            }
-        }
-    }
-
-    @Synchronized
-    fun renderPage(index: Int): Bitmap? {
-        cache.get(index)?.let { return it }
-        val r = renderer ?: return null
-        if (index !in 0 until r.pageCount) return null
-        val page = r.openPage(index)
-        return try {
-            // Uniform scale so the page aspect ratio is always preserved (the same
-            // bug fixed in PdfImporter: an asymmetric cap squishes/stretches pages).
-            val maxDim = 1600
-            val rawW = page.width.toFloat()
-            val rawH = page.height.toFloat()
-            val fit = minOf(1.0f, maxDim / maxOf(rawW, rawH))
-            val width = (rawW * fit).toInt().coerceAtLeast(1)
-            val height = (rawH * fit).toInt().coerceAtLeast(1)
-            val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            cache.put(index, bmp)
-            bmp
-        } catch (e: Exception) {
-            android.util.Log.w("KZKT/PDF", "Failed to render page ${index + 1}: ${e.message}")
-            null
-        } finally {
-            page.close()
-        }
-    }
-
-    @Synchronized
-    fun close() {
-        cache.evictAll()
-        renderer?.close()
-        renderer = null
-        try { fd?.close() } catch (_: Exception) {}
-        fd = null
-    }
-
-    companion object {
-        private const val MAX_CACHED_PAGES = 5
-    }
-}
-
-/**
- * Fast in-app PDF reader. Pages are rendered lazily from the PDF via Android
- * PdfRenderer — only the pages on screen — so a translated PDF opens instantly.
- * (The previous flow rasterized every page to disk up front, which was slow for
- * multi-page manga.) Supports pinch-zoom, webtoon mode, and sharing the PDF.
- */
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
-@Composable
-fun PdfReaderDialog(
-    pdfPath: String,
-    onDismiss: () -> Unit,
-) {
-    val context = LocalContext.current
-
-    // Owns the renderer + page cache for the lifetime of the dialog.
-    val pdfState = remember(pdfPath) { PdfReaderState(context, pdfPath) }
-    DisposableEffect(pdfState) {
-        onDispose {
-            // Close off the main thread: close() waits (via its lock) for any
-            // in-flight IO page render, which would otherwise stall dismissal.
-            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                pdfState.close()
-            }
-        }
-    }
-
-    val pageCount = pdfState.pageCount
-    if (pageCount <= 0) {
-        Dialog(
-            onDismissRequest = onDismiss,
-            properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)
-        ) {
-            Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Could not open PDF", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(8.dp))
-                        TextButton(onClick = onDismiss) {
-                            Text("Close", color = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                }
-            }
-        }
-        return
-    }
-
-    val pagerState = rememberPagerState(initialPage = 0) { pageCount }
-    var showControls by remember { mutableStateOf(true) }
-    var isZoomed by remember { mutableStateOf(false) }
-    var isWebtoonMode by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
-
-    val webtoonListState = rememberLazyListState()
-    val visibleWebtoonPage by remember { derivedStateOf { webtoonListState.firstVisibleItemIndex } }
-    val currentPageIndex = if (isWebtoonMode) visibleWebtoonPage.coerceIn(0, pageCount - 1) else pagerState.currentPage
-
-    LaunchedEffect(isWebtoonMode) {
-        if (isWebtoonMode) webtoonListState.scrollToItem(pagerState.currentPage)
-    }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnBackPress = true,
-            dismissOnClickOutside = false
-        )
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = Color.Black
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                if (isWebtoonMode) {
-                    LazyColumn(
-                        state = webtoonListState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(Unit) {
-                                detectTapGestures { showControls = !showControls }
-                            }
-                    ) {
-                        items(pageCount) { pageIndex ->
-                            val bitmap by produceState<Bitmap?>(initialValue = null, key1 = pageIndex) {
-                                value = withContext(Dispatchers.IO) { pdfState.renderPage(pageIndex) }
-                            }
-                            val bmp = bitmap
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(if (bmp != null) bmp.width.toFloat() / bmp.height else 3f / 4f)
-                                    .background(Color(0xFF1A1A1A))
-                            ) {
-                                bmp?.let { loaded ->
-                                    Image(
-                                        bitmap = loaded.asImageBitmap(),
-                                        contentDescription = "Page ${pageIndex + 1}",
-                                        modifier = Modifier.fillMaxWidth(),
-                                        contentScale = ContentScale.FillWidth
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    HorizontalPager(
-                        state = pagerState,
-                        userScrollEnabled = !isZoomed,
-                        modifier = Modifier.fillMaxSize()
-                    ) { pageIndex ->
-                        val bitmap by produceState<Bitmap?>(initialValue = null, key1 = pageIndex) {
-                            value = withContext(Dispatchers.IO) { pdfState.renderPage(pageIndex) }
-                        }
-                        ZoomablePageViewer(
-                            bitmap = bitmap,
-                            onTap = { showControls = !showControls },
-                            onZoomStateChanged = { zoomed -> isZoomed = zoomed }
-                        )
-                    }
-                }
-
-                // ── Top App Bar (Controls) ──
-                AnimatedVisibility(
-                    visible = showControls,
-                    enter = fadeIn() + slideInVertically { -it },
-                    exit = fadeOut() + slideOutVertically { -it },
-                    modifier = Modifier.align(Alignment.TopCenter)
-                ) {
-                    TopAppBar(
-                        title = {
-                            Text(
-                                text = "Page ${currentPageIndex + 1} / $pageCount",
-                                style = MaterialTheme.typography.titleMedium.copy(color = Color.White),
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = onDismiss) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Close Reader",
-                                    tint = Color.White
-                                )
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = { isWebtoonMode = !isWebtoonMode }) {
-                                Icon(
-                                    if (isWebtoonMode) Icons.Default.ViewAgenda else Icons.Default.ViewCarousel,
-                                    contentDescription = "Toggle Webtoon Mode",
-                                    tint = Color.White
-                                )
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Black.copy(alpha = 0.7f)
-                        )
-                    )
-                }
-
-                // ── Bottom Toolbar ──
-                AnimatedVisibility(
-                    visible = showControls,
-                    enter = fadeIn() + slideInVertically { it },
-                    exit = fadeOut() + slideOutVertically { it },
-                    modifier = Modifier.align(Alignment.BottomCenter)
-                ) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = { FileUtils.shareAnyFile(context, pdfPath, "application/pdf") }) {
-                                Icon(
-                                    Icons.Default.Share,
-                                    contentDescription = "Share PDF",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-                    }
                 }
             }
         }

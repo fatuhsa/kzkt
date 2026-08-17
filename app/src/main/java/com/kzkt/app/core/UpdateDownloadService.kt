@@ -23,12 +23,18 @@ import okhttp3.Call
  * this flow; MainViewModel collects it and updates its updateState.
  */
 object UpdateDownloadTracker {
-
     sealed interface Event {
-        data class Progress(val progress: UpdateManager.DownloadProgress) : Event
+        data class Progress(
+            val progress: UpdateManager.DownloadProgress,
+        ) : Event
+
         data object Completed : Event
+
         data object Cancelled : Event
-        data class Failed(val message: String) : Event
+
+        data class Failed(
+            val message: String,
+        ) : Event
     }
 
     private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 64)
@@ -51,7 +57,6 @@ object UpdateDownloadTracker {
  * launch restrictions while a foreground service is running).
  */
 class UpdateDownloadService : Service() {
-
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Volatile
@@ -71,23 +76,31 @@ class UpdateDownloadService : Service() {
         private const val EXTRA_NOTES = "notes"
         private const val EXTRA_PUBLISHED = "publishedAt"
 
-        fun start(context: Context, info: UpdateManager.UpdateInfo) {
-            val intent = Intent(context, UpdateDownloadService::class.java).apply {
-                action = ACTION_START
-                putExtra(EXTRA_VERSION, info.version)
-                putExtra(EXTRA_APK_NAME, info.apkFileName)
-                putExtra(EXTRA_APK_URL, info.apkUrl)
-                putExtra(EXTRA_APK_SIZE, info.apkSizeBytes)
-                putExtra(EXTRA_NOTES, info.releaseNotes)
-                putExtra(EXTRA_PUBLISHED, info.publishedAt)
-            }
+        fun start(
+            context: Context,
+            info: UpdateManager.UpdateInfo,
+        ) {
+            val intent =
+                Intent(context, UpdateDownloadService::class.java).apply {
+                    action = ACTION_START
+                    putExtra(EXTRA_VERSION, info.version)
+                    putExtra(EXTRA_APK_NAME, info.apkFileName)
+                    putExtra(EXTRA_APK_URL, info.apkUrl)
+                    putExtra(EXTRA_APK_SIZE, info.apkSizeBytes)
+                    putExtra(EXTRA_NOTES, info.releaseNotes)
+                    putExtra(EXTRA_PUBLISHED, info.publishedAt)
+                }
             ContextCompat.startForegroundService(context, intent)
         }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int,
+    ): Int {
         when (intent?.action) {
             ACTION_CANCEL -> {
                 cancelled = true
@@ -98,17 +111,18 @@ class UpdateDownloadService : Service() {
                 stopSelf()
             }
             ACTION_START -> {
-                val info = intent.toUpdateInfo() ?: run {
-                    stopSelf()
-                    return START_NOT_STICKY
-                }
+                val info =
+                    intent.toUpdateInfo() ?: run {
+                        stopSelf()
+                        return START_NOT_STICKY
+                    }
                 // Android 14+ requires an explicit foreground service type; dataSync
                 // matches the manifest declaration + FOREGROUND_SERVICE_DATA_SYNC.
                 ServiceCompat.startForeground(
                     this,
                     UpdateManager.UPDATE_NOTIFICATION_ID,
                     UpdateManager.buildDownloadNotification(this, info, null),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
                 )
                 scope.launch { runDownload(info) }
             }
@@ -119,15 +133,17 @@ class UpdateDownloadService : Service() {
 
     private suspend fun runDownload(info: UpdateManager.UpdateInfo) {
         try {
-            val file = UpdateManager.downloadApkWithRetry(
-                this, info,
-                onProgress = { p ->
-                    UpdateManager.updateDownloadNotification(this, info, p)
-                    UpdateDownloadTracker.emit(UpdateDownloadTracker.Event.Progress(p))
-                },
-                isCancelled = { cancelled },
-                onCallCreated = { currentCall = it },
-            )
+            val file =
+                UpdateManager.downloadApkWithRetry(
+                    this,
+                    info,
+                    onProgress = { p ->
+                        UpdateManager.updateDownloadNotification(this, info, p)
+                        UpdateDownloadTracker.emit(UpdateDownloadTracker.Event.Progress(p))
+                    },
+                    isCancelled = { cancelled },
+                    onCallCreated = { currentCall = it },
+                )
             UpdateManager.cancelDownloadNotification(this)
             UpdateDownloadTracker.emit(UpdateDownloadTracker.Event.Completed)
             UpdateManager.installApk(this, file)
