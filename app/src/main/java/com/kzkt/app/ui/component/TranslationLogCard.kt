@@ -64,10 +64,11 @@ fun SystemLogsButton(
         shape = RoundedCornerShape(50),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(50))
-            .clickable(onClick = onClick),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(50))
+                .clickable(onClick = onClick),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -115,15 +116,17 @@ fun TranslationLogBottomSheet(
         dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
         ) {
             // Header Row: Title on left, Entry count + Copy button on right
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -167,10 +170,11 @@ fun TranslationLogBottomSheet(
 
             if (logList.isEmpty()) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp)
-                        .padding(16.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(140.dp)
+                            .padding(16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -182,10 +186,11 @@ fun TranslationLogBottomSheet(
             } else {
                 LazyColumn(
                     state = logListState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 200.dp, max = 460.dp)
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 200.dp, max = 460.dp)
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     itemsIndexed(logList, key = { index, _ -> index }) { _, msg ->
@@ -196,11 +201,12 @@ fun TranslationLogBottomSheet(
                             style = MaterialTheme.typography.bodySmall,
                             fontSize = 11.5.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = when {
-                                isError -> MaterialTheme.colorScheme.error
-                                isSuccess -> MaterialTheme.colorScheme.primary
-                                else -> MaterialTheme.colorScheme.onSurface
-                            },
+                            color =
+                                when {
+                                    isError -> MaterialTheme.colorScheme.error
+                                    isSuccess -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.onSurface
+                                },
                         )
                     }
                 }
@@ -219,17 +225,19 @@ fun TranslationLogCard(
 ) {
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             val context = LocalContext.current
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -279,9 +287,10 @@ fun TranslationLogCard(
             } else {
                 LazyColumn(
                     state = logListState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     itemsIndexed(logList, key = { index, _ -> index }) { _, msg ->
@@ -290,8 +299,12 @@ fun TranslationLogCard(
                             msg,
                             style = MaterialTheme.typography.bodySmall,
                             fontSize = 11.sp,
-                            color = if (isError) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.onSurface,
+                            color =
+                                if (isError) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
                         )
                     }
                 }

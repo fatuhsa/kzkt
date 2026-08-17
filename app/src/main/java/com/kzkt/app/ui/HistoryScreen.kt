@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
@@ -29,10 +27,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -71,9 +67,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(
-    viewModel: MainViewModel,
-) {
+fun HistoryScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val entries by viewModel.historyEntries.collectAsStateWithLifecycle()
@@ -110,32 +104,37 @@ fun HistoryScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val filteredEntries = remember(entries, query, removedIds) {
-        filterHistoryEntries(
-            entries = entries,
-            query = query,
-            removedIds = removedIds,
-        )
-    }
+    val filteredEntries =
+        remember(entries, query, removedIds) {
+            filterHistoryEntries(
+                entries = entries,
+                query = query,
+                removedIds = removedIds,
+            )
+        }
 
     // Apply the chosen sort to the displayed list. Grouping by day happens AFTER
     // sorting so each day bucket keeps the selected order internally.
-    val sortedFiltered = remember(filteredEntries, sortMode, sortDescending) {
-        sortHistoryEntries(filteredEntries, sortMode, sortDescending)
-    }
+    val sortedFiltered =
+        remember(filteredEntries, sortMode, sortDescending) {
+            sortHistoryEntries(filteredEntries, sortMode, sortDescending)
+        }
     val groupedEntries = remember(sortedFiltered) { groupByDayAndBatch(sortedFiltered) }
 
     // Total page count per translation run (from the unfiltered list) — used to
     // show "X of Y pages match" on folder cards while a search is active.
-    val batchTotals = remember(entries, removedIds) {
-        entries.filterNot { it.timestamp in removedIds }
-            .groupingBy { batchKeyOf(it) }
-            .eachCount()
-    }
+    val batchTotals =
+        remember(entries, removedIds) {
+            entries
+                .filterNot { it.timestamp in removedIds }
+                .groupingBy { batchKeyOf(it) }
+                .eachCount()
+        }
     // Pages of the currently open folder (still query-filtered, still sorted).
-    val folderEntries = remember(openBatchKey, sortedFiltered) {
-        if (openBatchKey == null) emptyList() else sortedFiltered.filter { batchKeyOf(it) == openBatchKey }
-    }
+    val folderEntries =
+        remember(openBatchKey, sortedFiltered) {
+            if (openBatchKey == null) emptyList() else sortedFiltered.filter { batchKeyOf(it) == openBatchKey }
+        }
 
     fun openReaderForEntry(entry: HistoryEntry) {
         val file = File(entry.outputPath)
@@ -164,11 +163,12 @@ fun HistoryScreen(
         removedIds = removedIds + entry.timestamp
         viewModel.deleteHistoryEntry(entry.timestamp)
         scope.launch {
-            val result = snackbarHostState.showSnackbar(
-                message = "Deleted \"${entry.fileName}\"",
-                actionLabel = "Undo",
-                duration = SnackbarDuration.Short,
-            )
+            val result =
+                snackbarHostState.showSnackbar(
+                    message = "Deleted \"${entry.fileName}\"",
+                    actionLabel = "Undo",
+                    duration = SnackbarDuration.Short,
+                )
             if (result == SnackbarResult.ActionPerformed) {
                 removedIds = removedIds - entry.timestamp
                 viewModel.restoreHistoryEntry(entry)
@@ -183,11 +183,12 @@ fun HistoryScreen(
         clearedSnapshot = snapshot
         viewModel.clearHistory()
         scope.launch {
-            val result = snackbarHostState.showSnackbar(
-                message = "History cleared",
-                actionLabel = "Undo",
-                duration = SnackbarDuration.Short,
-            )
+            val result =
+                snackbarHostState.showSnackbar(
+                    message = "History cleared",
+                    actionLabel = "Undo",
+                    duration = SnackbarDuration.Short,
+                )
             if (result == SnackbarResult.ActionPerformed) {
                 clearedSnapshot?.let { viewModel.restoreHistoryEntries(it) }
             }
@@ -201,11 +202,12 @@ fun HistoryScreen(
     }
 
     fun toggleSelect(entry: HistoryEntry) {
-        selectedTimestamps = if (entry.timestamp in selectedTimestamps) {
-            selectedTimestamps - entry.timestamp
-        } else {
-            selectedTimestamps + entry.timestamp
-        }
+        selectedTimestamps =
+            if (entry.timestamp in selectedTimestamps) {
+                selectedTimestamps - entry.timestamp
+            } else {
+                selectedTimestamps + entry.timestamp
+            }
     }
 
     /** Toggle every page of a translation run at once (folder-card select). */
@@ -220,11 +222,12 @@ fun HistoryScreen(
         removedIds = removedIds + batchEntries.map { it.timestamp }
         batchEntries.forEach { viewModel.deleteHistoryEntry(it.timestamp) }
         scope.launch {
-            val result = snackbarHostState.showSnackbar(
-                message = "Deleted ${batchEntries.size} entr${if (batchEntries.size == 1) "y" else "ies"}",
-                actionLabel = "Undo",
-                duration = SnackbarDuration.Short,
-            )
+            val result =
+                snackbarHostState.showSnackbar(
+                    message = "Deleted ${batchEntries.size} entr${if (batchEntries.size == 1) "y" else "ies"}",
+                    actionLabel = "Undo",
+                    duration = SnackbarDuration.Short,
+                )
             if (result == SnackbarResult.ActionPerformed) {
                 removedIds = removedIds - batchEntries.map { it.timestamp }.toSet()
                 viewModel.restoreHistoryEntries(batchEntries)
@@ -241,11 +244,12 @@ fun HistoryScreen(
         doomed.forEach { viewModel.deleteHistoryEntry(it.timestamp) }
         exitSelectionMode()
         scope.launch {
-            val result = snackbarHostState.showSnackbar(
-                message = "Deleted ${doomed.size} entr${if (doomed.size == 1) "y" else "ies"}",
-                actionLabel = "Undo",
-                duration = SnackbarDuration.Short,
-            )
+            val result =
+                snackbarHostState.showSnackbar(
+                    message = "Deleted ${doomed.size} entr${if (doomed.size == 1) "y" else "ies"}",
+                    actionLabel = "Undo",
+                    duration = SnackbarDuration.Short,
+                )
             if (result == SnackbarResult.ActionPerformed) {
                 removedIds = removedIds - doomed.map { it.timestamp }.toSet()
                 viewModel.restoreHistoryEntries(doomed)
@@ -263,17 +267,21 @@ fun HistoryScreen(
         // Only image outputs can be packed — PDF entries stay out of the archive
         // (they are already PDF files; packing them would nest a PDF inside a ZIP).
         val pdfCount = selected.count { it.outputPath.endsWith(".pdf", ignoreCase = true) }
-        val paths = selected.mapNotNull { e ->
-            val p = e.outputPath
-            if (!p.endsWith(".pdf", ignoreCase = true) && File(p).exists()) p else null
-        }
-        if (paths.isEmpty()) {
-            val msg = if (pdfCount > 0) {
-                "PDF entr${if (pdfCount == 1) "y is" else "ies are"} already PDF files — only image pages can be packed"
-            } else {
-                "No image files selected to export"
+        val paths =
+            selected.mapNotNull { e ->
+                val p = e.outputPath
+                if (!p.endsWith(".pdf", ignoreCase = true) && File(p).exists()) p else null
             }
-            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+        if (paths.isEmpty()) {
+            val msg =
+                if (pdfCount > 0) {
+                    "PDF entr${if (pdfCount == 1) "y is" else "ies are"} already PDF files — only image pages can be packed"
+                } else {
+                    "No image files selected to export"
+                }
+            android.widget.Toast
+                .makeText(context, msg, android.widget.Toast.LENGTH_SHORT)
+                .show()
             exitSelectionMode()
             return
         }
@@ -281,35 +289,44 @@ fun HistoryScreen(
         val toastContext = context
         scope.launch(Dispatchers.IO) {
             val stamp = System.currentTimeMillis()
-            val out = if (asPdf) {
-                com.kzkt.app.util.ArchiveExtractor.createPdf(toastContext, paths, "KZKT_Export_$stamp.pdf")
-            } else {
-                com.kzkt.app.util.ArchiveExtractor.createCbz(toastContext, paths, "KZKT_Export_$stamp.zip")
-            }
+            val out =
+                if (asPdf) {
+                    com.kzkt.app.util.ArchiveExtractor
+                        .createPdf(toastContext, paths, "KZKT_Export_$stamp.pdf")
+                } else {
+                    com.kzkt.app.util.ArchiveExtractor
+                        .createCbz(toastContext, paths, "KZKT_Export_$stamp.zip")
+                }
             kotlinx.coroutines.withContext(Dispatchers.Main) {
                 exporting = false
                 if (out != null) {
                     // Copy into the public Downloads/KZKT folder. The private temp copy
                     // is only deleted when the public copy actually landed (otherwise
                     // the fallback path in the toast would point at a missing file).
-                    val publicPath = com.kzkt.app.ui.FileUtils.saveToMediaStore(toastContext, out.absolutePath)
+                    val publicPath =
+                        com.kzkt.app.ui.FileUtils
+                            .saveToMediaStore(toastContext, out.absolutePath)
                     if (publicPath != null) {
                         out.delete()
-                        android.widget.Toast.makeText(
-                            toastContext,
-                            "Saved to Downloads/KZKT: ${File(publicPath).name}",
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
+                        android.widget.Toast
+                            .makeText(
+                                toastContext,
+                                "Saved to Downloads/KZKT: ${File(publicPath).name}",
+                                android.widget.Toast.LENGTH_LONG,
+                            ).show()
                     } else {
-                        android.widget.Toast.makeText(
-                            toastContext,
-                            "Saved: ${out.absolutePath}",
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
+                        android.widget.Toast
+                            .makeText(
+                                toastContext,
+                                "Saved: ${out.absolutePath}",
+                                android.widget.Toast.LENGTH_LONG,
+                            ).show()
                     }
                     exitSelectionMode()
                 } else {
-                    android.widget.Toast.makeText(toastContext, "Export failed", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast
+                        .makeText(toastContext, "Export failed", android.widget.Toast.LENGTH_SHORT)
+                        .show()
                 }
             }
         }
@@ -372,12 +389,13 @@ fun HistoryScreen(
                                         HistoryFolderCard(
                                             entries = batch.entries,
                                             title = batchFolderTitle(batch.entries),
-                                            matchNote = if (query.isNotBlank()) {
-                                                val total = batchTotals[batchKey] ?: batch.entries.size
-                                                if (batch.entries.size < total) "${batch.entries.size} of $total pages match" else null
-                                            } else {
-                                                null
-                                            },
+                                            matchNote =
+                                                if (query.isNotBlank()) {
+                                                    val total = batchTotals[batchKey] ?: batch.entries.size
+                                                    if (batch.entries.size < total) "${batch.entries.size} of $total pages match" else null
+                                                } else {
+                                                    null
+                                                },
                                             selectionMode = selectionMode,
                                             isSelected = batch.entries.all { it.timestamp in selectedTimestamps },
                                             onClick = {
@@ -487,7 +505,7 @@ fun HistoryScreen(
         pdfReaderPath?.let { path ->
             PdfReaderDialog(
                 pdfPath = path,
-                onDismiss = { pdfReaderPath = null }
+                onDismiss = { pdfReaderPath = null },
             )
         }
     }
@@ -502,7 +520,7 @@ fun HistoryScreen(
                     onClick = {
                         deleteEntry(entry)
                         confirmDelete = null
-                    }
+                    },
                 ) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
@@ -524,7 +542,7 @@ fun HistoryScreen(
                         deleteBatch(batchEntries)
                         confirmDeleteBatch = null
                         if (openBatchKey != null) openBatchKey = null
-                    }
+                    },
                 ) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
@@ -545,7 +563,7 @@ fun HistoryScreen(
                     onClick = {
                         confirmClearAll = false
                         clearAll()
-                    }
+                    },
                 ) {
                     Text("Clear", color = MaterialTheme.colorScheme.error)
                 }
@@ -555,7 +573,6 @@ fun HistoryScreen(
             },
         )
     }
-
 }
 
 /** History header: title + selection actions, search field and sort controls. */
@@ -582,9 +599,10 @@ private fun HistoryFilterHeader(
                 if (selectionMode) "Select ($selectedCount)" else "History",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(vertical = 4.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .padding(vertical = 4.dp),
             )
             if (selectionMode) {
                 TextButton(onClick = onExitSelectMode) {
@@ -639,9 +657,12 @@ private fun HistoryFilterHeader(
                 onClick = { onSortModeChange(HistorySortMode.TIME) },
                 label = { Text("By Time") },
                 shape = RoundedCornerShape(50),
-                leadingIcon = if (sortMode == HistorySortMode.TIME) {
-                    { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-                } else null,
+                leadingIcon =
+                    if (sortMode == HistorySortMode.TIME) {
+                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                    } else {
+                        null
+                    },
                 modifier = Modifier.weight(1f),
             )
             FilterChip(
@@ -649,16 +670,20 @@ private fun HistoryFilterHeader(
                 onClick = { onSortModeChange(HistorySortMode.NAME) },
                 label = { Text("By Name") },
                 shape = RoundedCornerShape(50),
-                leadingIcon = if (sortMode == HistorySortMode.NAME) {
-                    { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-                } else null,
+                leadingIcon =
+                    if (sortMode == HistorySortMode.NAME) {
+                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                    } else {
+                        null
+                    },
                 modifier = Modifier.weight(1f),
             )
             Box(
-                modifier = Modifier
-                    .height(24.dp)
-                    .width(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                modifier =
+                    Modifier
+                        .height(24.dp)
+                        .width(1.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
             )
             IconButton(onClick = onToggleSortDirection) {
                 Icon(
@@ -702,9 +727,10 @@ private fun HistoryFolderHeader(
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(vertical = 4.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .padding(vertical = 4.dp),
             )
             if (selectionMode) {
                 TextButton(onClick = onExitSelectMode) {
@@ -727,9 +753,12 @@ private fun HistoryFolderHeader(
                 onClick = { onSortModeChange(HistorySortMode.TIME) },
                 label = { Text("By Time") },
                 shape = RoundedCornerShape(50),
-                leadingIcon = if (sortMode == HistorySortMode.TIME) {
-                    { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-                } else null,
+                leadingIcon =
+                    if (sortMode == HistorySortMode.TIME) {
+                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                    } else {
+                        null
+                    },
                 modifier = Modifier.weight(1f),
             )
             FilterChip(
@@ -737,16 +766,20 @@ private fun HistoryFolderHeader(
                 onClick = { onSortModeChange(HistorySortMode.NAME) },
                 label = { Text("By Name") },
                 shape = RoundedCornerShape(50),
-                leadingIcon = if (sortMode == HistorySortMode.NAME) {
-                    { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-                } else null,
+                leadingIcon =
+                    if (sortMode == HistorySortMode.NAME) {
+                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                    } else {
+                        null
+                    },
                 modifier = Modifier.weight(1f),
             )
             Box(
-                modifier = Modifier
-                    .height(24.dp)
-                    .width(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                modifier =
+                    Modifier
+                        .height(24.dp)
+                        .width(1.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
             )
             IconButton(onClick = onToggleSortDirection) {
                 Icon(

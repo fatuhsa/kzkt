@@ -27,9 +27,10 @@ fun EmptyHistoryPlaceholder(modifier: Modifier = Modifier) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Outlined.MenuBook,
@@ -62,9 +63,10 @@ fun NoResultsItem(modifier: Modifier = Modifier) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 48.dp, horizontal = 24.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(vertical = 48.dp, horizontal = 24.dp),
     ) {
         Icon(
             imageVector = Icons.Filled.Search,

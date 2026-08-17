@@ -194,7 +194,7 @@ fun KzktApp(
                             themeColor = it
                             scope.launch { viewModel.settingsRepo.saveAccentColor(it.toArgb().toLong() and 0xFFFFFFFFL) }
                         },
-                        onNavigateToGlossary = { navController.navigate("glossary") }
+                        onNavigateToGlossary = { navController.navigate("glossary") },
                     )
                 }
                 composable("glossary") {

@@ -57,34 +57,38 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
     val providerKey by remember { derivedStateOf { viewModel.settings.value.llmProvider } }
     val meta = Config.PROVIDER_REGISTRY[providerKey] ?: return
 
-    val apiKey by remember(providerKey) { derivedStateOf {
-        when (providerKey) {
-            "gemini" -> viewModel.settings.value.geminiApiKey
-            "openai" -> viewModel.settings.value.openaiApiKey
-            "openrouter" -> viewModel.settings.value.openrouterApiKey
-            "zen" -> viewModel.settings.value.zenApiKey
-            "opencodego" -> viewModel.settings.value.opencodegoApiKey
-            "custom" -> viewModel.settings.value.customApiKey
-            "anthropic" -> viewModel.settings.value.anthropicApiKey
-            else -> ""
+    val apiKey by remember(providerKey) {
+        derivedStateOf {
+            when (providerKey) {
+                "gemini" -> viewModel.settings.value.geminiApiKey
+                "openai" -> viewModel.settings.value.openaiApiKey
+                "openrouter" -> viewModel.settings.value.openrouterApiKey
+                "zen" -> viewModel.settings.value.zenApiKey
+                "opencodego" -> viewModel.settings.value.opencodegoApiKey
+                "custom" -> viewModel.settings.value.customApiKey
+                "anthropic" -> viewModel.settings.value.anthropicApiKey
+                else -> ""
+            }
         }
-    } }
+    }
 
     val baseUrl by remember(providerKey) { derivedStateOf { viewModel.settings.value.getBaseUrl(providerKey) } }
     val defaultBaseUrl = meta.defaultBaseUrl
 
-    val currentModel by remember(providerKey) { derivedStateOf {
-        when (providerKey) {
-            "gemini" -> viewModel.settings.value.modelGemini
-            "openai" -> viewModel.settings.value.modelOpenai
-            "openrouter" -> viewModel.settings.value.modelOpenrouter
-            "zen" -> viewModel.settings.value.modelZen
-            "opencodego" -> viewModel.settings.value.modelOpencodego
-            "custom" -> viewModel.settings.value.modelCustom
-            "anthropic" -> viewModel.settings.value.modelAnthropic
-            else -> meta.defaultModel
+    val currentModel by remember(providerKey) {
+        derivedStateOf {
+            when (providerKey) {
+                "gemini" -> viewModel.settings.value.modelGemini
+                "openai" -> viewModel.settings.value.modelOpenai
+                "openrouter" -> viewModel.settings.value.modelOpenrouter
+                "zen" -> viewModel.settings.value.modelZen
+                "opencodego" -> viewModel.settings.value.modelOpencodego
+                "custom" -> viewModel.settings.value.modelCustom
+                "anthropic" -> viewModel.settings.value.modelAnthropic
+                else -> meta.defaultModel
+            }
         }
-    } }
+    }
 
     var apiKeyText by remember(providerKey) { mutableStateOf(apiKey) }
     var apiKeyVisible by remember { mutableStateOf(false) }
@@ -164,7 +168,7 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
                                 Text("Reset", style = MaterialTheme.typography.labelSmall)
                             }
                         }
-                    }
+                    },
                 )
             }
 
@@ -247,11 +251,12 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
     testState?.let { state ->
         if (!state.loading && state.message.isNotBlank()) {
             Spacer(Modifier.height(6.dp))
-            val resultColor = when (state.ok) {
-                true -> MaterialTheme.colorScheme.primary
-                false -> MaterialTheme.colorScheme.error
-                null -> MaterialTheme.colorScheme.onSurfaceVariant
-            }
+            val resultColor =
+                when (state.ok) {
+                    true -> MaterialTheme.colorScheme.primary
+                    false -> MaterialTheme.colorScheme.error
+                    null -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
             Text(
                 state.message,
                 style = MaterialTheme.typography.bodySmall,
@@ -280,11 +285,12 @@ fun ModelDropdownInput(
         }
     }
 
-    val options = remember(presets, value) {
-        val list = presets.toMutableList()
-        if (value.isNotBlank() && value !in list) list.add(0, value)
-        list
-    }
+    val options =
+        remember(presets, value) {
+            val list = presets.toMutableList()
+            if (value.isNotBlank() && value !in list) list.add(0, value)
+            list
+        }
 
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
         OutlinedTextField(

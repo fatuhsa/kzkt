@@ -1578,32 +1578,6 @@
         <error line="358" column="141" source="standard:max-line-length" />
         <error line="369" column="1" source="standard:no-consecutive-blank-lines" />
     </file>
-    <file name="app/src/main/java/com/kzkt/app/ui/GlossaryScreen.kt">
-        <error line="5" column="1" source="standard:no-wildcard-imports" />
-        <error line="11" column="1" source="standard:no-wildcard-imports" />
-        <error line="12" column="1" source="standard:no-wildcard-imports" />
-        <error line="19" column="5" source="standard:function-naming" />
-        <error line="20" column="5" source="standard:function-signature" />
-        <error line="20" column="35" source="standard:function-signature" />
-        <error line="20" column="35" source="standard:trailing-comma-on-declaration-site" />
-        <error line="27" column="20" source="standard:multiline-expression-wrapping" />
-        <error line="29" column="28" source="standard:trailing-comma-on-call-site" />
-        <error line="34" column="55" source="standard:trailing-comma-on-call-site" />
-        <error line="40" column="56" source="standard:trailing-comma-on-call-site" />
-        <error line="46" column="61" source="standard:trailing-comma-on-call-site" />
-        <error line="53" column="34" source="standard:trailing-comma-on-call-site" />
-        <error line="60" column="34" source="standard:trailing-comma-on-call-site" />
-        <error line="69" column="57" source="standard:trailing-comma-on-call-site" />
-        <error line="86" column="65" source="standard:trailing-comma-on-call-site" />
-        <error line="91" column="116" source="standard:trailing-comma-on-call-site" />
-        <error line="94" column="40" source="standard:multiline-expression-wrapping" />
-        <error line="98" column="75" source="standard:trailing-comma-on-call-site" />
-        <error line="102" column="38" source="standard:argument-list-wrapping" />
-        <error line="102" column="51" source="standard:argument-list-wrapping" />
-        <error line="102" column="96" source="standard:argument-list-wrapping" />
-        <error line="102" column="141" source="standard:max-line-length" />
-        <error line="102" column="146" source="standard:argument-list-wrapping" />
-    </file>
     <file name="app/src/main/java/com/kzkt/app/ui/HistoryListUtils.kt">
         <error line="19" column="47" source="standard:function-signature" />
         <error line="22" column="41" source="standard:function-signature" />
@@ -1624,104 +1598,12 @@
     </file>
     <file name="app/src/main/java/com/kzkt/app/ui/HistoryScreen.kt">
         <error line="3" column="1" source="standard:import-ordering" />
-        <error line="10" column="1" source="standard:no-unused-imports" />
-        <error line="19" column="1" source="standard:no-unused-imports" />
-        <error line="33" column="1" source="standard:no-unused-imports" />
-        <error line="72" column="5" source="standard:function-naming" />
-        <error line="73" column="5" source="standard:function-signature" />
-        <error line="73" column="30" source="standard:function-signature" />
-        <error line="111" column="27" source="standard:multiline-expression-wrapping" />
-        <error line="121" column="26" source="standard:multiline-expression-wrapping" />
-        <error line="128" column="23" source="standard:multiline-expression-wrapping" />
-        <error line="129" column="16" source="standard:chain-method-continuation" />
-        <error line="134" column="25" source="standard:multiline-expression-wrapping" />
-        <error line="165" column="26" source="standard:multiline-expression-wrapping" />
-        <error line="184" column="26" source="standard:multiline-expression-wrapping" />
-        <error line="202" column="30" source="standard:multiline-expression-wrapping" />
-        <error line="221" column="26" source="standard:multiline-expression-wrapping" />
-        <error line="242" column="26" source="standard:multiline-expression-wrapping" />
-        <error line="264" column="21" source="standard:multiline-expression-wrapping" />
-        <error line="269" column="23" source="standard:multiline-expression-wrapping" />
-        <error line="274" column="33" source="standard:chain-method-continuation" />
-        <error line="274" column="91" source="standard:chain-method-continuation" />
-        <error line="282" column="23" source="standard:multiline-expression-wrapping" />
-        <error line="283" column="51" source="standard:chain-method-continuation" />
-        <error line="285" column="51" source="standard:chain-method-continuation" />
-        <error line="293" column="63" source="standard:chain-method-continuation" />
-        <error line="296" column="45" source="standard:chain-method-continuation" />
-        <error line="299" column="61" source="standard:trailing-comma-on-call-site" />
-        <error line="302" column="45" source="standard:chain-method-continuation" />
-        <error line="305" column="61" source="standard:trailing-comma-on-call-site" />
-        <error line="310" column="41" source="standard:chain-method-continuation" />
-        <error line="310" column="116" source="standard:chain-method-continuation" />
-        <error line="373" column="57" source="standard:multiline-expression-wrapping" />
-        <error line="488" column="53" source="standard:trailing-comma-on-call-site" />
-        <error line="503" column="22" source="standard:trailing-comma-on-call-site" />
-        <error line="525" column="22" source="standard:trailing-comma-on-call-site" />
-        <error line="546" column="22" source="standard:trailing-comma-on-call-site" />
-        <error line="556" column="1" source="standard:no-blank-line-before-rbrace" />
-        <error line="561" column="13" source="standard:function-naming" />
-        <error line="582" column="28" source="standard:multiline-expression-wrapping" />
-        <error line="639" column="31" source="standard:multiline-expression-wrapping" />
-        <error line="641" column="19" source="standard:if-else-wrapping" />
-        <error line="641" column="24" source="standard:if-else-bracing" />
-        <error line="641" column="24" source="standard:if-else-wrapping" />
-        <error line="641" column="24" source="standard:multiline-if-else" />
-        <error line="648" column="31" source="standard:multiline-expression-wrapping" />
-        <error line="650" column="19" source="standard:if-else-wrapping" />
-        <error line="650" column="24" source="standard:if-else-bracing" />
-        <error line="650" column="24" source="standard:if-else-wrapping" />
-        <error line="650" column="24" source="standard:multiline-if-else" />
-        <error line="668" column="13" source="standard:function-naming" />
-        <error line="696" column="28" source="standard:multiline-expression-wrapping" />
-        <error line="722" column="31" source="standard:multiline-expression-wrapping" />
-        <error line="724" column="19" source="standard:if-else-wrapping" />
-        <error line="724" column="24" source="standard:if-else-bracing" />
-        <error line="724" column="24" source="standard:if-else-wrapping" />
-        <error line="724" column="24" source="standard:multiline-if-else" />
-        <error line="731" column="31" source="standard:multiline-expression-wrapping" />
-        <error line="733" column="19" source="standard:if-else-wrapping" />
-        <error line="733" column="24" source="standard:if-else-bracing" />
-        <error line="733" column="24" source="standard:if-else-wrapping" />
-        <error line="733" column="24" source="standard:multiline-if-else" />
     </file>
     <file name="app/src/main/java/com/kzkt/app/ui/KzktApp.kt">
         <error line="3" column="1" source="standard:import-ordering" />
-        <error line="51" column="13" source="standard:function-naming" />
-        <error line="71" column="5" source="standard:function-naming" />
         <error line="96" column="14" source="standard:trailing-comma-on-call-site" />
         <error line="106" column="21" source="standard:multiline-expression-wrapping" />
         <error line="157" column="38" source="standard:multiline-expression-wrapping" />
-        <error line="194" column="86" source="standard:trailing-comma-on-call-site" />
-    </file>
-    <file name="app/src/main/java/com/kzkt/app/ui/MainScreen.kt">
-        <error line="33" column="5" source="standard:function-naming" />
-        <error line="34" column="5" source="standard:function-signature" />
-        <error line="34" column="30" source="standard:function-signature" />
-        <error line="50" column="42" source="standard:multiline-expression-wrapping" />
-        <error line="51" column="63" source="standard:trailing-comma-on-call-site" />
-        <error line="58" column="35" source="standard:multiline-expression-wrapping" />
-        <error line="60" column="56" source="standard:trailing-comma-on-call-site" />
-        <error line="70" column="30" source="standard:multiline-expression-wrapping" />
-        <error line="71" column="67" source="standard:trailing-comma-on-call-site" />
-        <error line="82" column="32" source="standard:multiline-expression-wrapping" />
-        <error line="83" column="62" source="standard:trailing-comma-on-call-site" />
-        <error line="91" column="45" source="standard:chain-method-continuation" />
-        <error line="91" column="55" source="standard:argument-list-wrapping" />
-        <error line="91" column="69" source="standard:argument-list-wrapping" />
-        <error line="91" column="103" source="standard:argument-list-wrapping" />
-        <error line="91" column="136" source="standard:argument-list-wrapping" />
-        <error line="91" column="137" source="standard:chain-method-continuation" />
-        <error line="91" column="141" source="standard:max-line-length" />
-        <error line="99" column="45" source="standard:chain-method-continuation" />
-        <error line="99" column="55" source="standard:argument-list-wrapping" />
-        <error line="99" column="69" source="standard:argument-list-wrapping" />
-        <error line="99" column="114" source="standard:argument-list-wrapping" />
-        <error line="99" column="141" source="standard:max-line-length" />
-        <error line="99" column="147" source="standard:argument-list-wrapping" />
-        <error line="99" column="148" source="standard:chain-method-continuation" />
-        <error line="107" column="20" source="standard:multiline-expression-wrapping" />
-        <error line="109" column="28" source="standard:trailing-comma-on-call-site" />
     </file>
     <file name="app/src/main/java/com/kzkt/app/ui/MainViewModel.kt">
         <error line="3" column="1" source="standard:import-ordering" />
@@ -1760,217 +1642,8 @@
         <error line="435" column="44" source="standard:chain-method-continuation" />
         <error line="439" column="44" source="standard:chain-method-continuation" />
         <error line="449" column="53" source="standard:chain-method-continuation" />
-        <error line="456" column="34" source="standard:chain-method-continuation" />
-        <error line="456" column="75" source="standard:chain-method-continuation" />
-        <error line="471" column="34" source="standard:chain-method-continuation" />
-        <error line="471" column="75" source="standard:chain-method-continuation" />
-        <error line="494" column="30" source="standard:multiline-expression-wrapping" />
-        <error line="494" column="42" source="standard:chain-method-continuation" />
-        <error line="504" column="32" source="standard:function-signature" />
-        <error line="504" column="53" source="standard:function-signature" />
-        <error line="504" column="70" source="standard:function-signature" />
-        <error line="504" column="86" source="standard:function-signature" />
-        <error line="504" column="99" source="standard:function-signature" />
-        <error line="509" column="28" source="standard:multiline-expression-wrapping" />
-        <error line="510" column="30" source="standard:argument-list-wrapping" />
-        <error line="510" column="38" source="standard:argument-list-wrapping" />
-        <error line="510" column="45" source="standard:argument-list-wrapping" />
-        <error line="510" column="54" source="standard:argument-list-wrapping" />
-        <error line="510" column="85" source="standard:trailing-comma-on-call-site" />
-        <error line="524" column="47" source="standard:multiline-expression-wrapping" />
-        <error line="526" column="121" source="standard:trailing-comma-on-call-site" />
-        <error line="556" column="67" source="standard:chain-method-continuation" />
-        <error line="568" column="49" source="standard:multiline-expression-wrapping" />
-        <error line="590" column="48" source="standard:chain-method-continuation" />
-        <error line="598" column="32" source="standard:function-signature" />
-        <error line="598" column="53" source="standard:function-signature" />
-        <error line="598" column="70" source="standard:function-signature" />
-        <error line="598" column="84" source="standard:function-signature" />
-        <error line="637" column="45" source="standard:function-signature" />
-        <error line="637" column="66" source="standard:function-signature" />
-        <error line="637" column="83" source="standard:function-signature" />
-        <error line="637" column="97" source="standard:function-signature" />
-        <error line="642" column="28" source="standard:multiline-expression-wrapping" />
-        <error line="677" column="1" source="standard:no-blank-line-before-rbrace" />
-    </file>
-    <file name="app/src/main/java/com/kzkt/app/ui/SettingsScreen.kt">
-        <error line="5" column="1" source="standard:import-ordering" />
-        <error line="6" column="1" source="standard:no-wildcard-imports" />
-        <error line="28" column="1" source="standard:no-wildcard-imports" />
-        <error line="29" column="1" source="standard:no-wildcard-imports" />
-        <error line="52" column="5" source="standard:function-naming" />
-        <error line="71" column="32" source="standard:multiline-expression-wrapping" />
-        <error line="72" column="56" source="standard:trailing-comma-on-call-site" />
-        <error line="84" column="59" source="standard:chain-method-continuation" />
-        <error line="85" column="59" source="standard:chain-method-continuation" />
-        <error line="87" column="46" source="standard:chain-method-continuation" />
-        <error line="92" column="41" source="standard:chain-method-continuation" />
-        <error line="92" column="130" source="standard:chain-method-continuation" />
-        <error line="102" column="55" source="standard:chain-method-continuation" />
-        <error line="103" column="26" source="standard:multiline-expression-wrapping" />
-        <error line="105" column="35" source="standard:argument-list-wrapping" />
-        <error line="106" column="45" source="standard:argument-list-wrapping" />
-        <error line="106" column="69" source="standard:argument-list-wrapping" />
-        <error line="106" column="90" source="standard:trailing-comma-on-call-site" />
-        <error line="109" column="48" source="standard:chain-method-continuation" />
-        <error line="113" column="37" source="standard:chain-method-continuation" />
-        <error line="114" column="35" source="standard:argument-list-wrapping" />
-        <error line="115" column="107" source="standard:trailing-comma-on-call-site" />
-        <error line="121" column="30" source="standard:multiline-expression-wrapping" />
-        <error line="122" column="56" source="standard:trailing-comma-on-call-site" />
-        <error line="154" column="20" source="standard:multiline-expression-wrapping" />
-        <error line="178" column="29" source="standard:multiline-expression-wrapping" />
-        <error line="179" column="1" source="standard:indent" />
-        <error line="180" column="1" source="standard:indent" />
-        <error line="181" column="1" source="standard:indent" />
-        <error line="182" column="1" source="standard:indent" />
-        <error line="183" column="1" source="standard:indent" />
-        <error line="184" column="1" source="standard:indent" />
-        <error line="185" column="1" source="standard:indent" />
-        <error line="186" column="1" source="standard:indent" />
-        <error line="187" column="1" source="standard:indent" />
-        <error line="188" column="1" source="standard:indent" />
-        <error line="189" column="1" source="standard:indent" />
-        <error line="190" column="1" source="standard:indent" />
-        <error line="191" column="1" source="standard:indent" />
-        <error line="192" column="1" source="standard:indent" />
-        <error line="193" column="1" source="standard:indent" />
-        <error line="194" column="1" source="standard:indent" />
-        <error line="195" column="1" source="standard:indent" />
-        <error line="196" column="1" source="standard:indent" />
-        <error line="197" column="1" source="standard:indent" />
-        <error line="198" column="1" source="standard:indent" />
-        <error line="199" column="1" source="standard:indent" />
-        <error line="200" column="1" source="standard:indent" />
-        <error line="201" column="1" source="standard:indent" />
-        <error line="202" column="1" source="standard:indent" />
-        <error line="203" column="1" source="standard:indent" />
-        <error line="204" column="1" source="standard:indent" />
-        <error line="205" column="1" source="standard:indent" />
-        <error line="206" column="1" source="standard:indent" />
-        <error line="207" column="1" source="standard:indent" />
-        <error line="325" column="29" source="standard:multiline-expression-wrapping" />
-        <error line="329" column="43" source="standard:function-literal" />
-        <error line="329" column="44" source="standard:wrapping" />
-        <error line="329" column="50" source="standard:argument-list-wrapping" />
-        <error line="329" column="141" source="standard:max-line-length" />
-        <error line="329" column="210" source="standard:argument-list-wrapping" />
-        <error line="329" column="212" source="standard:function-literal" />
-        <error line="335" column="38" source="standard:trailing-comma-on-call-site" />
-        <error line="340" column="30" source="standard:trailing-comma-on-call-site" />
-        <error line="349" column="123" source="standard:trailing-comma-on-call-site" />
-        <error line="351" column="30" source="standard:trailing-comma-on-call-site" />
-        <error line="356" column="43" source="standard:function-literal" />
-        <error line="356" column="44" source="standard:wrapping" />
-        <error line="356" column="50" source="standard:argument-list-wrapping" />
-        <error line="356" column="141" source="standard:max-line-length" />
-        <error line="356" column="172" source="standard:argument-list-wrapping" />
-        <error line="356" column="174" source="standard:function-literal" />
-        <error line="362" column="38" source="standard:trailing-comma-on-call-site" />
-        <error line="367" column="30" source="standard:trailing-comma-on-call-site" />
-        <error line="374" column="60" source="standard:if-else-wrapping" />
-        <error line="374" column="60" source="standard:multiline-if-else" />
-        <error line="375" column="42" source="standard:if-else-wrapping" />
-        <error line="375" column="42" source="standard:multiline-if-else" />
-        <error line="375" column="68" source="standard:trailing-comma-on-call-site" />
-        <error line="397" column="38" source="standard:trailing-comma-on-call-site" />
-        <error line="429" column="29" source="standard:multiline-expression-wrapping" />
-        <error line="505" column="38" source="standard:argument-list-wrapping" />
-        <error line="505" column="84" source="standard:argument-list-wrapping" />
-        <error line="505" column="98" source="standard:argument-list-wrapping" />
-        <error line="505" column="141" source="standard:max-line-length" />
-        <error line="505" column="142" source="standard:argument-list-wrapping" />
-        <error line="507" column="47" source="standard:multiline-expression-wrapping" />
-        <error line="513" column="31" source="standard:if-else-wrapping" />
-        <error line="513" column="36" source="standard:if-else-bracing" />
-        <error line="513" column="36" source="standard:if-else-wrapping" />
-        <error line="513" column="36" source="standard:multiline-if-else" />
-        <error line="516" column="22" source="standard:trailing-comma-on-call-site" />
-        <error line="531" column="29" source="standard:multiline-expression-wrapping" />
-        <error line="549" column="50" source="standard:chain-method-continuation" />
-        <error line="549" column="86" source="standard:chain-method-continuation" />
-        <error line="550" column="53" source="standard:chain-method-continuation" />
-        <error line="550" column="63" source="standard:argument-list-wrapping" />
-        <error line="550" column="72" source="standard:argument-list-wrapping" />
-        <error line="550" column="101" source="standard:argument-list-wrapping" />
-        <error line="550" column="134" source="standard:argument-list-wrapping" />
-        <error line="550" column="135" source="standard:chain-method-continuation" />
-        <error line="550" column="141" source="standard:max-line-length" />
-        <error line="551" column="30" source="standard:trailing-comma-on-call-site" />
-        <error line="557" column="59" source="standard:trailing-comma-on-call-site" />
-        <error line="559" column="22" source="standard:trailing-comma-on-call-site" />
-        <error line="575" column="29" source="standard:multiline-expression-wrapping" />
-        <error line="585" column="38" source="standard:trailing-comma-on-call-site" />
-        <error line="590" column="30" source="standard:trailing-comma-on-call-site" />
-        <error line="600" column="22" source="standard:trailing-comma-on-call-site" />
-        <error line="608" column="28" source="standard:multiline-expression-wrapping" />
-        <error line="612" column="26" source="standard:multiline-expression-wrapping" />
-        <error line="613" column="97" source="standard:trailing-comma-on-call-site" />
-        <error line="615" column="80" source="standard:trailing-comma-on-call-site" />
-        <error line="618" column="32" source="standard:multiline-expression-wrapping" />
-        <error line="622" column="67" source="standard:trailing-comma-on-call-site" />
-        <error line="626" column="55" source="standard:trailing-comma-on-call-site" />
-        <error line="633" column="141" source="standard:max-line-length" />
-        <error line="635" column="83" source="standard:trailing-comma-on-call-site" />
-        <error line="641" column="50" source="standard:trailing-comma-on-call-site" />
-        <error line="652" column="29" source="standard:multiline-expression-wrapping" />
-        <error line="656" column="43" source="standard:function-literal" />
-        <error line="656" column="44" source="standard:wrapping" />
-        <error line="656" column="50" source="standard:argument-list-wrapping" />
-        <error line="656" column="141" source="standard:max-line-length" />
-        <error line="656" column="172" source="standard:argument-list-wrapping" />
-        <error line="656" column="174" source="standard:function-literal" />
-        <error line="662" column="38" source="standard:trailing-comma-on-call-site" />
-        <error line="667" column="30" source="standard:trailing-comma-on-call-site" />
-        <error line="668" column="26" source="standard:trailing-comma-on-call-site" />
-        <error line="669" column="22" source="standard:trailing-comma-on-call-site" />
-        <error line="705" column="111" source="standard:trailing-comma-on-call-site" />
-        <error line="716" column="32" source="standard:function-literal" />
-        <error line="716" column="33" source="standard:wrapping" />
-        <error line="716" column="39" source="standard:argument-list-wrapping" />
-        <error line="716" column="141" source="standard:max-line-length" />
-        <error line="716" column="164" source="standard:argument-list-wrapping" />
-        <error line="716" column="166" source="standard:function-literal" />
-        <error line="721" column="57" source="standard:chain-method-continuation" />
-        <error line="721" column="128" source="standard:chain-method-continuation" />
-        <error line="732" column="26" source="standard:trailing-comma-on-call-site" />
-        <error line="747" column="20" source="standard:function-literal" />
-        <error line="747" column="21" source="standard:wrapping" />
-        <error line="747" column="27" source="standard:argument-list-wrapping" />
-        <error line="747" column="141" source="standard:max-line-length" />
-        <error line="747" column="150" source="standard:argument-list-wrapping" />
-        <error line="747" column="152" source="standard:function-literal" />
-        <error line="754" column="22" source="standard:trailing-comma-on-call-site" />
-        <error line="760" column="59" source="standard:trailing-comma-on-call-site" />
-        <error line="772" column="29" source="standard:binary-expression-wrapping" />
-        <error line="772" column="58" source="standard:function-literal" />
-        <error line="772" column="91" source="standard:argument-list-wrapping" />
-        <error line="772" column="97" source="standard:argument-list-wrapping" />
-        <error line="772" column="119" source="standard:argument-list-wrapping" />
-        <error line="772" column="125" source="standard:argument-list-wrapping" />
-        <error line="772" column="128" source="standard:function-literal" />
-        <error line="772" column="130" source="standard:binary-expression-wrapping" />
-        <error line="772" column="141" source="standard:max-line-length" />
-        <error line="781" column="63" source="standard:trailing-comma-on-call-site" />
-        <error line="783" column="34" source="standard:argument-list-wrapping" />
-        <error line="783" column="50" source="standard:argument-list-wrapping" />
-        <error line="783" column="86" source="standard:argument-list-wrapping" />
-        <error line="783" column="141" source="standard:max-line-length" />
-        <error line="783" column="144" source="standard:argument-list-wrapping" />
-        <error line="792" column="63" source="standard:trailing-comma-on-call-site" />
-        <error line="808" column="14" source="standard:trailing-comma-on-call-site" />
-    </file>
-    <file name="app/src/main/java/com/kzkt/app/ui/component/AccentColorRow.kt">
-        <error line="20" column="30" source="standard:multiline-expression-wrapping" />
-        <error line="31" column="5" source="standard:function-naming" />
-        <error line="31" column="20" source="standard:function-signature" />
-        <error line="31" column="37" source="standard:function-signature" />
-        <error line="31" column="62" source="standard:function-signature" />
-        <error line="35" column="28" source="standard:multiline-expression-wrapping" />
-        <error line="43" column="21" source="standard:chain-method-continuation" />
     </file>
     <file name="app/src/main/java/com/kzkt/app/ui/component/ChipsRow.kt">
-        <error line="31" column="9" source="standard:function-naming" />
         <error line="40" column="1" source="standard:indent" />
         <error line="41" column="1" source="standard:indent" />
         <error line="42" column="1" source="standard:indent" />
@@ -1980,16 +1653,9 @@
     </file>
     <file name="app/src/main/java/com/kzkt/app/ui/component/HistoryDateRangeDialog.kt">
         <error line="21" column="1" source="standard:no-unused-imports" />
-        <error line="32" column="5" source="standard:function-naming" />
         <error line="39" column="22" source="standard:multiline-expression-wrapping" />
     </file>
-    <file name="app/src/main/java/com/kzkt/app/ui/component/HistoryEmptyStates.kt">
-        <error line="23" column="5" source="standard:function-naming" />
-        <error line="51" column="5" source="standard:function-naming" />
-        <error line="54" column="20" source="standard:multiline-expression-wrapping" />
-    </file>
     <file name="app/src/main/java/com/kzkt/app/ui/component/HistoryFolderCard.kt">
-        <error line="46" column="5" source="standard:function-naming" />
         <error line="61" column="20" source="standard:multiline-expression-wrapping" />
         <error line="65" column="18" source="standard:multiline-expression-wrapping" />
         <error line="66" column="30" source="standard:multiline-expression-wrapping" />
@@ -1998,25 +1664,19 @@
         <error line="87" column="28" source="standard:multiline-expression-wrapping" />
     </file>
     <file name="app/src/main/java/com/kzkt/app/ui/component/HistoryListItem.kt">
-        <error line="56" column="5" source="standard:function-naming" />
         <error line="66" column="24" source="standard:multiline-expression-wrapping" />
         <error line="85" column="28" source="standard:multiline-expression-wrapping" />
-        <error line="114" column="5" source="standard:function-naming" />
         <error line="126" column="20" source="standard:multiline-expression-wrapping" />
         <error line="130" column="18" source="standard:multiline-expression-wrapping" />
         <error line="131" column="30" source="standard:multiline-expression-wrapping" />
         <error line="132" column="17" source="standard:multiline-if-else" />
         <error line="134" column="17" source="standard:multiline-if-else" />
-        <error line="238" column="5" source="standard:function-naming" />
         <error line="244" column="20" source="standard:multiline-expression-wrapping" />
         <error line="258" column="36" source="standard:multiline-expression-wrapping" />
         <error line="260" column="101" source="standard:trailing-comma-on-call-site" />
-        <error line="272" column="5" source="standard:function-naming" />
     </file>
     <file name="app/src/main/java/com/kzkt/app/ui/component/HistorySelectionBar.kt">
-        <error line="32" column="13" source="standard:function-naming" />
         <error line="41" column="20" source="standard:multiline-expression-wrapping" />
-        <error line="54" column="5" source="standard:function-naming" />
         <error line="62" column="20" source="standard:multiline-expression-wrapping" />
         <error line="69" column="24" source="standard:multiline-expression-wrapping" />
     </file>
@@ -2026,7 +1686,6 @@
         <error line="10" column="1" source="standard:no-wildcard-imports" />
         <error line="11" column="1" source="standard:no-wildcard-imports" />
         <error line="22" column="1" source="standard:no-wildcard-imports" />
-        <error line="34" column="5" source="standard:function-naming" />
         <error line="47" column="19" source="standard:multiline-expression-wrapping" />
         <error line="82" column="1" source="standard:no-trailing-spaces" />
         <error line="87" column="1" source="standard:no-trailing-spaces" />
@@ -3004,7 +2663,6 @@
         <error line="90" column="118" source="standard:argument-list-wrapping" />
         <error line="90" column="140" source="standard:max-line-length" />
         <error line="90" column="141" source="standard:argument-list-wrapping" />
-        <error line="105" column="5" source="standard:function-naming" />
         <error line="127" column="59" source="standard:chain-method-continuation" />
         <error line="128" column="58" source="standard:chain-method-continuation" />
         <error line="136" column="57" source="standard:chain-method-continuation" />
@@ -3109,7 +2767,6 @@
         <error line="466" column="143" source="standard:argument-list-wrapping" />
         <error line="466" column="144" source="standard:chain-method-continuation" />
         <error line="472" column="26" source="standard:trailing-comma-on-call-site" />
-        <error line="481" column="13" source="standard:function-naming" />
         <error line="484" column="47" source="standard:trailing-comma-on-declaration-site" />
         <error line="509" column="20" source="standard:multiline-expression-wrapping" />
         <error line="525" column="18" source="standard:trailing-comma-on-call-site" />
@@ -3137,7 +2794,6 @@
         <error line="657" column="27" source="standard:try-catch-finally-spacing" />
         <error line="657" column="51" source="standard:try-catch-finally-spacing" />
         <error line="657" column="51" source="standard:try-catch-finally-spacing" />
-        <error line="674" column="5" source="standard:function-naming" />
         <error line="696" column="106" source="standard:trailing-comma-on-call-site" />
         <error line="716" column="59" source="standard:chain-method-continuation" />
         <error line="728" column="22" source="standard:multiline-expression-wrapping" />
@@ -3166,7 +2822,6 @@
         <error line="851" column="79" source="standard:trailing-comma-on-call-site" />
     </file>
     <file name="app/src/main/java/com/kzkt/app/ui/component/MarkdownText.kt">
-        <error line="33" column="5" source="standard:function-naming" />
         <error line="33" column="18" source="standard:function-signature" />
         <error line="33" column="36" source="standard:function-signature" />
         <error line="33" column="65" source="standard:function-signature" />
@@ -3179,17 +2834,14 @@
         <error line="52" column="5" source="standard:blank-line-before-declaration" />
         <error line="52" column="26" source="standard:class-signature" />
         <error line="52" column="41" source="standard:class-signature" />
-        <error line="106" column="13" source="standard:function-naming" />
         <error line="106" column="28" source="standard:function-signature" />
         <error line="106" column="41" source="standard:function-signature" />
         <error line="106" column="53" source="standard:function-signature" />
         <error line="106" column="72" source="standard:function-signature" />
         <error line="107" column="17" source="standard:multiline-expression-wrapping" />
-        <error line="121" column="13" source="standard:function-naming" />
         <error line="121" column="28" source="standard:function-signature" />
         <error line="121" column="41" source="standard:function-signature" />
         <error line="121" column="60" source="standard:function-signature" />
-        <error line="133" column="13" source="standard:function-naming" />
         <error line="133" column="26" source="standard:function-signature" />
         <error line="133" column="39" source="standard:function-signature" />
         <error line="133" column="58" source="standard:function-signature" />
@@ -3200,7 +2852,6 @@
     </file>
     <file name="app/src/main/java/com/kzkt/app/ui/component/Material3SettingsGroup.kt">
         <error line="7" column="1" source="standard:no-unused-imports" />
-        <error line="42" column="5" source="standard:function-naming" />
         <error line="45" column="36" source="standard:trailing-comma-on-declaration-site" />
         <error line="48" column="20" source="standard:multiline-expression-wrapping" />
         <error line="49" column="28" source="standard:trailing-comma-on-call-site" />
@@ -3208,142 +2859,12 @@
         <error line="64" column="61" source="standard:trailing-comma-on-call-site" />
         <error line="67" column="29" source="standard:multiline-expression-wrapping" />
         <error line="77" column="30" source="standard:multiline-expression-wrapping" />
-        <error line="78" column="42" source="standard:multiline-expression-wrapping" />
-        <error line="82" column="26" source="standard:trailing-comma-on-call-site" />
-        <error line="84" column="84" source="standard:trailing-comma-on-call-site" />
-        <error line="97" column="13" source="standard:function-naming" />
-        <error line="98" column="5" source="standard:function-signature" />
-        <error line="98" column="32" source="standard:function-signature" />
-        <error line="98" column="32" source="standard:trailing-comma-on-declaration-site" />
-        <error line="101" column="20" source="standard:multiline-expression-wrapping" />
-        <error line="105" column="53" source="standard:trailing-comma-on-call-site" />
-        <error line="107" column="13" source="standard:chain-method-continuation" />
-        <error line="108" column="55" source="standard:trailing-comma-on-call-site" />
-        <error line="116" column="28" source="standard:multiline-expression-wrapping" />
-        <error line="121" column="76" source="standard:trailing-comma-on-call-site" />
-        <error line="122" column="26" source="standard:trailing-comma-on-call-site" />
-        <error line="124" column="52" source="standard:trailing-comma-on-call-site" />
-        <error line="130" column="81" source="standard:trailing-comma-on-call-site" />
-        <error line="132" column="26" source="standard:trailing-comma-on-call-site" />
-        <error line="137" column="36" source="standard:multiline-expression-wrapping" />
-        <error line="138" column="33" source="standard:multiline-if-else" />
-        <error line="140" column="33" source="standard:multiline-if-else" />
-        <error line="142" column="33" source="standard:multiline-if-else" />
-        <error line="143" column="60" source="standard:trailing-comma-on-call-site" />
-        <error line="150" column="32" source="standard:multiline-expression-wrapping" />
-        <error line="151" column="29" source="standard:multiline-if-else" />
-        <error line="153" column="29" source="standard:multiline-if-else" />
-        <error line="155" column="29" source="standard:multiline-if-else" />
-        <error line="156" column="56" source="standard:trailing-comma-on-call-site" />
-        <error line="166" column="43" source="standard:trailing-comma-on-call-site" />
-        <error line="171" column="29" source="standard:multiline-expression-wrapping" />
-        <error line="172" column="25" source="standard:multiline-if-else" />
-        <error line="174" column="25" source="standard:multiline-if-else" />
-        <error line="174" column="60" source="standard:trailing-comma-on-call-site" />
-        <error line="175" column="18" source="standard:trailing-comma-on-call-site" />
-        <error line="185" column="33" source="standard:multiline-expression-wrapping" />
-        <error line="186" column="29" source="standard:multiline-if-else" />
-        <error line="188" column="29" source="standard:multiline-if-else" />
-        <error line="188" column="71" source="standard:trailing-comma-on-call-site" />
-        <error line="189" column="22" source="standard:trailing-comma-on-call-site" />
-        <error line="216" column="38" source="standard:trailing-comma-on-declaration-site" />
-    </file>
-    <file name="app/src/main/java/com/kzkt/app/ui/component/ProviderConfigCard.kt">
-        <error line="54" column="5" source="standard:function-naming" />
-        <error line="62" column="41" source="standard:function-literal" />
-        <error line="62" column="42" source="standard:wrapping" />
-        <error line="62" column="43" source="standard:multiline-expression-wrapping" />
-        <error line="62" column="43" source="standard:statement-wrapping" />
-        <error line="73" column="6" source="standard:wrapping" />
-        <error line="73" column="7" source="standard:statement-wrapping" />
-        <error line="73" column="7" source="standard:function-literal" />
-        <error line="78" column="47" source="standard:function-literal" />
-        <error line="78" column="48" source="standard:wrapping" />
-        <error line="78" column="49" source="standard:multiline-expression-wrapping" />
-        <error line="78" column="49" source="standard:statement-wrapping" />
-        <error line="89" column="6" source="standard:wrapping" />
-        <error line="89" column="7" source="standard:statement-wrapping" />
-        <error line="89" column="7" source="standard:function-literal" />
-        <error line="171" column="22" source="standard:trailing-comma-on-call-site" />
-        <error line="259" column="31" source="standard:multiline-expression-wrapping" />
-        <error line="276" column="5" source="standard:function-naming" />
-        <error line="295" column="19" source="standard:multiline-expression-wrapping" />
-    </file>
-    <file name="app/src/main/java/com/kzkt/app/ui/component/QuickSettingsCard.kt">
-        <error line="40" column="13" source="standard:function-naming" />
-        <error line="40" column="22" source="standard:function-signature" />
-        <error line="40" column="41" source="standard:function-signature" />
-        <error line="40" column="56" source="standard:function-signature" />
-        <error line="40" column="85" source="standard:function-signature" />
-        <error line="64" column="5" source="standard:function-naming" />
-        <error line="71" column="18" source="standard:multiline-expression-wrapping" />
-        <error line="110" column="48" source="standard:multiline-expression-wrapping" />
-        <error line="128" column="61" source="standard:trailing-comma-on-call-site" />
     </file>
     <file name="app/src/main/java/com/kzkt/app/ui/component/ResultPreviewCard.kt">
         <error line="3" column="1" source="standard:import-ordering" />
-        <error line="48" column="5" source="standard:function-naming" />
-        <error line="65" column="22" source="standard:multiline-expression-wrapping" />
-        <error line="66" column="95" source="standard:trailing-comma-on-call-site" />
-        <error line="68" column="47" source="standard:trailing-comma-on-call-site" />
-        <error line="74" column="55" source="standard:trailing-comma-on-call-site" />
-        <error line="80" column="77" source="standard:trailing-comma-on-call-site" />
-        <error line="85" column="75" source="standard:trailing-comma-on-call-site" />
-        <error line="93" column="55" source="standard:trailing-comma-on-call-site" />
-        <error line="106" column="91" source="standard:trailing-comma-on-call-site" />
-        <error line="116" column="60" source="standard:trailing-comma-on-call-site" />
-        <error line="125" column="91" source="standard:trailing-comma-on-call-site" />
-        <error line="134" column="56" source="standard:trailing-comma-on-call-site" />
-        <error line="158" column="65" source="standard:trailing-comma-on-call-site" />
-        <error line="166" column="53" source="standard:trailing-comma-on-call-site" />
-        <error line="206" column="57" source="standard:argument-list-wrapping" />
-        <error line="206" column="75" source="standard:argument-list-wrapping" />
-        <error line="207" column="60" source="standard:argument-list-wrapping" />
-        <error line="207" column="72" source="standard:argument-list-wrapping" />
-        <error line="207" column="82" source="standard:argument-list-wrapping" />
-        <error line="207" column="94" source="standard:wrapping" />
-        <error line="207" column="95" source="standard:argument-list-wrapping" />
-        <error line="207" column="95" source="standard:trailing-comma-on-call-site" />
-        <error line="223" column="60" source="standard:multiline-expression-wrapping" />
-        <error line="226" column="47" source="standard:trailing-comma-on-call-site" />
-        <error line="228" column="18" source="standard:trailing-comma-on-call-site" />
-    </file>
-    <file name="app/src/main/java/com/kzkt/app/ui/component/SettingsIcon.kt">
-        <error line="13" column="5" source="standard:function-naming" />
-    </file>
-    <file name="app/src/main/java/com/kzkt/app/ui/component/TranslateActionButtons.kt">
-        <error line="34" column="5" source="standard:function-naming" />
-        <error line="78" column="26" source="standard:multiline-expression-wrapping" />
-        <error line="112" column="30" source="standard:multiline-expression-wrapping" />
-    </file>
-    <file name="app/src/main/java/com/kzkt/app/ui/component/TranslationLogCard.kt">
-        <error line="38" column="5" source="standard:function-naming" />
-        <error line="46" column="18" source="standard:multiline-expression-wrapping" />
-        <error line="74" column="74" source="standard:argument-list-wrapping" />
-        <error line="74" column="115" source="standard:argument-list-wrapping" />
-        <error line="74" column="141" source="standard:max-line-length" />
-        <error line="77" column="53" source="standard:chain-method-continuation" />
-        <error line="77" column="63" source="standard:argument-list-wrapping" />
-        <error line="77" column="72" source="standard:argument-list-wrapping" />
-        <error line="77" column="123" source="standard:argument-list-wrapping" />
-        <error line="77" column="141" source="standard:max-line-length" />
-        <error line="77" column="156" source="standard:argument-list-wrapping" />
-        <error line="77" column="157" source="standard:chain-method-continuation" />
-        <error line="79" column="60" source="standard:trailing-comma-on-call-site" />
-        <error line="85" column="64" source="standard:trailing-comma-on-call-site" />
-        <error line="113" column="37" source="standard:multiline-expression-wrapping" />
-        <error line="113" column="50" source="standard:if-else-wrapping" />
-        <error line="113" column="50" source="standard:multiline-if-else" />
-        <error line="114" column="1" source="standard:indent" />
-        <error line="114" column="42" source="standard:if-else-wrapping" />
-        <error line="114" column="42" source="standard:multiline-if-else" />
-    </file>
-    <file name="app/src/main/java/com/kzkt/app/ui/component/TranslationProgressBar.kt">
-        <error line="18" column="5" source="standard:function-naming" />
     </file>
     <file name="app/src/main/java/com/kzkt/app/ui/component/TweakSettingsSections.kt">
         <error line="9" column="1" source="standard:no-unused-imports" />
-        <error line="35" column="5" source="standard:function-naming" />
         <error line="41" column="17" source="standard:multiline-expression-wrapping" />
         <error line="49" column="108" source="standard:trailing-comma-on-call-site" />
         <error line="51" column="18" source="standard:trailing-comma-on-call-site" />
@@ -3359,7 +2880,6 @@
         <error line="105" column="17" source="standard:trailing-comma-on-declaration-site" />
         <error line="111" column="21" source="standard:multiline-expression-wrapping" />
         <error line="116" column="18" source="standard:trailing-comma-on-call-site" />
-        <error line="126" column="13" source="standard:function-naming" />
         <error line="134" column="27" source="standard:function-literal" />
         <error line="134" column="28" source="standard:wrapping" />
         <error line="134" column="29" source="standard:multiline-expression-wrapping" />
@@ -3374,11 +2894,9 @@
         <error line="149" column="17" source="standard:multiline-expression-wrapping" />
         <error line="156" column="75" source="standard:trailing-comma-on-call-site" />
         <error line="159" column="39" source="standard:multiline-expression-wrapping" />
-        <error line="185" column="5" source="standard:function-naming" />
         <error line="190" column="17" source="standard:multiline-expression-wrapping" />
     </file>
     <file name="app/src/main/java/com/kzkt/app/ui/component/UpdateDialog.kt">
-        <error line="30" column="5" source="standard:function-naming" />
         <error line="134" column="44" source="standard:multiline-expression-wrapping" />
         <error line="153" column="47" source="standard:function-signature" />
         <error line="156" column="50" source="standard:function-signature" />
@@ -3389,12 +2907,7 @@
         <error line="165" column="50" source="standard:multiline-expression-wrapping" />
         <error line="165" column="50" source="standard:function-signature" />
     </file>
-    <file name="app/src/main/java/com/kzkt/app/ui/component/YoloStatusCard.kt">
-        <error line="30" column="5" source="standard:function-naming" />
-        <error line="53" column="5" source="standard:function-naming" />
-    </file>
     <file name="app/src/main/java/com/kzkt/app/ui/theme/Theme.kt">
-        <error line="31" column="5" source="standard:function-naming" />
         <error line="40" column="27" source="standard:multiline-expression-wrapping" />
         <error line="47" column="43" source="standard:trailing-comma-on-call-site" />
         <error line="51" column="23" source="standard:multiline-expression-wrapping" />
@@ -3407,40 +2920,6 @@
         <error line="66" column="12" source="standard:multiline-if-else" />
         <error line="68" column="18" source="standard:multiline-expression-wrapping" />
         <error line="70" column="5" source="standard:blank-line-before-declaration" />
-    </file>
-    <file name="app/src/main/java/com/kzkt/app/ui/theme/Type.kt">
-        <error line="12" column="21" source="standard:multiline-expression-wrapping" />
-        <error line="13" column="20" source="standard:multiline-expression-wrapping" />
-        <error line="18" column="35" source="standard:trailing-comma-on-call-site" />
-        <error line="20" column="21" source="standard:multiline-expression-wrapping" />
-        <error line="25" column="29" source="standard:trailing-comma-on-call-site" />
-        <error line="27" column="20" source="standard:multiline-expression-wrapping" />
-        <error line="32" column="29" source="standard:trailing-comma-on-call-site" />
-        <error line="34" column="21" source="standard:multiline-expression-wrapping" />
-        <error line="39" column="29" source="standard:trailing-comma-on-call-site" />
-        <error line="41" column="22" source="standard:multiline-expression-wrapping" />
-        <error line="46" column="29" source="standard:trailing-comma-on-call-site" />
-        <error line="48" column="21" source="standard:multiline-expression-wrapping" />
-        <error line="53" column="29" source="standard:trailing-comma-on-call-site" />
-        <error line="55" column="18" source="standard:multiline-expression-wrapping" />
-        <error line="60" column="29" source="standard:trailing-comma-on-call-site" />
-        <error line="62" column="19" source="standard:multiline-expression-wrapping" />
-        <error line="67" column="32" source="standard:trailing-comma-on-call-site" />
-        <error line="69" column="18" source="standard:multiline-expression-wrapping" />
-        <error line="74" column="31" source="standard:trailing-comma-on-call-site" />
-        <error line="76" column="17" source="standard:multiline-expression-wrapping" />
-        <error line="81" column="31" source="standard:trailing-comma-on-call-site" />
-        <error line="83" column="18" source="standard:multiline-expression-wrapping" />
-        <error line="88" column="32" source="standard:trailing-comma-on-call-site" />
-        <error line="90" column="17" source="standard:multiline-expression-wrapping" />
-        <error line="95" column="31" source="standard:trailing-comma-on-call-site" />
-        <error line="97" column="18" source="standard:multiline-expression-wrapping" />
-        <error line="102" column="31" source="standard:trailing-comma-on-call-site" />
-        <error line="104" column="19" source="standard:multiline-expression-wrapping" />
-        <error line="109" column="31" source="standard:trailing-comma-on-call-site" />
-        <error line="111" column="18" source="standard:multiline-expression-wrapping" />
-        <error line="116" column="31" source="standard:trailing-comma-on-call-site" />
-        <error line="117" column="6" source="standard:trailing-comma-on-call-site" />
     </file>
     <file name="app/src/main/java/com/kzkt/app/util/ArchiveExtractor.kt">
         <error line="8" column="1" source="standard:no-unused-imports" />

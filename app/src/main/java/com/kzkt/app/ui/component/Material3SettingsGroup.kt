@@ -77,7 +77,7 @@ fun Material3SettingsGroup(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                     ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 ) {
                     Material3SettingsItemRow(item = item)
                 }
@@ -90,18 +90,16 @@ fun Material3SettingsGroup(
  * Individual settings item row with Material 3 styling
  */
 @Composable
-private fun Material3SettingsItemRow(
-    item: Material3SettingsItem
-) {
+private fun Material3SettingsItemRow(item: Material3SettingsItem) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(
-                enabled = item.enabled && item.onClick != null,
-                onClick = { item.onClick?.invoke() }
-            )
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(
+                    enabled = item.enabled && item.onClick != null,
+                    onClick = { item.onClick?.invoke() },
+                ).padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         // Custom leading content or Icon with background
         if (item.leadingContent != null) {
@@ -109,47 +107,52 @@ private fun Material3SettingsItemRow(
             Spacer(modifier = Modifier.width(16.dp))
         } else if (item.icon != null) {
             Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        MaterialTheme.colorScheme.primary.copy(
-                            alpha = if (item.isHighlighted) 0.15f else 0.1f
-                        )
-                    ),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            MaterialTheme.colorScheme.primary.copy(
+                                alpha = if (item.isHighlighted) 0.15f else 0.1f,
+                            ),
+                        ),
+                contentAlignment = Alignment.Center,
             ) {
                 if (item.showBadge) {
                     BadgedBox(
                         badge = {
                             Badge(
-                                containerColor = MaterialTheme.colorScheme.error
+                                containerColor = MaterialTheme.colorScheme.error,
                             )
-                        }
+                        },
                     ) {
                         Icon(
                             painter = item.icon,
                             contentDescription = null,
-                            tint = if (!item.enabled)
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                            else if (item.isHighlighted)
-                                MaterialTheme.colorScheme.primary
-                            else
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
-                            modifier = Modifier.size(24.dp)
+                            tint =
+                                if (!item.enabled) {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                } else if (item.isHighlighted) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                                },
+                            modifier = Modifier.size(24.dp),
                         )
                     }
                 } else {
                     Icon(
                         painter = item.icon,
                         contentDescription = null,
-                        tint = if (!item.enabled)
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        else if (item.isHighlighted)
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
-                        modifier = Modifier.size(24.dp)
+                        tint =
+                            if (!item.enabled) {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            } else if (item.isHighlighted) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                            },
+                        modifier = Modifier.size(24.dp),
                     )
                 }
             }
@@ -159,16 +162,18 @@ private fun Material3SettingsItemRow(
 
         // Title and description
         Column(
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         ) {
             // Title content
             ProvideTextStyle(
                 MaterialTheme.typography.titleMedium.copy(
-                    color = if (!item.enabled)
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    else
-                        MaterialTheme.colorScheme.onSurface
-                )
+                    color =
+                        if (!item.enabled) {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                ),
             ) {
                 item.title()
             }
@@ -178,11 +183,13 @@ private fun Material3SettingsItemRow(
                 Spacer(modifier = Modifier.height(2.dp))
                 ProvideTextStyle(
                     MaterialTheme.typography.bodyMedium.copy(
-                        color = if (!item.enabled)
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        else
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                        color =
+                            if (!item.enabled) {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                    ),
                 ) {
                     desc()
                 }
@@ -209,5 +216,5 @@ data class Material3SettingsItem(
     val showBadge: Boolean = false,
     val isHighlighted: Boolean = false,
     val enabled: Boolean = true,
-    val onClick: (() -> Unit)? = null
+    val onClick: (() -> Unit)? = null,
 )

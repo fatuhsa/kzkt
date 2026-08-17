@@ -1,0 +1,19 @@
+# EditorConfig — shared editor / ktlint settings
+# See https://editorconfig.org
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+[*.kt]
+# Compose composables are named in PascalCase by convention (fun MyScreen()).
+# ktlint 1.x flags them with standard:function-naming unless this property is
+# set — exclude functions annotated with @Composable instead of suppressing
+# every call site or hiding them in the baseline.
+ktlint_function_naming_ignore_when_annotated_with = Composable

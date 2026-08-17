@@ -454,7 +454,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (newPaths.isNotEmpty()) {
             selectedFiles.addAll(newPaths)
             canRetry.value = false
-            com.kzkt.app.core.TranslationProgressTracker.clearCache()
+            com.kzkt.app.core.TranslationProgressTracker
+                .clearCache()
         }
     }
 
@@ -470,14 +471,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         selectedFiles.clear()
         pageStatus.clear()
         canRetry.value = false
-        com.kzkt.app.core.TranslationProgressTracker.clearCache()
+        com.kzkt.app.core.TranslationProgressTracker
+            .clearCache()
     }
 
     /** Remove one entry from the Riwayat tab (and its persisted edit metadata). */
     fun deleteHistoryEntry(timestamp: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             historyEntries.value.find { it.timestamp == timestamp }?.let { entry ->
-                com.kzkt.app.data.EditMetadataRepository(getApplication()).deleteForOutput(entry.outputPath)
+                com.kzkt.app.data
+                    .EditMetadataRepository(getApplication())
+                    .deleteForOutput(entry.outputPath)
             }
             historyRepo.delete(timestamp)
         }
@@ -492,7 +496,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearHistory() {
         viewModelScope.launch(Dispatchers.IO) {
             historyEntries.value.forEach { entry ->
-                com.kzkt.app.data.EditMetadataRepository(getApplication()).deleteForOutput(entry.outputPath)
+                com.kzkt.app.data
+                    .EditMetadataRepository(getApplication())
+                    .deleteForOutput(entry.outputPath)
             }
             historyRepo.clear()
         }
@@ -515,24 +521,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Custom provider model auto-detect ──
 
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .build()
+    private val httpClient =
+        OkHttpClient
+            .Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .build()
 
     /**
      * Health check: send one tiny text request through the provider to validate the
      * API key + model + base URL before a real batch. Reports the result in
      * [providerTestState] (shown inline in Settings).
      */
-    fun testProviderConnection(providerKey: String, baseUrl: String, apiKey: String, model: String) {
+    fun testProviderConnection(
+        providerKey: String,
+        baseUrl: String,
+        apiKey: String,
+        model: String,
+    ) {
         if (providerTestState.value?.loading == true) return
         providerTestState.value = ProviderTestState(loading = true)
 
         viewModelScope.launch(Dispatchers.IO) {
-            val provider = com.kzkt.app.core.providers.ProviderFactory.create(
-                providerKey, apiKey, model, baseUrl, settings.value.customTimeoutSec
-            )
+            val provider =
+                com.kzkt.app.core.providers.ProviderFactory.create(
+                    providerKey,
+                    apiKey,
+                    model,
+                    baseUrl,
+                    settings.value.customTimeoutSec,
+                )
             if (provider == null) {
                 post {
                     providerTestState.value = ProviderTestState(ok = false, message = "Unknown provider: $providerKey")
@@ -545,10 +563,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val elapsed = System.currentTimeMillis() - started
                 val ok = reply != null && reply.contains("OK", ignoreCase = true)
                 post {
-                    providerTestState.value = ProviderTestState(
-                        ok = ok,
-                        message = if (ok) "Connection OK (${elapsed}ms)" else "Provider answered, but unexpected reply."
-                    )
+                    providerTestState.value =
+                        ProviderTestState(
+                            ok = ok,
+                            message = if (ok) "Connection OK (${elapsed}ms)" else "Provider answered, but unexpected reply.",
+                        )
                 }
             } catch (e: Exception) {
                 val msg = e.message ?: "Unknown error"
@@ -577,7 +596,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                when (val result = com.kzkt.app.core.UpdateManager.checkForUpdate()) {
+                when (
+                    val result =
+                        com.kzkt.app.core.UpdateManager
+                            .checkForUpdate()
+                ) {
                     is com.kzkt.app.core.UpdateManager.CheckResult.Available -> {
                         // Pop-up — the only case a background check surfaces UI.
                         post { updateState.value = UpdateUiState(info = result.info) }
@@ -589,11 +612,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     is com.kzkt.app.core.UpdateManager.CheckResult.Failed -> {
                         post {
-                            updateState.value = if (manual) {
-                                UpdateUiState(error = "Could not check for updates: ${result.message}")
-                            } else {
-                                UpdateUiState() // background failures stay silent
-                            }
+                            updateState.value =
+                                if (manual) {
+                                    UpdateUiState(error = "Could not check for updates: ${result.message}")
+                                } else {
+                                    UpdateUiState() // background failures stay silent
+                                }
                         }
                     }
                 }
@@ -611,7 +635,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun downloadAndInstallUpdate() {
         val info = updateState.value.info ?: return
         updateState.value = updateState.value.copy(downloading = true, downloadProgress = 0f)
-        com.kzkt.app.core.UpdateDownloadService.start(getApplication(), info)
+        com.kzkt.app.core.UpdateDownloadService
+            .start(getApplication(), info)
     }
 
     /** Dismiss the update dialog and clear transient state. */
@@ -619,7 +644,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         updateState.value = UpdateUiState()
     }
 
-    fun fetchModelsForProvider(providerKey: String, baseUrl: String, apiKey: String) {
+    fun fetchModelsForProvider(
+        providerKey: String,
+        baseUrl: String,
+        apiKey: String,
+    ) {
         val meta = Config.PROVIDER_REGISTRY[providerKey]
         val rawUrl = if (baseUrl.isNotBlank()) baseUrl else (meta?.defaultBaseUrl ?: "")
         if (rawUrl.isBlank()) {
@@ -658,17 +687,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * the Settings "Fetch Models" button and the pre-flight model validation in
      * [startTranslation] so the check lives in exactly one place.
      */
-    private suspend fun fetchModelsBlocking(providerKey: String, baseUrl: String, apiKey: String): List<String> {
+    private suspend fun fetchModelsBlocking(
+        providerKey: String,
+        baseUrl: String,
+        apiKey: String,
+    ): List<String> {
         return try {
             var normalized = baseUrl.trimEnd('/')
             if (normalized.endsWith("/chat/completions")) normalized = normalized.removeSuffix("/chat/completions")
             if (normalized.endsWith("/v1")) normalized = normalized.removeSuffix("/v1")
-            val endpoint = if (providerKey == "gemini") {
-                val base = if (normalized.endsWith("/v1beta")) normalized else "$normalized/v1beta"
-                "$base/models"
-            } else {
-                "$normalized/v1/models"
-            }
+            val endpoint =
+                if (providerKey == "gemini") {
+                    val base = if (normalized.endsWith("/v1beta")) normalized else "$normalized/v1beta"
+                    "$base/models"
+                } else {
+                    "$normalized/v1/models"
+                }
 
             val requestBuilder = Request.Builder().url(endpoint)
             if (apiKey.isNotBlank()) {
@@ -698,5 +732,4 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             emptyList()
         }
     }
-
 }

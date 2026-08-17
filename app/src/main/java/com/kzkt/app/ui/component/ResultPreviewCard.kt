@@ -1,6 +1,5 @@
 package com.kzkt.app.ui.component
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,11 +18,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,9 +69,10 @@ fun ResultPreviewCard(
 
         Card(
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                ),
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
@@ -141,12 +138,14 @@ fun ResultPreviewCard(
                     if (viewModel.lastResultForEditing.value != null && !currentPath.endsWith(".pdf", ignoreCase = true)) {
                         IconButton(
                             onClick = { viewModel.showInteractiveEditor.value = true },
-                            colors = IconButtonDefaults.iconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            ),
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape),
+                            colors =
+                                IconButtonDefaults.iconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                ),
+                            modifier =
+                                Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape),
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Edit,
@@ -180,12 +179,14 @@ fun ResultPreviewCard(
                     // Share button
                     IconButton(
                         onClick = { FileUtils.shareFile(context, currentPath) },
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        ),
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape),
+                        colors =
+                            IconButtonDefaults.iconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            ),
+                        modifier =
+                            Modifier
+                                .size(36.dp)
+                                .clip(CircleShape),
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
@@ -254,8 +255,13 @@ fun ResultPreviewCard(
                                 if (pristineOriginal != null) {
                                     try {
                                         com.kzkt.app.data.EditMetadataRepository(context).saveForOutput(
-                                            outputPath, pristineOriginal, updatedTranslations,
-                                            updatedCoords, targetLang, rawTexts, updatedStyles
+                                            outputPath,
+                                            pristineOriginal,
+                                            updatedTranslations,
+                                            updatedCoords,
+                                            targetLang,
+                                            rawTexts,
+                                            updatedStyles,
                                         )
                                     } catch (e: Exception) {
                                         android.util.Log.w("KZKT", "Failed to save edit metadata: ${e.message}")
@@ -271,11 +277,12 @@ fun ResultPreviewCard(
                         onSaved()
                     }
 
-                    viewModel.lastResultForEditing.value = lastResult.copy(
-                        translations = updatedTranslations,
-                        coordinateMap = updatedCoords,
-                        styles = updatedStyles,
-                    )
+                    viewModel.lastResultForEditing.value =
+                        lastResult.copy(
+                            translations = updatedTranslations,
+                            coordinateMap = updatedCoords,
+                            styles = updatedStyles,
+                        )
                 },
             )
         }

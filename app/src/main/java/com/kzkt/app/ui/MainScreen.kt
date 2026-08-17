@@ -3,10 +3,8 @@ package com.kzkt.app.ui
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,9 +49,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
-fun MainScreen(
-    viewModel: MainViewModel,
-) {
+fun MainScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
     val logListState = rememberLazyListState()
 
@@ -62,18 +58,20 @@ fun MainScreen(
 
     var showLogBottomSheet by remember { mutableStateOf(false) }
 
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { _ -> }
+    val notificationPermissionLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission(),
+        ) { _ -> }
 
     // Initialize YOLO on first composition and request notification permission
     LaunchedEffect(Unit) {
         viewModel.initialize(context)
         if (android.os.Build.VERSION.SDK_INT >= 33) {
-            val permissionCheck = androidx.core.content.ContextCompat.checkSelfPermission(
-                context,
-                "android.permission.POST_NOTIFICATIONS"
-            )
+            val permissionCheck =
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    "android.permission.POST_NOTIFICATIONS",
+                )
             if (permissionCheck != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 notificationPermissionLauncher.launch("android.permission.POST_NOTIFICATIONS")
             }
@@ -82,58 +80,71 @@ fun MainScreen(
 
     val scope = rememberCoroutineScope()
 
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenMultipleDocuments()
-    ) { uris: List<Uri> ->
-        if (uris.isNotEmpty()) {
-            val allPaths = FileUtils.resolvePickedUris(context, uris)
-            if (allPaths.isNotEmpty()) {
-                if (viewModel.selectedFiles.isEmpty()) {
-                    viewModel.addFiles(allPaths)
-                } else {
-                    viewModel.appendFiles(allPaths)
+    val filePickerLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenMultipleDocuments(),
+        ) { uris: List<Uri> ->
+            if (uris.isNotEmpty()) {
+                val allPaths = FileUtils.resolvePickedUris(context, uris)
+                if (allPaths.isNotEmpty()) {
+                    if (viewModel.selectedFiles.isEmpty()) {
+                        viewModel.addFiles(allPaths)
+                    } else {
+                        viewModel.appendFiles(allPaths)
+                    }
                 }
             }
         }
-    }
 
     // ── Folder input (SAF tree picker): pick one folder, import all images in it ──
-    val folderPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { treeUri: Uri? ->
-        if (treeUri != null) {
-            val toastContext = context
-            scope.launch(Dispatchers.IO) {
-                val uris = FileUtils.listImageUrisFromTree(context, treeUri)
-                if (uris.isEmpty()) {
-                    kotlinx.coroutines.withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(toastContext, "No images found in this folder", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                    return@launch
-                }
-                val paths = uris.mapNotNull { FileUtils.copyUriToCache(context, it) }
-                kotlinx.coroutines.withContext(Dispatchers.Main) {
-                    if (paths.isNotEmpty()) {
-                        if (viewModel.selectedFiles.isEmpty()) {
-                            viewModel.addFiles(paths)
-                        } else {
-                            viewModel.appendFiles(paths)
+    val folderPickerLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocumentTree(),
+        ) { treeUri: Uri? ->
+            if (treeUri != null) {
+                val toastContext = context
+                scope.launch(Dispatchers.IO) {
+                    val uris = FileUtils.listImageUrisFromTree(context, treeUri)
+                    if (uris.isEmpty()) {
+                        kotlinx.coroutines.withContext(Dispatchers.Main) {
+                            android.widget.Toast
+                                .makeText(
+                                    toastContext,
+                                    "No images found in this folder",
+                                    android.widget.Toast.LENGTH_SHORT,
+                                ).show()
                         }
-                        android.widget.Toast.makeText(toastContext, "Imported ${paths.size} images from folder", android.widget.Toast.LENGTH_SHORT).show()
+                        return@launch
+                    }
+                    val paths = uris.mapNotNull { FileUtils.copyUriToCache(context, it) }
+                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                        if (paths.isNotEmpty()) {
+                            if (viewModel.selectedFiles.isEmpty()) {
+                                viewModel.addFiles(paths)
+                            } else {
+                                viewModel.appendFiles(paths)
+                            }
+                            android.widget.Toast
+                                .makeText(
+                                    toastContext,
+                                    "Imported ${paths.size} images from folder",
+                                    android.widget.Toast.LENGTH_SHORT,
+                                ).show()
+                        }
                     }
                 }
             }
         }
-    }
 
     val hasFiles by remember { derivedStateOf { viewModel.selectedFiles.isNotEmpty() } }
     val active by remember { derivedStateOf { viewModel.translationActive.value } }
     val yoloReady by remember { derivedStateOf { viewModel.yoloReady.value } }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(16.dp),
     ) {
         // Header: Title + YOLO badge
         Text(
@@ -161,9 +172,10 @@ fun MainScreen(
 
             // Center Empty State
             Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
                 contentAlignment = Alignment.Center,
             ) {
                 EmptyMangaPickerView(
@@ -178,10 +190,11 @@ fun MainScreen(
                 Button(
                     onClick = { viewModel.cancelTranslation() },
                     shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                    ),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        ),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -218,10 +231,11 @@ fun MainScreen(
                             onClick = { viewModel.retryTranslation() },
                             enabled = hasFiles && yoloReady,
                             shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                            ),
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                ),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -233,10 +247,11 @@ fun MainScreen(
                             onClick = { viewModel.startTranslation() },
                             enabled = hasFiles && yoloReady,
                             shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                            ),
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                ),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))

@@ -74,9 +74,10 @@ fun InfoChip(
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(14.dp))
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -140,10 +141,11 @@ fun QuickConfigRow(
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 8.dp)
-                    .padding(bottom = 24.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp)
+                        .padding(bottom = 24.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -185,15 +187,18 @@ fun QuickConfigRow(
                                 )
                             },
                             shape = RoundedCornerShape(50),
-                            leadingIcon = if (isSelected) {
-                                {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(FilterChipDefaults.IconSize),
-                                    )
-                                }
-                            } else null,
+                            leadingIcon =
+                                if (isSelected) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(FilterChipDefaults.IconSize),
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
                         )
                     }
                 }
@@ -210,10 +215,11 @@ fun QuickConfigRow(
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 8.dp)
-                    .padding(bottom = 24.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp)
+                        .padding(bottom = 24.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -241,27 +247,32 @@ fun QuickConfigRow(
                         val isSelected = meta.key == provider
                         Card(
                             shape = RoundedCornerShape(14.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isSelected)
-                                    MaterialTheme.colorScheme.primaryContainer
-                                else
-                                    MaterialTheme.colorScheme.surfaceContainerLow,
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable {
-                                    scope.launch {
-                                        viewModel.settingsRepo.saveProvider(meta.key)
-                                        viewModel.refreshModelsForProvider(meta.key)
-                                    }
-                                    showProviderPicker = false
-                                },
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor =
+                                        if (isSelected) {
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceContainerLow
+                                        },
+                                ),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        scope.launch {
+                                            viewModel.settingsRepo.saveProvider(meta.key)
+                                            viewModel.refreshModelsForProvider(meta.key)
+                                        }
+                                        showProviderPicker = false
+                                    },
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -270,19 +281,23 @@ fun QuickConfigRow(
                                         meta.displayName,
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isSelected)
-                                            MaterialTheme.colorScheme.onPrimaryContainer
-                                        else
-                                            MaterialTheme.colorScheme.onSurface,
+                                        color =
+                                            if (isSelected) {
+                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface
+                                            },
                                     )
                                     if (meta.description.isNotBlank()) {
                                         Text(
                                             meta.description,
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = if (isSelected)
-                                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                                            else
-                                                MaterialTheme.colorScheme.onSurfaceVariant,
+                                            color =
+                                                if (isSelected) {
+                                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                },
                                         )
                                     }
                                 }
@@ -336,10 +351,11 @@ fun SelectedFilesSection(
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable { viewModel.clearFiles() }
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        modifier =
+                            Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable { viewModel.clearFiles() }
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
                     )
                 }
             }
@@ -362,13 +378,14 @@ fun SelectedFilesSection(
                             // Close button on top-right (when idle)
                             if (!active) {
                                 Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(5.dp)
-                                        .size(18.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                                        .clickable { viewModel.removeFile(path) },
+                                    modifier =
+                                        Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(5.dp)
+                                            .size(18.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                                            .clickable { viewModel.removeFile(path) },
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Icon(
@@ -385,29 +402,32 @@ fun SelectedFilesSection(
                                         imageVector = Icons.Default.CheckCircle,
                                         contentDescription = "Done",
                                         tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(5.dp)
-                                            .size(16.dp),
+                                        modifier =
+                                            Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(5.dp)
+                                                .size(16.dp),
                                     )
                                 } else if (state == "failed") {
                                     Icon(
                                         imageVector = Icons.Default.Error,
                                         contentDescription = "Failed",
                                         tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(5.dp)
-                                            .size(16.dp),
+                                        modifier =
+                                            Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(5.dp)
+                                                .size(16.dp),
                                     )
                                 }
                             }
 
                             // Center content: Document icon or spinner
                             Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 6.dp, vertical = 8.dp),
+                                modifier =
+                                    Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 6.dp, vertical = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center,
                             ) {
@@ -418,7 +438,10 @@ fun SelectedFilesSection(
                                     Icon(
                                         imageVector = Icons.Default.Description,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isProcessingThis) 0.4f else 0.85f),
+                                        tint =
+                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                alpha = if (isProcessingThis) 0.4f else 0.85f,
+                                            ),
                                         modifier = Modifier.size(26.dp),
                                     )
                                     if (isProcessingThis) {
@@ -452,10 +475,11 @@ fun SelectedFilesSection(
                         Surface(
                             shape = RoundedCornerShape(14.dp),
                             color = MaterialTheme.colorScheme.surfaceContainerLow,
-                            modifier = Modifier
-                                .size(width = 84.dp, height = 84.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable { onAddClick() },
+                            modifier =
+                                Modifier
+                                    .size(width = 84.dp, height = 84.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable { onAddClick() },
                         ) {
                             Column(
                                 modifier = Modifier.fillMaxSize(),
