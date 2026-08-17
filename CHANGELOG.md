@@ -4,6 +4,29 @@ All notable changes to KZKT are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Interactive Quick Config Badges**: tap the Target Language (`→ [Language]`) or Provider badge on the main Translate screen to open a modal bottom sheet picker and switch preferences instantly without going to Settings.
+- **Modern Stepped Progress UI**: 3-phase translation progress tracker (`Scan` → `Translate` → `Render`) with active step highlighting and continuous progress indicator.
+- **Modal Bottom Sheet System Logs**: tap the System Logs button to view live logs in a slide-up modal bottom sheet with category color tags, log counter, and one-tap copy button.
+- **Integrated Inter UI Font**: bundled the Inter font family (Regular, Medium, SemiBold, Bold) across all Material 3 typography tokens for a crisp, modern UI.
+- **Top Jump Chips in Settings**: horizontal quick navigation bar to jump directly to any settings category.
+- **Back Navigation in Glossary**: integrated top navigation bar with back arrow in the Custom Glossary screen.
+
+### Changed
+
+- **Settings Screen Reorganization**: streamlined settings into 5 structured categories (*AI & Provider*, *Detection & Engine*, *Text & Rendering*, *Appearance*, *Data & Updates*) with dedicated section icons and card containers.
+- **Full English Localization**: unified all UI labels, action buttons, descriptions, and empty state placeholders into standard English.
+- **History Screen Visual Upgrade**: pill-shaped search bar with clear button, pill sort chips, and updated folder/item card styling.
+- **Result Preview Card**: modernized result container with pill action buttons (*View in App*, *Gallery*, *Edit*, *Share*).
+
+### Fixed
+
+- **Theme Mode Auto Persistence**: resolved issue where selecting `Auto` (system theme) was immediately overwritten with `dark` or `light` in DataStore.
+- **Appearance Spacing & Squeezed Labels**: resolved cramped layout in Theme Mode and Accent Color settings by moving selectors into full-width card description rows.
+
 ## [v1.36.7] - 2026-08-16
 
 ### Added
