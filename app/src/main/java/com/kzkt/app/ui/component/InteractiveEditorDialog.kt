@@ -20,18 +20,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FormatAlignLeft
+import androidx.compose.material.icons.automirrored.filled.FormatAlignRight
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FormatAlignCenter
-import androidx.compose.material.icons.filled.FormatAlignLeft
-import androidx.compose.material.icons.filled.FormatAlignRight
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatPaint
-import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -659,7 +659,7 @@ fun InteractiveEditorDialog(
                                         androidx.compose.foundation.shape.CircleShape,
                                     ),
                             ) {
-                                Icon(Icons.Default.Undo, contentDescription = "Undo")
+                                Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
                             }
                             // Redo button
                             androidx.compose.material3.IconButton(
@@ -680,7 +680,7 @@ fun InteractiveEditorDialog(
                                         androidx.compose.foundation.shape.CircleShape,
                                     ),
                             ) {
-                                Icon(Icons.Default.Redo, contentDescription = "Redo")
+                                Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Redo")
                             }
                             // Peek Original button
                             androidx.compose.material3.IconButton(
@@ -808,8 +808,8 @@ fun InteractiveEditorDialog(
                                             ) {
                                                 Icon(
                                                     when (bubble.align) {
-                                                        android.graphics.Paint.Align.LEFT -> Icons.Default.FormatAlignLeft
-                                                        android.graphics.Paint.Align.RIGHT -> Icons.Default.FormatAlignRight
+                                                        android.graphics.Paint.Align.LEFT -> Icons.AutoMirrored.Filled.FormatAlignLeft
+                                                        android.graphics.Paint.Align.RIGHT -> Icons.AutoMirrored.Filled.FormatAlignRight
                                                         else -> Icons.Default.FormatAlignCenter
                                                     },
                                                     "Align",

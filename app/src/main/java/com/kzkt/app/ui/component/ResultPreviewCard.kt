@@ -237,10 +237,15 @@ fun ResultPreviewCard(
                 rawTexts = lastResult.rawTexts,
                 styles = lastResult.styles,
                 onDismiss = { viewModel.showInteractiveEditor.value = false },
-                onSave = { updatedBitmap, updatedTranslations, updatedCoords, updatedStyles, onSaved ->
+                onSave = {
+                    updatedBitmap,
+                    updatedTranslations,
+                    updatedCoords,
+                    updatedStyles,
+                    onSaved,
+                    ->
                     val outputPath = lastResult.outputPath
                     if (outputPath != null) {
-                        val pristineOriginal = lastResult.originalBitmap
                         val rawTexts = lastResult.rawTexts
                         val targetLang = viewModel.settings.value.targetLanguage
                         scope.launch(Dispatchers.IO) {
@@ -252,20 +257,18 @@ fun ResultPreviewCard(
                                 } catch (e: Exception) {
                                     android.util.Log.w("KZKT", "Failed to save edited image: ${e.message}")
                                 }
-                                if (pristineOriginal != null) {
-                                    try {
-                                        com.kzkt.app.data.EditMetadataRepository(context).saveForOutput(
-                                            outputPath,
-                                            pristineOriginal,
-                                            updatedTranslations,
-                                            updatedCoords,
-                                            targetLang,
-                                            rawTexts,
-                                            updatedStyles,
-                                        )
-                                    } catch (e: Exception) {
-                                        android.util.Log.w("KZKT", "Failed to save edit metadata: ${e.message}")
-                                    }
+                                try {
+                                    com.kzkt.app.data.EditMetadataRepository(context).saveForOutput(
+                                        outputPath,
+                                        lastResult.originalBitmap,
+                                        updatedTranslations,
+                                        updatedCoords,
+                                        targetLang,
+                                        rawTexts,
+                                        updatedStyles,
+                                    )
+                                } catch (e: Exception) {
+                                    android.util.Log.w("KZKT", "Failed to save edit metadata: ${e.message}")
                                 }
                             } finally {
                                 kotlinx.coroutines.withContext(Dispatchers.Main) {

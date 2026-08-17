@@ -62,4 +62,22 @@ class JsonUtilsTest {
         assertTrue(JsonUtils.parseTranslationMap("not json at all").isEmpty())
         assertTrue(JsonUtils.parseTranslationMap("null").isEmpty())
     }
+
+    @Test
+    fun `raw control characters inside values are stripped so parse survives`() {
+        // U+000B (vertical tab) and U+000C (form feed) are illegal inside JSON
+        // strings even under LENIENT — sanitize must remove them, not fail.
+        val raw = "{\"ft1\":\"teks\u000Bvertikal\",\"ft2\":\"ok\u000C!\"}"
+        val result = JsonUtils.parseTranslationMap(JsonUtils.sanitizeJson(raw))
+        assertEquals("teksvertikal", result["ft1"])
+        assertEquals("ok!", result["ft2"])
+    }
+
+    @Test
+    fun `control characters outside the json object are also stripped`() {
+        val raw = "prefix\u0000junk {\"1\":\"a\"} trailing\u000B"
+        val result = JsonUtils.parseTranslationMap(JsonUtils.sanitizeJson(raw))
+        assertEquals(1, result.size)
+        assertEquals("a", result["1"])
+    }
 }

@@ -28,6 +28,18 @@ object Constants {
     const val MODEL_DECRYPT_KEY_STR = "indravoyager"
     val MODEL_DECRYPT_KEY: Int get() = MODEL_DECRYPT_KEY_STR.length * 7 + 6 // = 90
 
+    // ── Free-text scaling ──────────────────────────────────────────
+
+    /**
+     * Free-text crops whose longest side already reaches this size are NOT
+     * scaled up for the mosaic. Scaling a tall vertical region (e.g. a column
+     * of Japanese text) by the 2× mosaic factor produces an extremely tall
+     * mosaic that providers downscale again — shrinking every region in the
+     * mosaic, which is exactly when vision LLMs start returning unparseable
+     * output for free text.
+     */
+    const val FREE_TEXT_SCALE_UP_MAX_DIM: Int = 1200
+
     // ── YOLO settings ──────────────────────────────────────────────
     const val YOLO_INPUT_SIZE: Int = 640
     val YOLO_PREDICTION_STAGES: List<Pair<Double, Double>> =

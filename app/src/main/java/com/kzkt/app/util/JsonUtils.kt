@@ -1,6 +1,7 @@
 package com.kzkt.app.util
 
 import com.google.gson.GsonBuilder
+import com.google.gson.Strictness
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
@@ -11,11 +12,24 @@ import java.io.StringReader
  */
 object JsonUtils {
     /**
+     * Raw control characters that are illegal inside JSON strings even under
+     * Strictness.LENIENT (U+0000–U+0008, U+000B, U+000C, U+000E–U+001F). \n, \r
+     * and \t are legal JSON escapes and are kept. LLMs occasionally echo control
+     * chars from odd source text (vertical columns of manga text included), which
+     * would otherwise make BOTH the strict and tolerant parses fail.
+     */
+    private val CONTROL_CHARS_REGEX = Regex("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]")
+
+    /**
      * Strip markdown code fences and extract the first JSON object from raw text.
      * Handles ```json ... ```, ``` ... ```, and plain JSON.
      */
     fun sanitizeJson(rawText: String): String {
         var text = rawText.trim()
+
+        // Remove control characters that are invalid inside JSON strings before
+        // anything else, so they cannot break the strict or tolerant parse below.
+        text = text.replace(CONTROL_CHARS_REGEX, "")
 
         // Strip Reasoning / Thinking blocks (<think>...</think>)
         text = text.replace(Regex("(?i)<think>[\\s\\S]*?</think>"), "").trim()
@@ -54,7 +68,7 @@ object JsonUtils {
     fun parseTranslationMap(cleanedJson: String): Map<String, String> {
         try {
             val type = object : TypeToken<Map<String, String>>() {}.type
-            val strict = GsonBuilder().setLenient().create().fromJson<Map<String, String>>(cleanedJson, type)
+            val strict = GsonBuilder().setStrictness(Strictness.LENIENT).create().fromJson<Map<String, String>>(cleanedJson, type)
             return strict ?: emptyMap()
         } catch (e: Exception) {
             // duplicate keys (or similar) → tolerant re-parse
@@ -66,7 +80,7 @@ object JsonUtils {
     private fun scanDuplicateTolerant(json: String): Map<String, String> {
         val result = linkedMapOf<String, String>()
         val reader = JsonReader(StringReader(json))
-        reader.isLenient = true
+        reader.setStrictness(Strictness.LENIENT)
         try {
             if (reader.peek() != JsonToken.BEGIN_OBJECT) return result
             reader.beginObject()
