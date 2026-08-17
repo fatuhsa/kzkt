@@ -3,6 +3,7 @@ package com.kzkt.app.data
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
+import com.kzkt.app.util.KLog
 import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
@@ -15,16 +16,17 @@ import java.security.MessageDigest
  * entries) instead of on every single bubble, and the in-memory map is capped so the
  * cache cannot grow without bound.
  */
-class TranslationCacheRepository(private val context: Context) {
-
+class TranslationCacheRepository(
+    private val context: Context,
+) {
     private val cacheFile: File
         get() = File(context.filesDir, "translation_cache.json")
 
     // Access-order LinkedHashMap with a size cap: least-recently-used entries are evicted.
-    private val memoryCache = object : LinkedHashMap<String, String>(256, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean =
-            size > MAX_ENTRIES
-    }
+    private val memoryCache =
+        object : LinkedHashMap<String, String>(256, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > MAX_ENTRIES
+        }
 
     @Volatile
     private var dirty = false
@@ -95,25 +97,37 @@ class TranslationCacheRepository(private val context: Context) {
             }
             val md = MessageDigest.getInstance("MD5")
             md.digest(bytes).joinToString("") { "%02x".format(it) }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            KLog.w("KZKT", "Translation cache: crop hash failed — cache disabled for this bubble: ${e.message}")
             ""
         }
     }
 
     @Synchronized
-    fun getTranslation(cropBitmap: Bitmap, targetLanguage: String, providerName: String, modelName: String): String? {
+    fun getTranslation(
+        cropBitmap: Bitmap,
+        targetLanguage: String,
+        providerName: String,
+        modelName: String,
+    ): String? {
         val hash = computeHash(cropBitmap)
         if (hash.isBlank()) return null
-        val key = "${hash}_${targetLanguage.lowercase()}_${providerName}_${modelName}"
+        val key = "${hash}_${targetLanguage.lowercase()}_${providerName}_$modelName"
         return memoryCache[key]
     }
 
     @Synchronized
-    fun saveTranslation(cropBitmap: Bitmap, targetLanguage: String, translatedText: String, providerName: String, modelName: String) {
+    fun saveTranslation(
+        cropBitmap: Bitmap,
+        targetLanguage: String,
+        translatedText: String,
+        providerName: String,
+        modelName: String,
+    ) {
         if (translatedText.isBlank() || translatedText.uppercase() == "SKIP") return
         val hash = computeHash(cropBitmap)
         if (hash.isBlank()) return
-        val key = "${hash}_${targetLanguage.lowercase()}_${providerName}_${modelName}"
+        val key = "${hash}_${targetLanguage.lowercase()}_${providerName}_$modelName"
         memoryCache[key] = translatedText
         dirty = true
         if (++pendingWrites >= AUTO_FLUSH_EVERY) saveCache()

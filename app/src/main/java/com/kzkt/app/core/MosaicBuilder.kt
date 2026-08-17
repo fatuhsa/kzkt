@@ -1,21 +1,30 @@
 package com.kzkt.app.core
 
-import android.graphics.*
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
 import com.kzkt.app.KzktApplication
 import com.kzkt.app.core.Config.TweakParams
+import com.kzkt.app.util.KLog
 
 /**
  * Build mosaic images from bubble crops for batch LLM translation.
- * Ported from the original Python translator mosaic assembly sections
  */
 object MosaicBuilder {
-
-    data class CropItem(val id: String, val bitmap: Bitmap)
+    data class CropItem(
+        val id: String,
+        val bitmap: Bitmap,
+    )
 
     /**
      * Partition crops into chunks of maxBubblesPerChunk.
      */
-    fun chunkCrops(crops: List<CropItem>, maxPerChunk: Int = 20): List<List<CropItem>> {
+    fun chunkCrops(
+        crops: List<CropItem>,
+        maxPerChunk: Int = 20,
+    ): List<List<CropItem>> {
         if (crops.isEmpty()) return emptyList()
         val chunkSize = if (maxPerChunk <= 0) 20 else maxPerChunk
         return crops.chunked(chunkSize)
@@ -60,24 +69,27 @@ object MosaicBuilder {
             }
         }
 
-        val numberPaint = Paint().apply {
-            color = Color.RED
-            textSize = 40f
-            isAntiAlias = true
-            textAlign = Paint.Align.LEFT
-            typeface = Typeface.DEFAULT_BOLD
-        }
+        val numberPaint =
+            Paint().apply {
+                color = Color.RED
+                textSize = 40f
+                isAntiAlias = true
+                textAlign = Paint.Align.LEFT
+                typeface = Typeface.DEFAULT_BOLD
+            }
 
         val useTwoColumns = crops.size >= 4
 
         if (!useTwoColumns) {
             // Single column vertical stack for small batches (< 4)
-            val mosaicWidth = maxOf(
-                params.detection.lebarMosaikMin,
-                (crops.maxOf { it.bitmap.width } + params.detection.marginKiriNomor + params.detection.marginKanan)
-            )
-            val mosaicHeight = crops.sumOf { it.bitmap.height } +
-                (crops.size * params.detection.jarakAntarPotongan) + 20
+            val mosaicWidth =
+                maxOf(
+                    params.detection.lebarMosaikMin,
+                    (crops.maxOf { it.bitmap.width } + params.detection.marginKiriNomor + params.detection.marginKanan),
+                )
+            val mosaicHeight =
+                crops.sumOf { it.bitmap.height } +
+                    (crops.size * params.detection.jarakAntarPotongan) + 20
 
             val mosaic = Bitmap.createBitmap(mosaicWidth, mosaicHeight, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(mosaic)
@@ -96,14 +108,16 @@ object MosaicBuilder {
             val leftCrops = crops.filterIndexed { idx, _ -> idx % 2 == 0 }
             val rightCrops = crops.filterIndexed { idx, _ -> idx % 2 == 1 }
 
-            val leftColWidth = maxOf(
-                params.detection.lebarMosaikMin / 2,
-                (leftCrops.maxOf { it.bitmap.width } + params.detection.marginKiriNomor + params.detection.marginKanan)
-            )
-            val rightColWidth = maxOf(
-                params.detection.lebarMosaikMin / 2,
-                (rightCrops.maxOf { it.bitmap.width } + params.detection.marginKiriNomor + params.detection.marginKanan)
-            )
+            val leftColWidth =
+                maxOf(
+                    params.detection.lebarMosaikMin / 2,
+                    (leftCrops.maxOf { it.bitmap.width } + params.detection.marginKiriNomor + params.detection.marginKanan),
+                )
+            val rightColWidth =
+                maxOf(
+                    params.detection.lebarMosaikMin / 2,
+                    (rightCrops.maxOf { it.bitmap.width } + params.detection.marginKiriNomor + params.detection.marginKanan),
+                )
 
             val rowCount = (crops.size + 1) / 2
             var totalHeight = 20
@@ -149,26 +163,36 @@ object MosaicBuilder {
      * Falls back to fallbackDir (or parent dir of input) when input path is unwritable
      * (e.g. PhotoPicker synthetic paths).
      */
-    fun makeOutputPath(inputPath: String, targetLanguage: String, fallbackDir: String = ""): String {
+    fun makeOutputPath(
+        inputPath: String,
+        targetLanguage: String,
+        fallbackDir: String = "",
+    ): String {
         val langCode = Config.getLangCode(targetLanguage).uppercase()
         val file = java.io.File(inputPath)
         val pathStr = file.absolutePath
 
-        val isSynthetic = pathStr.contains(".transforms") ||
+        val isSynthetic =
+            pathStr.contains(".transforms") ||
                 pathStr.contains("picker_get_content") ||
                 pathStr.contains("photopicker")
 
-        val base = if (!isSynthetic && fallbackDir.isBlank() && file.parentFile != null && file.parentFile!!.canWrite()) {
-            file.parentFile!!
-        } else if (fallbackDir.isNotBlank()) {
-            java.io.File(fallbackDir)
-        } else {
-            java.io.File(KzktApplication.instance.getExternalFilesDir(null), "translated")
-        }
+        val parentDir = file.parentFile
+        val base =
+            if (!isSynthetic && fallbackDir.isBlank() && parentDir != null && parentDir.canWrite()) {
+                parentDir
+            } else if (fallbackDir.isNotBlank()) {
+                java.io.File(fallbackDir)
+            } else {
+                java.io.File(KzktApplication.instance.getExternalFilesDir(null), "translated")
+            }
 
         val outputDir = java.io.File(base, langCode)
-        try { outputDir.mkdirs() } catch (_: Exception) {}
+        try {
+            outputDir.mkdirs()
+        } catch (e: Exception) {
+            KLog.w("KZKT", "Failed to create output dir ${outputDir.absolutePath}: ${e.message}")
+        }
         return java.io.File(outputDir, file.name).absolutePath
     }
-
 }

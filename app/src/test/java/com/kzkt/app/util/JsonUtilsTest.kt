@@ -6,13 +6,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class JsonUtilsTest {
-
     @Test
     fun `duplicate keys fall back to tolerant parse and keep first value`() {
         val json = """{"5_1":"satu","5_1":"dua","6_2":"tiga"}"""
         val result = JsonUtils.parseTranslationMap(json)
         assertEquals(2, result.size)
-        assertEquals("satu", result["5_1"])   // first occurrence wins
+        assertEquals("satu", result["5_1"]) // first occurrence wins
         assertEquals("tiga", result["6_2"])
     }
 
@@ -46,11 +45,12 @@ class JsonUtilsTest {
 
     @Test
     fun `sanitize strips markdown fences and junk`() {
-        val raw = """
+        val raw =
+            """
             ```json
             {"1":"a"}
             ```
-        """.trimIndent()
+            """.trimIndent()
         val result = JsonUtils.parseTranslationMap(JsonUtils.sanitizeJson(raw))
         assertEquals(1, result.size)
         assertEquals("a", result["1"])

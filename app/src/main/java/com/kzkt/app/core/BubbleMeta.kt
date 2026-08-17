@@ -12,7 +12,7 @@ data class BubbleMeta(
     var fontPreset: String = "Default", // e.g. "Default", "Serif", "Monospace"
     var rawText: String? = null,
     var fontScale: Float = 1.0f,
-    var strokeColor: String? = null
+    var strokeColor: String? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

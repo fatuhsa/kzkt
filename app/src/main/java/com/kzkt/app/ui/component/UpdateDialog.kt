@@ -131,10 +131,11 @@ fun UpdateDialog(
                         if (info.releaseNotes.isNotBlank()) {
                             MarkdownText(
                                 info.releaseNotes,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 260.dp)
-                                    .verticalScroll(rememberScrollState()),
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 260.dp)
+                                        .verticalScroll(rememberScrollState()),
                             )
                         }
                     }
@@ -150,20 +151,23 @@ fun UpdateDialog(
     }
 }
 
-private fun formatBytes(bytes: Long): String =
-    if (bytes <= 0) "0 MB" else "%.1f MB".format(bytes / 1048576f)
+private fun formatBytes(bytes: Long): String = if (bytes <= 0) "0 MB" else "%.1f MB".format(bytes / 1048576f)
 
-private fun formatSpeed(speedBps: Long): String =
-    if (speedBps > 0) " · %.1f MB/s".format(speedBps / 1048576f) else ""
+private fun formatSpeed(speedBps: Long): String = if (speedBps > 0) " · %.1f MB/s".format(speedBps / 1048576f) else ""
 
-private fun formatEta(downloaded: Long, total: Long, speedBps: Long): String {
+private fun formatEta(
+    downloaded: Long,
+    total: Long,
+    speedBps: Long,
+): String {
     if (speedBps <= 0 || total <= downloaded) return ""
     val remainingSecs = (total - downloaded) / speedBps
     return " · sisa ${formatDuration(remainingSecs)}"
 }
 
-private fun formatDuration(secs: Long): String = when {
-    secs < 60 -> "$secs dtk"
-    secs < 3600 -> "${secs / 60} mnt"
-    else -> "${secs / 3600} j ${(secs % 3600) / 60} mnt"
-}
+private fun formatDuration(secs: Long): String =
+    when {
+        secs < 60 -> "$secs dtk"
+        secs < 3600 -> "${secs / 60} mnt"
+        else -> "${secs / 3600} j ${(secs % 3600) / 60} mnt"
+    }

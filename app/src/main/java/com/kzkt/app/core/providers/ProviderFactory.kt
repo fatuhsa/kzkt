@@ -8,7 +8,6 @@ import com.kzkt.app.core.Config
  * check so provider construction stays in exactly one place.
  */
 object ProviderFactory {
-
     fun create(
         providerKey: String,
         apiKey: String,
@@ -29,12 +28,16 @@ object ProviderFactory {
             "openrouter" -> OpenRouterProvider(apiKey, modelName, baseUrl, useSse)
             "zen" -> ZenProvider(apiKey, modelName, baseUrl, useSse)
             "opencodego" -> OpenCodeGoProvider(apiKey, modelName, baseUrl, useSse)
-            "custom" -> CustomProvider(
-                apiKey, modelName, baseUrl, customTimeoutSec,
-                authHeaderName = authHeaderName,
-                authHeaderPrefix = authHeaderPrefix,
-                useSse = useSse,
-            )
+            "custom" ->
+                CustomProvider(
+                    apiKey,
+                    modelName,
+                    baseUrl,
+                    customTimeoutSec,
+                    authHeaderName = authHeaderName,
+                    authHeaderPrefix = authHeaderPrefix,
+                    useSse = useSse,
+                )
             "anthropic" -> AnthropicProvider(apiKey, modelName, baseUrl, customTimeoutSec, useSse)
             else -> null
         }

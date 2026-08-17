@@ -25,7 +25,6 @@ class ChunkTranslator(
     private val onProgress: (String) -> Unit,
     private val isCancelled: () -> Boolean,
 ) {
-
     /**
      * Core provider-chain loop: sends [request] through the primary + fallback
      * providers with rate limiting, parses the JSON response, writes successful
@@ -57,15 +56,16 @@ class ChunkTranslator(
             if (isCancelled()) break
             onProgress(logStart(prov))
             try {
-                val result = rateLimiter.executeWithRetry(
-                    apiCall = { request(prov) },
-                    providerName = prov.providerName,
-                    isCancelled = isCancelled,
-                    onWait = { msg ->
-                        onProgress(msg)
-                        onWait?.invoke(msg)
-                    }
-                )
+                val result =
+                    rateLimiter.executeWithRetry(
+                        apiCall = { request(prov) },
+                        providerName = prov.providerName,
+                        isCancelled = isCancelled,
+                        onWait = { msg ->
+                            onProgress(msg)
+                            onWait?.invoke(msg)
+                        },
+                    )
                 if (result != null) {
                     val cleaned = JsonUtils.sanitizeJson(result)
                     val parsed = JsonUtils.parseTranslationMap(cleaned)
@@ -88,7 +88,9 @@ class ChunkTranslator(
                         break
                     }
                     if (logUnparseable) {
-                        onProgress("  [!] ${prov.providerName} returned unparseable output (raw: ${cleaned.take(80)}). Trying next provider...")
+                        onProgress(
+                            "  [!] ${prov.providerName} returned unparseable output (raw: ${cleaned.take(80)}). Trying next provider...",
+                        )
                     }
                 }
             } catch (e: Exception) {
@@ -184,18 +186,19 @@ class ChunkTranslator(
         val prompt = textPrompt(textJson)
         // Some text-only providers accept a 1×1 image as a no-op vision call.
         val dummyBmp = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
-        val translated = try {
-            translateWithProviders(
-                request = { prov -> prov.translateText(textJson, prompt) ?: prov.translateImage(dummyBmp, prompt) },
-                cropItems = cropItems,
-                allTranslations = allTranslations,
-                logStart = logStart,
-                logUnparseable = false,
-                failoverMessage = { p, msg -> "  [Failover] ${p.providerName} failed: $msg. Trying fallback provider..." },
-            )
-        } finally {
-            if (!dummyBmp.isRecycled) dummyBmp.recycle()
-        }
+        val translated =
+            try {
+                translateWithProviders(
+                    request = { prov -> prov.translateText(textJson, prompt) ?: prov.translateImage(dummyBmp, prompt) },
+                    cropItems = cropItems,
+                    allTranslations = allTranslations,
+                    logStart = logStart,
+                    logUnparseable = false,
+                    failoverMessage = { p, msg -> "  [Failover] ${p.providerName} failed: $msg. Trying fallback provider..." },
+                )
+            } finally {
+                if (!dummyBmp.isRecycled) dummyBmp.recycle()
+            }
         return OcrResult(ocrMap, translated)
     }
 
@@ -204,14 +207,18 @@ class ChunkTranslator(
      * attempt per provider — when it fails the caller just falls through to the
      * next provider, so behaviour for well-formed responses is unchanged.
      */
-    private suspend fun repairJsonOutput(prov: LlmProvider, raw: String): String? {
+    private suspend fun repairJsonOutput(
+        prov: LlmProvider,
+        raw: String,
+    ): String? {
         if (raw.isBlank()) return null
         onProgress("  [!] Unparseable output — requesting JSON repair from ${prov.providerName}...")
-        val repairPrompt = "The text below is a translation result that is not valid JSON. " +
-            "Fix ONLY the JSON syntax/formatting errors and return the exact same translations " +
-            "as a valid JSON object with the same keys and values. " +
-            "Output ONLY the corrected JSON object — no markdown, no commentary.\n\n" +
-            "Broken output:\n$raw"
+        val repairPrompt =
+            "The text below is a translation result that is not valid JSON. " +
+                "Fix ONLY the JSON syntax/formatting errors and return the exact same translations " +
+                "as a valid JSON object with the same keys and values. " +
+                "Output ONLY the corrected JSON object — no markdown, no commentary.\n\n" +
+                "Broken output:\n$raw"
         return try {
             rateLimiter.executeWithRetry(
                 apiCall = { prov.translateText(raw, repairPrompt) },

@@ -2,7 +2,6 @@ package com.kzkt.app.core
 
 /**
  * Configuration constants and provider registry.
- * Ported from the original Python config module
  */
 object Config {
     const val CONNECT_TIMEOUT_SEC = 15L
@@ -26,73 +25,115 @@ object Config {
         val maxImageDimension: Int = 4096,
     )
 
-    val PROVIDER_REGISTRY: Map<String, ProviderMeta> = mapOf(
-        "gemini" to ProviderMeta(
-            key = "gemini", displayName = "Google Gemini",
-            defaultModel = "gemini-3.1-flash-lite",
-            defaultBaseUrl = "https://generativelanguage.googleapis.com/v1beta",
-            description = "Free tier available",
-        ),
-        "anthropic" to ProviderMeta(
-            key = "anthropic", displayName = "Anthropic",
-            defaultModel = "claude-sonnet-4-5",
-            defaultBaseUrl = "https://api.anthropic.com",
-            description = "Claude — native Messages API (vision + text)",
-            authHeaderName = "x-api-key",
-            authHeaderPrefix = "",
-        ),
-        "openai" to ProviderMeta(
-            key = "openai", displayName = "OpenAI",
-            defaultModel = "gpt-5.4-mini",
-            defaultBaseUrl = "https://api.openai.com/v1",
-            description = "GPT-5.4, GPT-5.4-mini",
-        ),
-        "zen" to ProviderMeta(
-            key = "zen", displayName = "Zen (opencode.ai)",
-            defaultModel = "minimax-m3-free",
-            defaultBaseUrl = "https://opencode.ai/zen/v1",
-            description = "Free models, optional API key for more quota",
-            requiresKey = false,
-        ),
-        "opencodego" to ProviderMeta(
-            key = "opencodego", displayName = "OpenCode Go",
-            defaultModel = "mimo-v2.5",
-            defaultBaseUrl = "https://opencode.ai/zen/go/v1",
-            description = "API key required, high-performance models",
-        ),
-        "openrouter" to ProviderMeta(
-            key = "openrouter", displayName = "OpenRouter",
-            defaultModel = "qwen/qwen2.5-vl-72b-instruct:free",
-            defaultBaseUrl = "https://openrouter.ai/api/v1",
-            description = "Access 100+ models (Claude, Llama, Mistral, etc.)",
-        ),
-        "custom" to ProviderMeta(
-            key = "custom", displayName = "Custom",
-            defaultModel = "gpt-5.4-mini",
-            defaultBaseUrl = "",
-            description = "OpenAI-compatible API, custom base URL",
-            requiresKey = false,
-        ),
-    )
+    val PROVIDER_REGISTRY: Map<String, ProviderMeta> =
+        mapOf(
+            "gemini" to
+                ProviderMeta(
+                    key = "gemini",
+                    displayName = "Google Gemini",
+                    defaultModel = "gemini-3.1-flash-lite",
+                    defaultBaseUrl = "https://generativelanguage.googleapis.com/v1beta",
+                    description = "Free tier available",
+                ),
+            "anthropic" to
+                ProviderMeta(
+                    key = "anthropic",
+                    displayName = "Anthropic",
+                    defaultModel = "claude-sonnet-4-5",
+                    defaultBaseUrl = "https://api.anthropic.com",
+                    description = "Claude — native Messages API (vision + text)",
+                    authHeaderName = "x-api-key",
+                    authHeaderPrefix = "",
+                ),
+            "openai" to
+                ProviderMeta(
+                    key = "openai",
+                    displayName = "OpenAI",
+                    defaultModel = "gpt-5.4-mini",
+                    defaultBaseUrl = "https://api.openai.com/v1",
+                    description = "GPT-5.4, GPT-5.4-mini",
+                ),
+            "zen" to
+                ProviderMeta(
+                    key = "zen",
+                    displayName = "Zen (opencode.ai)",
+                    defaultModel = "minimax-m3-free",
+                    defaultBaseUrl = "https://opencode.ai/zen/v1",
+                    description = "Free models, optional API key for more quota",
+                    requiresKey = false,
+                ),
+            "opencodego" to
+                ProviderMeta(
+                    key = "opencodego",
+                    displayName = "OpenCode Go",
+                    defaultModel = "mimo-v2.5",
+                    defaultBaseUrl = "https://opencode.ai/zen/go/v1",
+                    description = "API key required, high-performance models",
+                ),
+            "openrouter" to
+                ProviderMeta(
+                    key = "openrouter",
+                    displayName = "OpenRouter",
+                    defaultModel = "qwen/qwen2.5-vl-72b-instruct:free",
+                    defaultBaseUrl = "https://openrouter.ai/api/v1",
+                    description = "Access 100+ models (Claude, Llama, Mistral, etc.)",
+                ),
+            "custom" to
+                ProviderMeta(
+                    key = "custom",
+                    displayName = "Custom",
+                    defaultModel = "gpt-5.4-mini",
+                    defaultBaseUrl = "",
+                    description = "OpenAI-compatible API, custom base URL",
+                    requiresKey = false,
+                ),
+        )
 
     // ── Language ───────────────────────────────────────────────────
-    val LANG_CODES: Map<String, String> = mapOf(
-        "english" to "en", "indonesian" to "id", "spanish" to "es",
-        "portuguese" to "pt", "javanese" to "jv", "japanese" to "jp",
-        "jepang" to "jp", "korean" to "kr", "korea" to "kr",
-        "chinese" to "cn", "chinese (simplified)" to "cn",
-        "chinese (traditional)" to "tw", "mandarin" to "cn",
-        "thai" to "th", "vietnamese" to "vi", "russian" to "ru",
-        "arabic" to "ar", "hindi" to "hi", "malay" to "ms", "tagalog" to "tl",
-    )
+    val LANG_CODES: Map<String, String> =
+        mapOf(
+            "english" to "en",
+            "indonesian" to "id",
+            "spanish" to "es",
+            "portuguese" to "pt",
+            "javanese" to "jv",
+            "japanese" to "jp",
+            "jepang" to "jp",
+            "korean" to "kr",
+            "korea" to "kr",
+            "chinese" to "cn",
+            "chinese (simplified)" to "cn",
+            "chinese (traditional)" to "tw",
+            "mandarin" to "cn",
+            "thai" to "th",
+            "vietnamese" to "vi",
+            "russian" to "ru",
+            "arabic" to "ar",
+            "hindi" to "hi",
+            "malay" to "ms",
+            "tagalog" to "tl",
+        )
 
-    val LANGUAGE_CHOICES: List<String> = listOf(
-        "English", "Indonesian", "Japanese", "Mandarin", "Spanish",
-        "French", "German", "Vietnamese", "Portuguese", "Javanese",
-        "Korean", "Russian", "Arabic", "Thai",
-    )
+    val LANGUAGE_CHOICES: List<String> =
+        listOf(
+            "English",
+            "Indonesian",
+            "Japanese",
+            "Mandarin",
+            "Spanish",
+            "French",
+            "German",
+            "Vietnamese",
+            "Portuguese",
+            "Javanese",
+            "Korean",
+            "Russian",
+            "Arabic",
+            "Thai",
+        )
 
     // ── Tweakable Parameters ───────────────────────────────────────
+
     /**
      * Tweakable parameters, grouped by subsystem so each pipeline component only
      * reads the knobs that affect it.
@@ -106,7 +147,7 @@ object Config {
         val engine: EngineParams = EngineParams(),
     ) {
         data class DetectionParams(
-            var filterSfxMode: String = "balanced",  // balanced | relaxed | strict
+            var filterSfxMode: String = "balanced", // balanced | relaxed | strict
             var padXRatio: Double = 0.40,
             var padYRatio: Double = 0.25,
             var minPad: Int = 35,
@@ -160,18 +201,19 @@ object Config {
     }
 
     // ── Preset Models per Provider ──────────────────────────────────
-    val PRESET_MODELS: Map<String, List<String>> = mapOf(
-        "gemini" to listOf("gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"),
-        "openai" to listOf("gpt-5.4-mini", "gpt-5.4", "gpt-4o-mini", "gpt-4o"),
-        "openrouter" to listOf(
-            "qwen/qwen2.5-vl-72b-instruct:free",
-            "google/gemini-2.5-flash:free",
-            "meta-llama/llama-3.2-11b-vision-instruct:free",
-            "anthropic/claude-3.5-sonnet",
-        ),
-        "zen" to listOf("minimax-m3-free", "glm-4v-free", "qwen2.5-vl-free"),
-        "opencodego" to listOf("mimo-v2.5", "claude-3-5-sonnet"),
-        "anthropic" to listOf("claude-sonnet-4-5", "claude-haiku-4-5", "claude-opus-4-1"),
-    )
-
+    val PRESET_MODELS: Map<String, List<String>> =
+        mapOf(
+            "gemini" to listOf("gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"),
+            "openai" to listOf("gpt-5.4-mini", "gpt-5.4", "gpt-4o-mini", "gpt-4o"),
+            "openrouter" to
+                listOf(
+                    "qwen/qwen2.5-vl-72b-instruct:free",
+                    "google/gemini-2.5-flash:free",
+                    "meta-llama/llama-3.2-11b-vision-instruct:free",
+                    "anthropic/claude-3.5-sonnet",
+                ),
+            "zen" to listOf("minimax-m3-free", "glm-4v-free", "qwen2.5-vl-free"),
+            "opencodego" to listOf("mimo-v2.5", "claude-3-5-sonnet"),
+            "anthropic" to listOf("claude-sonnet-4-5", "claude-haiku-4-5", "claude-opus-4-1"),
+        )
 }

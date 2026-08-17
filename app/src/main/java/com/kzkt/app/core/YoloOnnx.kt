@@ -1,11 +1,12 @@
 package com.kzkt.app.core
 
-import android.content.Context
-import android.graphics.Bitmap
-import android.util.Log
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import android.content.Context
+import android.graphics.Bitmap
+import android.util.Log
+import com.kzkt.app.util.KLog
 import java.io.File
 import java.nio.FloatBuffer
 import java.util.UUID
@@ -22,7 +23,12 @@ class YoloOnnx(
     private var ortEnv: OrtEnvironment? = null
     private var ortSession: OrtSession? = null
 
-    data class Detection(val x1: Int, val y1: Int, val x2: Int, val y2: Int)
+    data class Detection(
+        val x1: Int,
+        val y1: Int,
+        val x2: Int,
+        val y2: Int,
+    )
 
     fun initialize(): Boolean {
         try {
@@ -44,9 +50,14 @@ class YoloOnnx(
             val opts = OrtSession.SessionOptions()
             opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
 
+            val env =
+                ortEnv ?: run {
+                    Log.e("KZKT/YOLO", "OrtEnvironment was not initialized")
+                    return false
+                }
             Log.d("KZKT/YOLO", "Creating session from ${onnxFile.absolutePath}...")
             try {
-                ortSession = ortEnv!!.createSession(onnxFile.absolutePath, opts)
+                ortSession = env.createSession(onnxFile.absolutePath, opts)
             } catch (e: Exception) {
                 // The cached file can pass the cheap 0x08 header check yet still be
                 // truncated/corrupt (e.g. an interrupted copy), and ONNX Runtime may
@@ -59,13 +70,18 @@ class YoloOnnx(
                     Log.e("KZKT/YOLO", "Re-decrypt after cache failure returned no usable file")
                     return false
                 }
-                ortSession = ortEnv!!.createSession(onnxFile.absolutePath, opts)
+                ortSession = env.createSession(onnxFile.absolutePath, opts)
             }
             Log.d("KZKT/YOLO", "Session created OK")
 
             // Log input/output info
-            val inputInfo = ortSession!!.inputNames
-            val outputInfo = ortSession!!.outputNames
+            val session =
+                ortSession ?: run {
+                    Log.e("KZKT/YOLO", "Session was not created")
+                    return false
+                }
+            val inputInfo = session.inputNames
+            val outputInfo = session.outputNames
             Log.d("KZKT/YOLO", "Inputs: $inputInfo")
             Log.d("KZKT/YOLO", "Outputs: $outputInfo")
 
@@ -148,7 +164,9 @@ class YoloOnnx(
                         f.delete()
                     }
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                KLog.w("KZKT/YOLO", "Failed to clean stale temp ONNX files: ${e.message}")
+            }
 
             modelFile
         } catch (e: Exception) {
@@ -169,7 +187,8 @@ class YoloOnnx(
                 ins.read(bytes) > 0
             }
             (bytes[0].toInt() and 0xFF) == 0x08
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            KLog.w("KZKT/YOLO", "Failed to read model header byte: ${e.message}")
             false
         }
     }
@@ -210,10 +229,11 @@ class YoloOnnx(
         if (resized != bitmap) resized.recycle()
 
         val area = Constants.YOLO_INPUT_SIZE * Constants.YOLO_INPUT_SIZE
-        val inputBuffer = java.nio.ByteBuffer
-            .allocateDirect(area * 3 * 4)
-            .order(java.nio.ByteOrder.nativeOrder())
-            .asFloatBuffer()
+        val inputBuffer =
+            java.nio.ByteBuffer
+                .allocateDirect(area * 3 * 4)
+                .order(java.nio.ByteOrder.nativeOrder())
+                .asFloatBuffer()
         for (i in pixels.indices) {
             val pixel = pixels[i]
             inputBuffer.put(i, ((pixel shr 16) and 0xFF) / 255.0f)
@@ -258,8 +278,14 @@ class YoloOnnx(
         val grid: Int
         val channels: Int
         when {
-            bufSize % 8400 == 0 -> { grid = 8400; channels = bufSize / 8400 }
-            bufSize % 840 == 0 -> { grid = 840; channels = bufSize / 840 }
+            bufSize % 8400 == 0 -> {
+                grid = 8400
+                channels = bufSize / 8400
+            }
+            bufSize % 840 == 0 -> {
+                grid = 840
+                channels = bufSize / 840
+            }
             else -> {
                 Log.e("KZKT/YOLO", "Unknown output shape - buffer size $bufSize not divisible by 8400 or 840")
                 return emptyList()
@@ -347,23 +373,31 @@ class YoloOnnx(
             val keep = mutableListOf<Int>()
 
             for (i in order) {
-                val keepFlag = keep.all { k ->
-                    val a = boxes[i]; val b = boxes[k]
-                    val ix1 = maxOf(a[0], b[0]); val iy1 = maxOf(a[1], b[1])
-                    val ix2 = minOf(a[0] + a[2], b[0] + b[2])
-                    val iy2 = minOf(a[1] + a[3], b[1] + b[3])
-                    val inter = maxOf(0, ix2 - ix1) * maxOf(0, iy2 - iy1)
-                    val iou = inter.toDouble() / (a[2] * a[3] + b[2] * b[3] - inter)
-                    iou <= iouThreshold
-                }
+                val keepFlag =
+                    keep.all { k ->
+                        val a = boxes[i]
+                        val b = boxes[k]
+                        val ix1 = maxOf(a[0], b[0])
+                        val iy1 = maxOf(a[1], b[1])
+                        val ix2 = minOf(a[0] + a[2], b[0] + b[2])
+                        val iy2 = minOf(a[1] + a[3], b[1] + b[3])
+                        val inter = maxOf(0, ix2 - ix1) * maxOf(0, iy2 - iy1)
+                        val iou = inter.toDouble() / (a[2] * a[3] + b[2] * b[3] - inter)
+                        iou <= iouThreshold
+                    }
                 if (keepFlag) keep.add(i)
             }
 
             for (i in keep) {
                 val b = boxes[i]
-                detections.add(Detection(b[0], b[1],
-                    (b[0] + b[2]).coerceAtMost(bitmap.width),
-                    (b[1] + b[3]).coerceAtMost(bitmap.height)))
+                detections.add(
+                    Detection(
+                        b[0],
+                        b[1],
+                        (b[0] + b[2]).coerceAtMost(bitmap.width),
+                        (b[1] + b[3]).coerceAtMost(bitmap.height),
+                    ),
+                )
             }
         }
 
@@ -381,7 +415,11 @@ class YoloOnnx(
      */
     fun close() {
         Log.d("KZKT/YOLO", "Closing...")
-        try { ortSession?.close() } catch (_: Exception) {}
+        try {
+            ortSession?.close()
+        } catch (e: Exception) {
+            KLog.w("KZKT/YOLO", "Session close failed: ${e.message}")
+        }
         ortEnv?.close()
     }
 }

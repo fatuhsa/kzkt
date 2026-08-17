@@ -9,7 +9,6 @@ class ZenProvider(
     customUrl: String = "",
     useSse: Boolean = true,
 ) : OpenAICompatProvider(apiKey, modelName, customUrl, useSse = useSse) {
-
     override val providerName: String = "Zen (opencode.ai)"
     override val defaultEndpoint: String = "https://opencode.ai/zen/v1/chat/completions"
 }

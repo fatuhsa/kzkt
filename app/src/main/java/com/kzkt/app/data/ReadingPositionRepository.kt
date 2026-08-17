@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.kzkt.app.util.KLog
 import kotlinx.coroutines.flow.first
 
 private val Context.positionDataStore: DataStore<Preferences> by preferencesDataStore(name = "kzkt_reading")
@@ -19,8 +20,9 @@ private val Context.positionDataStore: DataStore<Preferences> by preferencesData
  * Stored as one JSON blob (bookKey -> page index) under a single DataStore key —
  * small, no schema, and survives app restarts like the other preference stores.
  */
-class ReadingPositionRepository(private val context: Context) {
-
+class ReadingPositionRepository(
+    private val context: Context,
+) {
     private companion object {
         val KEY_POSITIONS = stringPreferencesKey("positions")
     }
@@ -33,18 +35,23 @@ class ReadingPositionRepository(private val context: Context) {
         return try {
             val type = object : TypeToken<Map<String, Int>>() {}.type
             gson.fromJson<Map<String, Int>>(json, type) ?: emptyMap()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            KLog.w("KZKT", "Reading positions: failed to parse stored positions — resume positions ignored: ${e.message}")
             emptyMap()
         }
     }
 
     suspend fun get(bookKey: String): Int? = readAll()[bookKey]
 
-    suspend fun save(bookKey: String, pageIndex: Int) {
+    suspend fun save(
+        bookKey: String,
+        pageIndex: Int,
+    ) {
         if (bookKey.isBlank()) return
-        val updated = readAll().toMutableMap().apply {
-            this[bookKey] = pageIndex.coerceAtLeast(0)
-        }
+        val updated =
+            readAll().toMutableMap().apply {
+                this[bookKey] = pageIndex.coerceAtLeast(0)
+            }
         context.positionDataStore.edit { prefs ->
             prefs[KEY_POSITIONS] = gson.toJson(updated)
         }

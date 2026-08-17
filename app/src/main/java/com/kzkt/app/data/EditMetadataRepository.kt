@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.kzkt.app.util.KLog
 import java.io.File
 import java.security.MessageDigest
 
@@ -19,8 +20,9 @@ import java.security.MessageDigest
  * while the full path changes (cache dir → /Download/KZKT). Saving and loading
  * both derive the key from the path they have, so they always agree.
  */
-class EditMetadataRepository(private val context: Context) {
-
+class EditMetadataRepository(
+    private val context: Context,
+) {
     data class EditMeta(
         val originalBitmap: Bitmap,
         val translations: Map<String, String>,
@@ -59,25 +61,27 @@ class EditMetadataRepository(private val context: Context) {
                 coordsJson.add(k, arr)
             }
 
-            val root = JsonObject().apply {
-                addProperty("targetLanguage", targetLanguage)
-                add("translations", translationsJson)
-                add("coordinateMap", coordsJson)
-                if (rawTexts != null) {
-                    val rawJson = JsonObject()
-                    rawTexts.forEach { (k, v) -> rawJson.addProperty(k, v) }
-                    add("rawTexts", rawJson)
+            val root =
+                JsonObject().apply {
+                    addProperty("targetLanguage", targetLanguage)
+                    add("translations", translationsJson)
+                    add("coordinateMap", coordsJson)
+                    if (rawTexts != null) {
+                        val rawJson = JsonObject()
+                        rawTexts.forEach { (k, v) -> rawJson.addProperty(k, v) }
+                        add("rawTexts", rawJson)
+                    }
+                    if (styles != null) {
+                        val stylesJson = JsonObject()
+                        val gson = com.google.gson.Gson()
+                        styles.forEach { (k, v) -> stylesJson.add(k, gson.toJsonTree(v)) }
+                        add("styles", stylesJson)
+                    }
                 }
-                if (styles != null) {
-                    val stylesJson = JsonObject()
-                    val gson = com.google.gson.Gson()
-                    styles.forEach { (k, v) -> stylesJson.add(k, gson.toJsonTree(v)) }
-                    add("styles", stylesJson)
-                }
-            }
             File(metaDir, "$key.json").writeText(root.toString())
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             // Best-effort: metadata is a convenience, never fail translation over it.
+            KLog.w("KZKT", "Edit metadata: failed to save for ${File(outputPath).name}: ${e.message}")
         }
     }
 
@@ -87,7 +91,10 @@ class EditMetadataRepository(private val context: Context) {
      * the cache path (and MediaStore may rename "name.png" → "name (1).png" on
      * collisions), so the metadata must follow the path the reader will use.
      */
-    fun rekeyForOutput(fromPath: String, toPath: String) {
+    fun rekeyForOutput(
+        fromPath: String,
+        toPath: String,
+    ) {
         if (fromPath == toPath) return
         try {
             val fromKey = keyFor(fromPath)
@@ -104,8 +111,9 @@ class EditMetadataRepository(private val context: Context) {
                 File(metaDir, "$toKey.json").writeText(fromJson.readText())
                 fromJson.delete()
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             // Best-effort.
+            KLog.w("KZKT", "Edit metadata: failed to rekey ${File(fromPath).name} -> ${File(toPath).name}: ${e.message}")
         }
     }
 
@@ -115,8 +123,9 @@ class EditMetadataRepository(private val context: Context) {
             val key = keyFor(outputPath)
             File(metaDir, "$key.png").delete()
             File(metaDir, "$key.json").delete()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             // Best-effort.
+            KLog.w("KZKT", "Edit metadata: failed to delete sidecar for ${File(outputPath).name}: ${e.message}")
         }
     }
 
@@ -145,7 +154,7 @@ class EditMetadataRepository(private val context: Context) {
                     rawTexts[entry.key] = entry.value.asString
                 }
             }
-            
+
             val styles = mutableMapOf<String, com.kzkt.app.core.BubbleMeta>()
             if (root.has("styles")) {
                 val gson = com.google.gson.Gson()
@@ -161,13 +170,16 @@ class EditMetadataRepository(private val context: Context) {
 
             EditMeta(bitmap, translations, coords, targetLang, rawTexts.takeIf { it.isNotEmpty() }, styles.takeIf { it.isNotEmpty() })
         } catch (e: Exception) {
+            KLog.w("KZKT", "Edit metadata: failed to load for ${File(outputPath).name}: ${e.message}")
             null
         }
     }
 
     private fun keyFor(outputPath: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest(File(outputPath).name.toByteArray())
+        val digest =
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(File(outputPath).name.toByteArray())
         return digest.joinToString("") { "%02x".format(it.toInt() and 0xff) }.take(16)
     }
 }

@@ -14,19 +14,21 @@ plugins {
 // (~/.android/debug.keystore) sehingga `./gradlew assembleRelease` tetap
 // menghasilkan APK release yang bisa diinstall.
 val keystorePropertiesFile = rootProject.file("keystore.properties")
-val keystoreProperties = Properties().apply {
-    if (keystorePropertiesFile.exists()) {
-        keystorePropertiesFile.inputStream().use { load(it) }
+val keystoreProperties =
+    Properties().apply {
+        if (keystorePropertiesFile.exists()) {
+            keystorePropertiesFile.inputStream().use { load(it) }
+        }
     }
-}
 
 // ── Per-ABI APK (ala Komikku) ────────────────────────────────────
 // Build menghasilkan 1 APK per chip + 1 universal. CI matrix dapat
 // membatasi build ke 1 ABI dengan -PabiFilter=arm64-v8a.
 // Tanpa flag = semua ABI + universal (perilaku default seperti sebelumnya).
-val abiFilter = (project.findProperty("abiFilter") as String?)?.takeIf {
-    it.isNotBlank() && it != "all"
-}
+val abiFilter =
+    (project.findProperty("abiFilter") as String?)?.takeIf {
+        it.isNotBlank() && it != "all"
+    }
 
 android {
     namespace = "com.kzkt.app"
@@ -116,7 +118,7 @@ android {
             isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
             // APK release langsung ter-sign saat build (tanpa langkah manual).
             signingConfig = signingConfigs.getByName("release")
@@ -151,11 +153,12 @@ android {
             useLegacyPackaging = true
         }
         resources {
-            excludes += setOf(
-                "META-INF/NOTICE.md",
-                "META-INF/LICENSE.md",
-                "META-INF/DEPENDENCIES"
-            )
+            excludes +=
+                setOf(
+                    "META-INF/NOTICE.md",
+                    "META-INF/LICENSE.md",
+                    "META-INF/DEPENDENCIES",
+                )
         }
     }
 }

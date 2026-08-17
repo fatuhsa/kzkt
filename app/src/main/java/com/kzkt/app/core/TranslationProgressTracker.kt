@@ -1,5 +1,6 @@
 package com.kzkt.app.core
 
+import com.kzkt.app.util.KLog
 import kotlinx.coroutines.flow.MutableSharedFlow
 
 object TranslationProgressTracker {
@@ -18,18 +19,37 @@ object TranslationProgressTracker {
                 page.crops.forEach { (_, bmp) ->
                     if (!bmp.isRecycled) bmp.recycle()
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                KLog.w("KZKT", "Failed to recycle cached page bitmaps: ${e.message}")
+            }
         }
         cachedPageData = null
     }
 
     sealed class ProgressEvent {
-        data class Log(val message: String) : ProgressEvent()
-        data class Progress(val done: Int, val total: Int) : ProgressEvent()
-        data class ResultPath(val path: String) : ProgressEvent()
+        data class Log(
+            val message: String,
+        ) : ProgressEvent()
+
+        data class Progress(
+            val done: Int,
+            val total: Int,
+        ) : ProgressEvent()
+
+        data class ResultPath(
+            val path: String,
+        ) : ProgressEvent()
+
         /** Per-file batch status: [state] is "processing", "done", or "failed". */
-        data class PageStatus(val path: String, val state: String) : ProgressEvent()
+        data class PageStatus(
+            val path: String,
+            val state: String,
+        ) : ProgressEvent()
+
         object Completed : ProgressEvent()
-        data class Error(val error: String) : ProgressEvent()
+
+        data class Error(
+            val error: String,
+        ) : ProgressEvent()
     }
 }

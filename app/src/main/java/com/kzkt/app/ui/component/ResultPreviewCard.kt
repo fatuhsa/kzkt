@@ -46,9 +46,9 @@ import androidx.compose.ui.unit.sp
 import com.kzkt.app.core.TextRenderer
 import com.kzkt.app.ui.FileUtils
 import com.kzkt.app.ui.MainViewModel
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.io.File
 
 /** Bottom result card: View in App / Edit / Open in Gallery / Share, aligned with app design. */
 @Composable

@@ -15,8 +15,10 @@ class ImageSaver(
     private val context: Context?,
     private val jpegQuality: Int,
 ) {
-
-    fun save(bitmap: Bitmap, path: String) {
+    fun save(
+        bitmap: Bitmap,
+        path: String,
+    ) {
         val file = File(path)
         file.parentFile?.mkdirs()
         // Encode benchmark (JVM ImageIO, representative ratio): JPEG encodes ~4x
@@ -26,11 +28,12 @@ class ImageSaver(
         // .png/.gif/extensionless name would mislabel the file in the gallery). The
         // quality is user-configurable (default 92).
         val lowerName = file.name.lowercase()
-        val format = if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
-            Bitmap.CompressFormat.JPEG
-        } else {
-            Bitmap.CompressFormat.PNG
-        }
+        val format =
+            if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
+                Bitmap.CompressFormat.JPEG
+            } else {
+                Bitmap.CompressFormat.PNG
+            }
         val quality = if (format == Bitmap.CompressFormat.JPEG) jpegQuality else 100
         try {
             FileOutputStream(file).use { out ->

@@ -63,17 +63,18 @@ fun SwipeToDismissHistoryItem(
     onToggleSelect: () -> Unit = {},
     onRetry: () -> Unit = {},
 ) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.EndToStart) {
-                onDelete()
-                true
-            } else {
-                false
-            }
-        },
-        positionalThreshold = { distance -> distance * 0.35f },
-    )
+    val dismissState =
+        rememberSwipeToDismissBoxState(
+            confirmValueChange = { value ->
+                if (value == SwipeToDismissBoxValue.EndToStart) {
+                    onDelete()
+                    true
+                } else {
+                    false
+                }
+            },
+            positionalThreshold = { distance -> distance * 0.35f },
+        )
 
     SwipeToDismissBox(
         state = dismissState,
@@ -82,10 +83,11 @@ fun SwipeToDismissHistoryItem(
         gesturesEnabled = !selectionMode,
         backgroundContent = {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.errorContainer),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.errorContainer),
                 contentAlignment = Alignment.CenterEnd,
             ) {
                 Icon(
@@ -123,16 +125,20 @@ fun HistoryItem(
     val isPdf = entry.outputPath.endsWith(".pdf", ignoreCase = true)
     val isFailed = entry.status == "failed"
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected)
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-            else
-                MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    if (isSelected) {
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerLow
+                    },
+            ),
         border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
     ) {
         Row(
@@ -241,10 +247,11 @@ fun HistoryThumbnail(
 ) {
     val file = remember(entry.outputPath) { File(entry.outputPath) }
     Box(
-        modifier = Modifier
-            .size(width = 54.dp, height = 76.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+        modifier =
+            Modifier
+                .size(width = 54.dp, height = 76.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         contentAlignment = Alignment.Center,
     ) {
         if (!isPdf && file.exists()) {
@@ -255,9 +262,10 @@ fun HistoryThumbnail(
                 modifier = Modifier.fillMaxSize(),
                 loading = {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                     )
                 },
                 error = { TypeBadgeIcon(isPdf) },

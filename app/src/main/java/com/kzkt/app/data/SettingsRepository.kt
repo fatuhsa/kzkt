@@ -2,7 +2,14 @@ package com.kzkt.app.data
 
 import android.content.Context
 import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.*
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -13,14 +20,15 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 
 /**
  * Settings persistence via DataStore Preferences.
- * Ported from the original Python JSON settings approach
  */
-class SettingsRepository(private val context: Context) {
-
+class SettingsRepository(
+    private val context: Context,
+) {
     companion object {
         // Provider
         private val KEY_PROVIDER = stringPreferencesKey("llm_provider")
         private val KEY_LANGUAGE = stringPreferencesKey("target_language")
+
         // Base URLs
         private val KEY_BASE_URL_GEMINI = stringPreferencesKey("base_url_gemini")
         private val KEY_BASE_URL_OPENAI = stringPreferencesKey("base_url_openai")
@@ -40,10 +48,16 @@ class SettingsRepository(private val context: Context) {
         private val KEY_ANTHROPIC_KEY = stringPreferencesKey("anthropic_api_key")
 
         // API-key preference names — their values are encrypted at rest via KeyCipher.
-        private val API_KEY_PREFS = setOf(
-            "gemini_api_key", "openai_api_key", "openrouter_api_key",
-            "zen_api_key", "opencodego_api_key", "custom_api_key", "anthropic_api_key",
-        )
+        private val API_KEY_PREFS =
+            setOf(
+                "gemini_api_key",
+                "openai_api_key",
+                "openrouter_api_key",
+                "zen_api_key",
+                "opencodego_api_key",
+                "custom_api_key",
+                "anthropic_api_key",
+            )
 
         // Models
         private val KEY_MODEL_GEMINI = stringPreferencesKey("model_gemini")
@@ -72,17 +86,19 @@ class SettingsRepository(private val context: Context) {
         private val KEY_OCR_SCRIPT = stringPreferencesKey("ocr_script")
         private val KEY_USE_SSE = booleanPreferencesKey("use_sse")
         private val KEY_AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
+
         // Rendered-text output settings
         private val KEY_JPEG_QUALITY = intPreferencesKey("jpeg_quality")
         private val KEY_RENDER_TEXT_COLOR = stringPreferencesKey("render_text_color")
         private val KEY_RENDER_FONT_SCALE = floatPreferencesKey("render_font_scale")
         private val KEY_RENDER_STYLE = stringPreferencesKey("render_style")
+
         // Theme (persisted so dark mode / pure black / accent survive app restarts)
         private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
         private val KEY_PURE_BLACK = booleanPreferencesKey("pure_black")
         private val KEY_ACCENT_COLOR = longPreferencesKey("accent_color")
     }
- 
+
     data class Settings(
         val llmProvider: String = "gemini",
         val targetLanguage: String = "Indonesian",
@@ -144,98 +160,104 @@ class SettingsRepository(private val context: Context) {
         val pureBlack: Boolean = false,
         val accentColor: Long = 0xFFED5564L,
     ) {
-        fun getBaseUrl(provider: String): String = when (provider) {
-            "gemini" -> baseUrlGemini
-            "openai" -> baseUrlOpenai
-            "openrouter" -> baseUrlOpenrouter
-            "zen" -> baseUrlZen
-            "opencodego" -> baseUrlOpencodego
-            "custom" -> customBaseUrl
-            "anthropic" -> baseUrlAnthropic
-            else -> ""
-        }
+        fun getBaseUrl(provider: String): String =
+            when (provider) {
+                "gemini" -> baseUrlGemini
+                "openai" -> baseUrlOpenai
+                "openrouter" -> baseUrlOpenrouter
+                "zen" -> baseUrlZen
+                "opencodego" -> baseUrlOpencodego
+                "custom" -> customBaseUrl
+                "anthropic" -> baseUrlAnthropic
+                else -> ""
+            }
     }
- 
+
     private object Defaults {
         val settings = Settings()
     }
- 
-    val settingsFlow: Flow<Settings> = context.dataStore.data.map { prefs ->
-        Settings(
-            llmProvider = prefs[KEY_PROVIDER] ?: Defaults.settings.llmProvider,
-            targetLanguage = prefs[KEY_LANGUAGE] ?: Defaults.settings.targetLanguage,
-            baseUrlGemini = prefs[KEY_BASE_URL_GEMINI] ?: Defaults.settings.baseUrlGemini,
-            baseUrlOpenai = prefs[KEY_BASE_URL_OPENAI] ?: Defaults.settings.baseUrlOpenai,
-            baseUrlOpenrouter = prefs[KEY_BASE_URL_OPENROUTER] ?: Defaults.settings.baseUrlOpenrouter,
-            baseUrlZen = prefs[KEY_BASE_URL_ZEN] ?: Defaults.settings.baseUrlZen,
-            baseUrlOpencodego = prefs[KEY_BASE_URL_OPENCODEGO] ?: Defaults.settings.baseUrlOpencodego,
-            customBaseUrl = prefs[KEY_CUSTOM_BASE_URL] ?: Defaults.settings.customBaseUrl,
-            baseUrlAnthropic = prefs[KEY_BASE_URL_ANTHROPIC] ?: Defaults.settings.baseUrlAnthropic,
-            geminiApiKey = prefs[KEY_GEMINI_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.geminiApiKey,
-            openaiApiKey = prefs[KEY_OPENAI_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.openaiApiKey,
-            openrouterApiKey = prefs[KEY_OPENROUTER_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.openrouterApiKey,
-            zenApiKey = prefs[KEY_ZEN_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.zenApiKey,
-            opencodegoApiKey = prefs[KEY_OPENCODEGO_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.opencodegoApiKey,
-            customApiKey = prefs[KEY_CUSTOM_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.customApiKey,
-            anthropicApiKey = prefs[KEY_ANTHROPIC_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.anthropicApiKey,
-            modelGemini = prefs[KEY_MODEL_GEMINI] ?: Defaults.settings.modelGemini,
-            modelOpenai = prefs[KEY_MODEL_OPENAI] ?: Defaults.settings.modelOpenai,
-            modelOpenrouter = prefs[KEY_MODEL_OPENROUTER] ?: Defaults.settings.modelOpenrouter,
-            modelZen = prefs[KEY_MODEL_ZEN] ?: Defaults.settings.modelZen,
-            modelOpencodego = prefs[KEY_MODEL_OPENCODEGO] ?: Defaults.settings.modelOpencodego,
-            modelCustom = prefs[KEY_MODEL_CUSTOM] ?: Defaults.settings.modelCustom,
-            modelAnthropic = prefs[KEY_MODEL_ANTHROPIC] ?: Defaults.settings.modelAnthropic,
-            maxBubblesPerRequest = prefs[KEY_MAX_BUBBLES] ?: Defaults.settings.maxBubblesPerRequest,
-            minRequestDelay = prefs[KEY_REQUEST_DELAY] ?: Defaults.settings.minRequestDelay,
-            filterSfxMode = prefs[KEY_SFX_MODE] ?: Defaults.settings.filterSfxMode,
-            padXRatio = prefs[KEY_PAD_X] ?: Defaults.settings.padXRatio,
-            padYRatio = prefs[KEY_PAD_Y] ?: Defaults.settings.padYRatio,
-            minPad = prefs[KEY_MIN_PAD] ?: Defaults.settings.minPad,
-            customFontPath = prefs[KEY_CUSTOM_FONT] ?: Defaults.settings.customFontPath,
-            useInpainting = prefs[KEY_USE_INPAINTING] ?: Defaults.settings.useInpainting,
-            useLocalOcr = prefs[KEY_USE_LOCAL_OCR] ?: Defaults.settings.useLocalOcr,
-            customTimeoutSec = prefs[KEY_CUSTOM_TIMEOUT] ?: Defaults.settings.customTimeoutSec,
-            enableDevLogs = prefs[KEY_DEV_LOGS] ?: Defaults.settings.enableDevLogs,
-            useImageUpscaler = prefs[KEY_USE_IMAGE_UPSCALER] ?: Defaults.settings.useImageUpscaler,
-            translateSfx = prefs[KEY_TRANSLATE_SFX] ?: Defaults.settings.translateSfx,
-            translateFreeText = prefs[KEY_TRANSLATE_FREE_TEXT] ?: Defaults.settings.translateFreeText,
-            ocrScript = (prefs[KEY_OCR_SCRIPT] ?: Defaults.settings.ocrScript).let { normalizeOcrScript(it) },
-            useSse = prefs[KEY_USE_SSE] ?: Defaults.settings.useSse,
-            autoCheckUpdates = prefs[KEY_AUTO_CHECK_UPDATES] ?: Defaults.settings.autoCheckUpdates,
-            renderTextColor = prefs[KEY_RENDER_TEXT_COLOR] ?: Defaults.settings.renderTextColor,
-            renderFontScale = prefs[KEY_RENDER_FONT_SCALE] ?: Defaults.settings.renderFontScale,
-            renderStyle = prefs[KEY_RENDER_STYLE] ?: Defaults.settings.renderStyle,
-            jpegQuality = prefs[KEY_JPEG_QUALITY] ?: Defaults.settings.jpegQuality,
-            themeMode = prefs[KEY_THEME_MODE] ?: Defaults.settings.themeMode,
-            pureBlack = prefs[KEY_PURE_BLACK] ?: Defaults.settings.pureBlack,
-            accentColor = prefs[KEY_ACCENT_COLOR] ?: Defaults.settings.accentColor,
-        )
-    }
+
+    val settingsFlow: Flow<Settings> =
+        context.dataStore.data.map { prefs ->
+            Settings(
+                llmProvider = prefs[KEY_PROVIDER] ?: Defaults.settings.llmProvider,
+                targetLanguage = prefs[KEY_LANGUAGE] ?: Defaults.settings.targetLanguage,
+                baseUrlGemini = prefs[KEY_BASE_URL_GEMINI] ?: Defaults.settings.baseUrlGemini,
+                baseUrlOpenai = prefs[KEY_BASE_URL_OPENAI] ?: Defaults.settings.baseUrlOpenai,
+                baseUrlOpenrouter = prefs[KEY_BASE_URL_OPENROUTER] ?: Defaults.settings.baseUrlOpenrouter,
+                baseUrlZen = prefs[KEY_BASE_URL_ZEN] ?: Defaults.settings.baseUrlZen,
+                baseUrlOpencodego = prefs[KEY_BASE_URL_OPENCODEGO] ?: Defaults.settings.baseUrlOpencodego,
+                customBaseUrl = prefs[KEY_CUSTOM_BASE_URL] ?: Defaults.settings.customBaseUrl,
+                baseUrlAnthropic = prefs[KEY_BASE_URL_ANTHROPIC] ?: Defaults.settings.baseUrlAnthropic,
+                geminiApiKey = prefs[KEY_GEMINI_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.geminiApiKey,
+                openaiApiKey = prefs[KEY_OPENAI_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.openaiApiKey,
+                openrouterApiKey = prefs[KEY_OPENROUTER_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.openrouterApiKey,
+                zenApiKey = prefs[KEY_ZEN_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.zenApiKey,
+                opencodegoApiKey = prefs[KEY_OPENCODEGO_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.opencodegoApiKey,
+                customApiKey = prefs[KEY_CUSTOM_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.customApiKey,
+                anthropicApiKey = prefs[KEY_ANTHROPIC_KEY]?.let { KeyCipher.decrypt(it) } ?: Defaults.settings.anthropicApiKey,
+                modelGemini = prefs[KEY_MODEL_GEMINI] ?: Defaults.settings.modelGemini,
+                modelOpenai = prefs[KEY_MODEL_OPENAI] ?: Defaults.settings.modelOpenai,
+                modelOpenrouter = prefs[KEY_MODEL_OPENROUTER] ?: Defaults.settings.modelOpenrouter,
+                modelZen = prefs[KEY_MODEL_ZEN] ?: Defaults.settings.modelZen,
+                modelOpencodego = prefs[KEY_MODEL_OPENCODEGO] ?: Defaults.settings.modelOpencodego,
+                modelCustom = prefs[KEY_MODEL_CUSTOM] ?: Defaults.settings.modelCustom,
+                modelAnthropic = prefs[KEY_MODEL_ANTHROPIC] ?: Defaults.settings.modelAnthropic,
+                maxBubblesPerRequest = prefs[KEY_MAX_BUBBLES] ?: Defaults.settings.maxBubblesPerRequest,
+                minRequestDelay = prefs[KEY_REQUEST_DELAY] ?: Defaults.settings.minRequestDelay,
+                filterSfxMode = prefs[KEY_SFX_MODE] ?: Defaults.settings.filterSfxMode,
+                padXRatio = prefs[KEY_PAD_X] ?: Defaults.settings.padXRatio,
+                padYRatio = prefs[KEY_PAD_Y] ?: Defaults.settings.padYRatio,
+                minPad = prefs[KEY_MIN_PAD] ?: Defaults.settings.minPad,
+                customFontPath = prefs[KEY_CUSTOM_FONT] ?: Defaults.settings.customFontPath,
+                useInpainting = prefs[KEY_USE_INPAINTING] ?: Defaults.settings.useInpainting,
+                useLocalOcr = prefs[KEY_USE_LOCAL_OCR] ?: Defaults.settings.useLocalOcr,
+                customTimeoutSec = prefs[KEY_CUSTOM_TIMEOUT] ?: Defaults.settings.customTimeoutSec,
+                enableDevLogs = prefs[KEY_DEV_LOGS] ?: Defaults.settings.enableDevLogs,
+                useImageUpscaler = prefs[KEY_USE_IMAGE_UPSCALER] ?: Defaults.settings.useImageUpscaler,
+                translateSfx = prefs[KEY_TRANSLATE_SFX] ?: Defaults.settings.translateSfx,
+                translateFreeText = prefs[KEY_TRANSLATE_FREE_TEXT] ?: Defaults.settings.translateFreeText,
+                ocrScript = (prefs[KEY_OCR_SCRIPT] ?: Defaults.settings.ocrScript).let { normalizeOcrScript(it) },
+                useSse = prefs[KEY_USE_SSE] ?: Defaults.settings.useSse,
+                autoCheckUpdates = prefs[KEY_AUTO_CHECK_UPDATES] ?: Defaults.settings.autoCheckUpdates,
+                renderTextColor = prefs[KEY_RENDER_TEXT_COLOR] ?: Defaults.settings.renderTextColor,
+                renderFontScale = prefs[KEY_RENDER_FONT_SCALE] ?: Defaults.settings.renderFontScale,
+                renderStyle = prefs[KEY_RENDER_STYLE] ?: Defaults.settings.renderStyle,
+                jpegQuality = prefs[KEY_JPEG_QUALITY] ?: Defaults.settings.jpegQuality,
+                themeMode = prefs[KEY_THEME_MODE] ?: Defaults.settings.themeMode,
+                pureBlack = prefs[KEY_PURE_BLACK] ?: Defaults.settings.pureBlack,
+                accentColor = prefs[KEY_ACCENT_COLOR] ?: Defaults.settings.accentColor,
+            )
+        }
 
     suspend fun saveUseLocalOcr(enabled: Boolean) {
         context.dataStore.edit { it[KEY_USE_LOCAL_OCR] = enabled }
     }
- 
+
     suspend fun saveProvider(provider: String) {
         context.dataStore.edit { it[KEY_PROVIDER] = provider }
     }
- 
+
     suspend fun saveLanguage(language: String) {
         context.dataStore.edit { it[KEY_LANGUAGE] = language }
     }
- 
-    suspend fun saveApiKey(providerName: String, key: String) {
+
+    suspend fun saveApiKey(
+        providerName: String,
+        key: String,
+    ) {
         context.dataStore.edit { prefs ->
-            val keyPref = when (providerName) {
-                "gemini" -> KEY_GEMINI_KEY
-                "openai" -> KEY_OPENAI_KEY
-                "openrouter" -> KEY_OPENROUTER_KEY
-                "zen" -> KEY_ZEN_KEY
-                "opencodego" -> KEY_OPENCODEGO_KEY
-                "custom" -> KEY_CUSTOM_KEY
-                "anthropic" -> KEY_ANTHROPIC_KEY
-                else -> return@edit
-            }
+            val keyPref =
+                when (providerName) {
+                    "gemini" -> KEY_GEMINI_KEY
+                    "openai" -> KEY_OPENAI_KEY
+                    "openrouter" -> KEY_OPENROUTER_KEY
+                    "zen" -> KEY_ZEN_KEY
+                    "opencodego" -> KEY_OPENCODEGO_KEY
+                    "custom" -> KEY_CUSTOM_KEY
+                    "anthropic" -> KEY_ANTHROPIC_KEY
+                    else -> return@edit
+                }
             prefs[keyPref] = KeyCipher.encrypt(key)
         }
     }
@@ -255,35 +277,43 @@ class SettingsRepository(private val context: Context) {
                 }
         }
     }
- 
-    suspend fun saveModel(providerName: String, model: String) {
+
+    suspend fun saveModel(
+        providerName: String,
+        model: String,
+    ) {
         context.dataStore.edit { prefs ->
-            val key = when (providerName) {
-                "gemini" -> KEY_MODEL_GEMINI
-                "openai" -> KEY_MODEL_OPENAI
-                "openrouter" -> KEY_MODEL_OPENROUTER
-                "zen" -> KEY_MODEL_ZEN
-                "opencodego" -> KEY_MODEL_OPENCODEGO
-                "custom" -> KEY_MODEL_CUSTOM
-                "anthropic" -> KEY_MODEL_ANTHROPIC
-                else -> return@edit
-            }
+            val key =
+                when (providerName) {
+                    "gemini" -> KEY_MODEL_GEMINI
+                    "openai" -> KEY_MODEL_OPENAI
+                    "openrouter" -> KEY_MODEL_OPENROUTER
+                    "zen" -> KEY_MODEL_ZEN
+                    "opencodego" -> KEY_MODEL_OPENCODEGO
+                    "custom" -> KEY_MODEL_CUSTOM
+                    "anthropic" -> KEY_MODEL_ANTHROPIC
+                    else -> return@edit
+                }
             prefs[key] = model
         }
     }
- 
-    suspend fun saveBaseUrl(providerName: String, url: String) {
+
+    suspend fun saveBaseUrl(
+        providerName: String,
+        url: String,
+    ) {
         context.dataStore.edit { prefs ->
-            val key = when (providerName) {
-                "gemini" -> KEY_BASE_URL_GEMINI
-                "openai" -> KEY_BASE_URL_OPENAI
-                "openrouter" -> KEY_BASE_URL_OPENROUTER
-                "zen" -> KEY_BASE_URL_ZEN
-                "opencodego" -> KEY_BASE_URL_OPENCODEGO
-                "custom" -> KEY_CUSTOM_BASE_URL
-                "anthropic" -> KEY_BASE_URL_ANTHROPIC
-                else -> return@edit
-            }
+            val key =
+                when (providerName) {
+                    "gemini" -> KEY_BASE_URL_GEMINI
+                    "openai" -> KEY_BASE_URL_OPENAI
+                    "openrouter" -> KEY_BASE_URL_OPENROUTER
+                    "zen" -> KEY_BASE_URL_ZEN
+                    "opencodego" -> KEY_BASE_URL_OPENCODEGO
+                    "custom" -> KEY_CUSTOM_BASE_URL
+                    "anthropic" -> KEY_BASE_URL_ANTHROPIC
+                    else -> return@edit
+                }
             prefs[key] = url
         }
     }
@@ -291,11 +321,11 @@ class SettingsRepository(private val context: Context) {
     suspend fun saveCustomFontPath(path: String) {
         context.dataStore.edit { it[KEY_CUSTOM_FONT] = path }
     }
- 
+
     suspend fun saveUseInpainting(enabled: Boolean) {
         context.dataStore.edit { it[KEY_USE_INPAINTING] = enabled }
     }
- 
+
     suspend fun saveCustomTimeoutSec(seconds: Int) {
         context.dataStore.edit { it[KEY_CUSTOM_TIMEOUT] = seconds.coerceIn(30, 600) }
     }
@@ -384,11 +414,26 @@ class SettingsRepository(private val context: Context) {
                     entry.put("t", "string")
                     entry.put("v", if (key.name in API_KEY_PREFS) KeyCipher.decrypt(value) else value)
                 }
-                is Int -> { entry.put("t", "int"); entry.put("v", value) }
-                is Long -> { entry.put("t", "long"); entry.put("v", value) }
-                is Float -> { entry.put("t", "float"); entry.put("v", value.toDouble()) }
-                is Boolean -> { entry.put("t", "boolean"); entry.put("v", value) }
-                is Set<*> -> { entry.put("t", "stringSet"); entry.put("v", value.joinToString("\u0001")) }
+                is Int -> {
+                    entry.put("t", "int")
+                    entry.put("v", value)
+                }
+                is Long -> {
+                    entry.put("t", "long")
+                    entry.put("v", value)
+                }
+                is Float -> {
+                    entry.put("t", "float")
+                    entry.put("v", value.toDouble())
+                }
+                is Boolean -> {
+                    entry.put("t", "boolean")
+                    entry.put("v", value)
+                }
+                is Set<*> -> {
+                    entry.put("t", "stringSet")
+                    entry.put("v", value.joinToString("\u0001"))
+                }
                 else -> return@forEach
             }
             root.put(key.name, entry)
@@ -418,8 +463,11 @@ class SettingsRepository(private val context: Context) {
             }
         }
     }
- 
-    suspend fun saveTweakParam(keyField: String, value: Any) {
+
+    suspend fun saveTweakParam(
+        keyField: String,
+        value: Any,
+    ) {
         context.dataStore.edit { prefs ->
             when (keyField) {
                 "max_bubbles" -> if (value is Int) prefs[KEY_MAX_BUBBLES] = value
@@ -433,7 +481,7 @@ class SettingsRepository(private val context: Context) {
             }
         }
     }
- 
+
     suspend fun resetToDefault() {
         context.dataStore.edit { prefs ->
             prefs.remove(KEY_MAX_BUBBLES)

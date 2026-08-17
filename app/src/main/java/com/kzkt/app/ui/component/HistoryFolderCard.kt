@@ -58,16 +58,20 @@ fun HistoryFolderCard(
     val finishedAt = entries.maxOf { it.timestamp }
     val pageWord = if (entries.size == 1) "page" else "pages"
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected)
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-            else
-                MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    if (isSelected) {
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerLow
+                    },
+            ),
         border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
     ) {
         Row(
@@ -84,10 +88,11 @@ fun HistoryFolderCard(
 
             // Folder icon tile — visually distinct from single-image thumbnails.
             Box(
-                modifier = Modifier
-                    .size(width = 54.dp, height = 76.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
+                modifier =
+                    Modifier
+                        .size(width = 54.dp, height = 76.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
