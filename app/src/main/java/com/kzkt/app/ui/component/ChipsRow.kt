@@ -33,7 +33,7 @@ fun <E> ChipsRow(
     currentValue: E,
     onValueUpdate: (E) -> Unit,
     modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
 ) {
     Row(
         modifier =
@@ -42,7 +42,7 @@ fun <E> ChipsRow(
             .horizontalScroll(rememberScrollState())
             .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)),
     ) {
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(4.dp))
 
         chips.forEach { (value, label) ->
             FilterChip(
@@ -52,11 +52,13 @@ fun <E> ChipsRow(
                     containerColor = containerColor,
                 ),
                 onClick = { onValueUpdate(value) },
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(50),
                 border = null
             )
 
             Spacer(Modifier.width(8.dp))
         }
+
+        Spacer(Modifier.width(4.dp))
     }
 }

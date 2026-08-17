@@ -2,33 +2,39 @@
 
 package com.kzkt.app.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.BrightnessLow
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CloudDownload
-import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Science
-import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,14 +51,12 @@ import com.kzkt.app.ui.theme.DefaultThemeColor
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
     darkTheme: Boolean,
     onDarkThemeChange: (Boolean) -> Unit,
+    onThemeModeChange: (String) -> Unit = {},
     pureBlack: Boolean,
     onPureBlackChange: (Boolean) -> Unit,
     themeColor: Color,
@@ -63,7 +67,6 @@ fun SettingsScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
 
     var showFontDialog by remember { mutableStateOf(false) }
-
     var confirmRestoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
     var isRestoring by remember { mutableStateOf(false) }
 
@@ -149,76 +152,83 @@ fun SettingsScreen(
     val providerChips = remember { Config.PROVIDER_REGISTRY.values.map { it.key to it.displayName } }
     val languageChips = remember { Config.LANGUAGE_CHOICES.map { it to it } }
     var showAdvanced by remember { mutableStateOf(false) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    val categories = remember {
+        listOf(
+            "AI & Provider" to 1,
+            "Detection & Engine" to 2,
+            "Text & Render" to 3,
+            "Appearance" to 4,
+            "Data & Updates" to 5,
+        )
+    }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        // ── 0. Top Header + Quick Jump Bar ──
         item(key = "header") {
-            Text(
-                "Settings",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-
-        // ── Appearance ──
-        item(key = "appearance") {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "Appearance",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
+                    "Settings",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
-                Material3SettingsGroup(
-                    items = listOf(
-                    Material3SettingsItem(
-                        leadingContent = { SettingsIcon(Icons.Outlined.DarkMode) },
-                        title = { Text("Dark mode") },
-                        description = { Text("Use the dark color scheme") },
-                        trailingContent = {
-                            Switch(checked = darkTheme, onCheckedChange = onDarkThemeChange)
-                        },
-                    ),
-                    Material3SettingsItem(
-                        leadingContent = { SettingsIcon(Icons.Outlined.BrightnessLow) },
-                        title = { Text("Pure black") },
-                        description = { Text("True black background in dark mode") },
-                        enabled = darkTheme,
-                        trailingContent = {
-                            Switch(
-                                checked = pureBlack,
-                                onCheckedChange = onPureBlackChange,
-                                enabled = darkTheme,
+                // Quick jump pill chips
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    items(categories) { (name, targetIndex) ->
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .clickable {
+                                    scope.launch { listState.animateScrollToItem(targetIndex) }
+                                },
+                        ) {
+                            Text(
+                                text = name,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             )
-                        },
-                    ),
-                    Material3SettingsItem(
-                        leadingContent = { SettingsIcon(Icons.Outlined.Palette) },
-                        title = { Text("Accent color") },
-                        description = {
-                            Text(if (themeColor == DefaultThemeColor) "System / Material You" else "Custom seed color")
-                        },
-                        trailingContent = { AccentColorRow(themeColor, onThemeColorChange) },
-                    ),
-                    ),
-                )
+                        }
+                    }
+                }
             }
         }
 
-        // ── Provider & Configuration ──
-        item(key = "provider") {
-            Column {
-                Text(
-                    "Provider",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
-                )
+        // ── 1. AI & Provider ──
+        item(key = "provider_group") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.AutoAwesome,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        "AI & Provider",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+
                 val selectedProvider by remember { derivedStateOf { viewModel.settings.value.llmProvider } }
                 ChipsRow(
                     chips = providerChips,
@@ -226,9 +236,6 @@ fun SettingsScreen(
                     onValueUpdate = { key ->
                         scope.launch {
                             viewModel.settingsRepo.saveProvider(key)
-                            // Auto-detect the model list for the newly selected
-                            // provider so the dropdown is fresh and a stale model
-                            // name never reaches a translation run silently.
                             viewModel.refreshModelsForProvider(key)
                         }
                     },
@@ -238,22 +245,19 @@ fun SettingsScreen(
                         meta.description,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 8.dp),
+                        modifier = Modifier.padding(horizontal = 4.dp),
                     )
                 }
-                Spacer(Modifier.height(4.dp))
-                ActiveProviderConfigCard(viewModel)
-            }
-        }
 
-        // ── Target Language ──
-        item(key = "language") {
-            Column {
+                ActiveProviderConfigCard(viewModel)
+
+                Spacer(Modifier.height(4.dp))
                 Text(
                     "Target Language",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 4.dp),
                 )
                 val language by remember { derivedStateOf { viewModel.settings.value.targetLanguage } }
                 ChipsRow(
@@ -264,27 +268,34 @@ fun SettingsScreen(
             }
         }
 
-        // ── Translation Engine ──
-        item(key = "engine") {
-            Column {
-                Text(
-                    "Translation Engine",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
-                )
-                // Read only the fields this group needs, each via its own
-                // derivedStateOf, so changing one setting recomposes just this
-                // group — not the whole Settings screen (recomposition storm).
+        // ── 2. Detection & Engine ──
+        item(key = "engine_group") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Science,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        "Detection & Engine",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+
                 val useLocalOcr by remember { derivedStateOf { viewModel.settings.value.useLocalOcr } }
                 val useImageUpscaler by remember { derivedStateOf { viewModel.settings.value.useImageUpscaler } }
                 val translateSfx by remember { derivedStateOf { viewModel.settings.value.translateSfx } }
                 val translateFreeText by remember { derivedStateOf { viewModel.settings.value.translateFreeText } }
                 val useSse by remember { derivedStateOf { viewModel.settings.value.useSse } }
-                // OCR script picker: which ML Kit on-device model(s) run for local
-                // OCR + free-text detection. "jp" (default) keeps today's behavior;
-                // en/kr/cn/auto are opt-in. Only shown when the scripts apply.
                 val ocrScript by remember { derivedStateOf { viewModel.settings.value.ocrScript } }
+
                 val ocrScriptItem: Material3SettingsItem? =
                     if (useLocalOcr || translateFreeText) {
                         Material3SettingsItem(
@@ -312,6 +323,7 @@ fun SettingsScreen(
                                                 selected = ocrScript == key,
                                                 onClick = { scope.launch { viewModel.settingsRepo.saveOcrScript(key) } },
                                                 label = { Text(label) },
+                                                shape = RoundedCornerShape(50),
                                             )
                                         }
                                     }
@@ -321,28 +333,25 @@ fun SettingsScreen(
                     } else {
                         null
                     }
+
                 Material3SettingsGroup(
                     items = listOf(
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.Science) },
-                            title = { Text("Use On-Device Local OCR") },
-                            description = { Text(if (useLocalOcr) "Google ML Kit extracts text locally before the LLM — works with any text-only model." else "Default: sends the bubble mosaic to a vision LLM.") },
+                            title = { Text("On-Device Local OCR") },
+                            description = { Text(if (useLocalOcr) "Google ML Kit extracts text locally before LLM call." else "Default: sends bubble mosaic directly to vision LLM.") },
                             trailingContent = {
                                 Switch(
                                     checked = useLocalOcr,
-                                    onCheckedChange = { enabled ->
-                                        scope.launch { viewModel.settingsRepo.saveUseLocalOcr(enabled) }
-                                    }
+                                    onCheckedChange = { enabled -> scope.launch { viewModel.settingsRepo.saveUseLocalOcr(enabled) } }
                                 )
                             },
-                            onClick = {
-                                scope.launch { viewModel.settingsRepo.saveUseLocalOcr(!useLocalOcr) }
-                            }
+                            onClick = { scope.launch { viewModel.settingsRepo.saveUseLocalOcr(!useLocalOcr) } }
                         ),
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.Science) },
                             title = { Text("Smart Image Upscaler") },
-                            description = { Text("Enhance low-resolution images for better AI text detection. May increase RAM usage.") },
+                            description = { Text("Enhance low-resolution images for better text recognition.") },
                             trailingContent = {
                                 Switch(
                                     checked = useImageUpscaler,
@@ -353,90 +362,83 @@ fun SettingsScreen(
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.Tune) },
                             title = { Text("Translate Sound Effects (SFX)") },
-                            description = { Text(if (translateSfx) "ON: onomatopoeia like ドドド / バキ get translated too." else "OFF: pure SFX bubbles are skipped (default).") },
+                            description = { Text(if (translateSfx) "ON: onomatopoeia like ドドド / バキ get translated." else "OFF: pure SFX bubbles are skipped.") },
                             trailingContent = {
                                 Switch(
                                     checked = translateSfx,
-                                    onCheckedChange = { enabled ->
-                                        scope.launch { viewModel.settingsRepo.saveTranslateSfx(enabled) }
-                                    }
+                                    onCheckedChange = { enabled -> scope.launch { viewModel.settingsRepo.saveTranslateSfx(enabled) } }
                                 )
                             },
-                            onClick = {
-                                scope.launch { viewModel.settingsRepo.saveTranslateSfx(!translateSfx) }
-                            }
+                            onClick = { scope.launch { viewModel.settingsRepo.saveTranslateSfx(!translateSfx) } }
                         ),
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.TextFields) },
-                            title = { Text("Translate Free Text (outside bubbles)") },
-                            description = {
-                                Text(
-                                    if (translateFreeText) "ON: also translate text outside bubbles"
-                                    else "OFF: only speech bubbles"
-                                )
-                            },
+                            title = { Text("Translate Free Text") },
+                            description = { Text(if (translateFreeText) "ON: translate text outside speech bubbles" else "OFF: only speech bubbles") },
                             trailingContent = {
                                 Switch(
                                     checked = translateFreeText,
-                                    onCheckedChange = { enabled -> scope.launch { viewModel.settingsRepo.saveTranslateFreeText(enabled) } },
+                                    onCheckedChange = { enabled -> scope.launch { viewModel.settingsRepo.saveTranslateFreeText(enabled) } }
                                 )
                             },
-                            onClick = {
-                                scope.launch { viewModel.settingsRepo.saveTranslateFreeText(!translateFreeText) }
-                            },
+                            onClick = { scope.launch { viewModel.settingsRepo.saveTranslateFreeText(!translateFreeText) } }
                         ),
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.Sync) },
                             title = { Text("Streaming (SSE)") },
-                            description = {
-                                Text(
-                                    if (useSse) {
-                                        "ON: stream responses as they generate"
-                                    } else {
-                                        "OFF: always plain requests (safer for endpoints whose streams never finish)"
-                                    }
-                                )
-                            },
+                            description = { Text(if (useSse) "ON: stream responses in real-time" else "OFF: standard request-response") },
                             trailingContent = {
                                 Switch(
                                     checked = useSse,
-                                    onCheckedChange = { enabled -> scope.launch { viewModel.settingsRepo.saveUseSse(enabled) } },
+                                    onCheckedChange = { enabled -> scope.launch { viewModel.settingsRepo.saveUseSse(enabled) } }
                                 )
                             },
-                            onClick = {
-                                scope.launch { viewModel.settingsRepo.saveUseSse(!useSse) }
-                            },
+                            onClick = { scope.launch { viewModel.settingsRepo.saveUseSse(!useSse) } }
                         ),
                     ) + if (ocrScriptItem != null) listOf(ocrScriptItem) else emptyList(),
                 )
             }
         }
 
-        // ── Rendered Text (appearance of the translated bubbles) ──
-        item(key = "render_text") {
-            Column {
-                Text(
-                    "Rendered Text",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
-                )
+        // ── 3. Text & Rendering ──
+        item(key = "render_group") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Tune,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        "Text & Rendering",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+
                 val textColor by remember { derivedStateOf { viewModel.settings.value.renderTextColor } }
                 val fontScale by remember { derivedStateOf { viewModel.settings.value.renderFontScale } }
                 val renderStyle by remember { derivedStateOf { viewModel.settings.value.renderStyle } }
                 val customFontPath by remember { derivedStateOf { viewModel.settings.value.customFontPath } }
+
                 Material3SettingsGroup(
                     items = listOf(
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.Tune) },
                             title = { Text("Render style") },
                             description = {
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                                     listOf("manga" to "Manga", "clean" to "Clean").forEach { (key, label) ->
                                         FilterChip(
                                             selected = renderStyle == key,
                                             onClick = { scope.launch { viewModel.settingsRepo.saveRenderStyle(key) } },
                                             label = { Text(label) },
+                                            shape = RoundedCornerShape(50),
                                         )
                                     }
                                 }
@@ -446,12 +448,13 @@ fun SettingsScreen(
                             leadingContent = { SettingsIcon(Icons.Outlined.Palette) },
                             title = { Text("Text color") },
                             description = {
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                                     listOf("auto" to "Auto", "white" to "White", "black" to "Black").forEach { (key, label) ->
                                         FilterChip(
                                             selected = textColor == key,
                                             onClick = { scope.launch { viewModel.settingsRepo.saveRenderTextColor(key) } },
                                             label = { Text(label) },
+                                            shape = RoundedCornerShape(50),
                                         )
                                     }
                                 }
@@ -460,9 +463,6 @@ fun SettingsScreen(
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.TextFields) },
                             title = {
-                                // Local slider state; DataStore write happens only on
-                                // onValueChangeFinished (same pattern as TweakSlider) so
-                                // dragging does not hammer the disk on every tick.
                                 var localScale by remember(fontScale) { mutableFloatStateOf(fontScale) }
                                 LaunchedEffect(fontScale) {
                                     if (fontScale != localScale) localScale = fontScale
@@ -477,6 +477,7 @@ fun SettingsScreen(
                                         Text(
                                             "%.0f%%".format(localScale * 100),
                                             style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.primary,
                                         )
                                     }
@@ -518,83 +519,173 @@ fun SettingsScreen(
             }
         }
 
-        // ── Data Management (Backup & Restore) ──
-        item(key = "data") {
-            Column {
-                Text(
-                    "Data & Memory",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
-                )
+        // ── 4. Appearance ──
+        item(key = "appearance_group") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Palette,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        "Appearance",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+
+                val currentThemeMode = viewModel.settings.value.themeMode
                 Material3SettingsGroup(
                     items = listOf(
                         Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.DarkMode) },
+                            title = { Text("Theme mode") },
+                            description = {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(top = 2.dp),
+                                ) {
+                                    Text(
+                                        when (currentThemeMode) {
+                                            "dark" -> "Dark theme enabled"
+                                            "light" -> "Light theme enabled"
+                                            else -> "Follow system default"
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        FilterChip(
+                                            selected = currentThemeMode == "system",
+                                            onClick = { onThemeModeChange("system") },
+                                            label = { Text("Auto") },
+                                            shape = RoundedCornerShape(50),
+                                        )
+                                        FilterChip(
+                                            selected = currentThemeMode == "light",
+                                            onClick = { onThemeModeChange("light") },
+                                            label = { Text("Light") },
+                                            shape = RoundedCornerShape(50),
+                                        )
+                                        FilterChip(
+                                            selected = currentThemeMode == "dark",
+                                            onClick = { onThemeModeChange("dark") },
+                                            label = { Text("Dark") },
+                                            shape = RoundedCornerShape(50),
+                                        )
+                                    }
+                                }
+                            },
+                        ),
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.BrightnessLow) },
+                            title = { Text("Pure black") },
+                            description = { Text("True black background in dark mode") },
+                            enabled = darkTheme,
+                            trailingContent = {
+                                Switch(
+                                    checked = pureBlack,
+                                    onCheckedChange = onPureBlackChange,
+                                    enabled = darkTheme,
+                                )
+                            },
+                        ),
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.Palette) },
+                            title = { Text("Accent color") },
+                            description = {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(top = 2.dp),
+                                ) {
+                                    Text(
+                                        if (themeColor == DefaultThemeColor) "System / Material You" else "Custom seed color",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    AccentColorRow(themeColor, onThemeColorChange)
+                                }
+                            },
+                        ),
+                    ),
+                )
+            }
+        }
+
+        // ── 5. Data & Updates ──
+        item(key = "data_group") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Storage,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        "Data & Updates",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+
+                val autoCheckUpdates by remember { derivedStateOf { viewModel.settings.value.autoCheckUpdates } }
+
+                Material3SettingsGroup(
+                    items = listOf(
+                        Material3SettingsItem(
+                            leadingContent = { SettingsIcon(Icons.Outlined.TextFields) },
+                            title = { Text("Custom Dictionary / Glossary") },
+                            description = { Text("Define translation rules for specific names or terms") },
+                            onClick = onNavigateToGlossary
+                        ),
+                        Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.CloudDownload) },
                             title = { Text("Export Backup") },
-                            description = { Text("Save settings, glossary, history and translation memory to one file") },
+                            description = { Text("Save settings, glossary, history, and translation memory") },
                             onClick = { exportBackup() },
                         ),
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.Link) },
                             title = { Text("Restore Backup") },
-                            description = { Text("Import a backup file — overwrites current settings, glossary and history") },
+                            description = { Text("Import a backup file to restore your configuration") },
                             onClick = { backupPickerLauncher.launch("*/*") },
                         ),
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.DeleteOutline) },
                             title = { Text("Clear Translation Cache") },
-                            description = { Text("Forces re-translation of identical speech bubbles instead of using memory") },
+                            description = { Text("Clear cached bubble translations memory") },
                             onClick = {
                                 com.kzkt.app.data.TranslationCacheRepository(context).clear()
                                 android.widget.Toast.makeText(context, "Translation cache cleared", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         ),
                         Material3SettingsItem(
-                            leadingContent = { SettingsIcon(Icons.Outlined.TextFields) },
-                            title = { Text("Custom Dictionary / Glossary") },
-                            description = { Text("Define how specific names or terms should be translated") },
-                            onClick = onNavigateToGlossary
-                        ),
-                    )
-                )
-            }
-        }
-
-        // ── Updates (self-update via GitHub Releases) ──
-        item(key = "updates") {
-            Column {
-                Text(
-                    "Updates",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
-                )
-                val autoCheckUpdates by remember { derivedStateOf { viewModel.settings.value.autoCheckUpdates } }
-                Material3SettingsGroup(
-                    items = listOf(
-                        Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.SystemUpdate) },
-                            title = { Text("Check for Updates Automatically") },
-                            description = { Text("Check GitHub Releases for a new version when the app opens") },
+                            title = { Text("Check Updates Automatically") },
+                            description = { Text("Check GitHub Releases when app opens") },
                             trailingContent = {
                                 Switch(
                                     checked = autoCheckUpdates,
-                                    onCheckedChange = { enabled ->
-                                        scope.launch { viewModel.settingsRepo.saveAutoCheckUpdates(enabled) }
-                                    }
+                                    onCheckedChange = { enabled -> scope.launch { viewModel.settingsRepo.saveAutoCheckUpdates(enabled) } }
                                 )
                             },
-                            onClick = {
-                                scope.launch { viewModel.settingsRepo.saveAutoCheckUpdates(!autoCheckUpdates) }
-                            }
+                            onClick = { scope.launch { viewModel.settingsRepo.saveAutoCheckUpdates(!autoCheckUpdates) } }
                         ),
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.CloudDownload) },
                             title = { Text("Check for Updates") },
-                            description = {
-                                Text("Current version: ${com.kzkt.app.BuildConfig.VERSION_NAME}")
-                            },
+                            description = { Text("Current version: ${com.kzkt.app.BuildConfig.VERSION_NAME}") },
                             onClick = { viewModel.checkForUpdate(manual = true) },
                         ),
                     )
@@ -602,22 +693,22 @@ fun SettingsScreen(
             }
         }
 
-        // ── Advanced Options Header ──
+        // ── 6. Advanced Settings (Expandable) ──
         item(key = "advanced_header") {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { showAdvanced = !showAdvanced },
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -626,12 +717,12 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f)
                     ) {
                         SettingsIcon(Icons.Outlined.Science)
-                        Spacer(Modifier.width(16.dp))
+                        Spacer(Modifier.width(14.dp))
                         Column {
-                            Text("Advanced settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Advanced Settings", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                             Text(
                                 if (showAdvanced) "Hide developer logs and tweak parameters" else "Show developer logs, tweak parameters, and SFX filter mode",
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -645,7 +736,6 @@ fun SettingsScreen(
         }
 
         if (showAdvanced) {
-            // ── Verbose Developer Logs ──
             item(key = "dev_logs") {
                 val enableDevLogs by remember { derivedStateOf { viewModel.settings.value.enableDevLogs } }
                 Material3SettingsGroup(
@@ -653,44 +743,40 @@ fun SettingsScreen(
                         Material3SettingsItem(
                             leadingContent = { SettingsIcon(Icons.Outlined.BugReport) },
                             title = { Text("Verbose Developer Logs") },
-                            description = { Text(if (enableDevLogs) "ON: Shows bubble-by-bubble OCR text and connection details." else "OFF: Clean & simple progress logs.") },
+                            description = { Text(if (enableDevLogs) "ON: Shows bubble OCR text and raw connection details." else "OFF: Clean & simple progress logs.") },
                             trailingContent = {
                                 Switch(
                                     checked = enableDevLogs,
-                                    onCheckedChange = { enabled ->
-                                        scope.launch { viewModel.settingsRepo.saveEnableDevLogs(enabled) }
-                                    }
+                                    onCheckedChange = { enabled -> scope.launch { viewModel.settingsRepo.saveEnableDevLogs(enabled) } }
                                 )
                             },
-                            onClick = {
-                                scope.launch { viewModel.settingsRepo.saveEnableDevLogs(!enableDevLogs) }
-                            }
+                            onClick = { scope.launch { viewModel.settingsRepo.saveEnableDevLogs(!enableDevLogs) } }
                         )
                     )
                 )
             }
 
-            // ── Tweak Parameters ──
             item(key = "tweak_params") {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         "Tweak Parameters",
                         style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 4.dp, top = 8.dp),
+                        modifier = Modifier.padding(horizontal = 4.dp),
                     )
                     TweakParamsSection(viewModel)
                 }
             }
 
-            // ── SFX Filter Mode ──
             item(key = "sfx_mode") {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         "SFX Filter Mode",
                         style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 4.dp, top = 8.dp),
+                        modifier = Modifier.padding(horizontal = 4.dp),
                     )
                     SfxFilterSection(viewModel)
                 }
@@ -701,19 +787,23 @@ fun SettingsScreen(
 
                 Button(
                     onClick = { showResetConfirm = true },
-                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Reset Advanced Settings")
+                    Text("Reset Advanced Settings", fontWeight = FontWeight.SemiBold)
                 }
 
                 if (showResetConfirm) {
                     AlertDialog(
                         onDismissRequest = { showResetConfirm = false },
                         title = { Text("Reset Settings") },
-                        text = { Text("Are you sure you want to reset all advanced settings to their default values? This will not affect your API keys or models.") },
+                        text = { Text("Are you sure you want to reset all advanced settings to default? This will not affect your API keys or models.") },
                         confirmButton = {
                             TextButton(onClick = {
                                 scope.launch {

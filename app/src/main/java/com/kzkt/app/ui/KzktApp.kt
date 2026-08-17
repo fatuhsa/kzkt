@@ -181,6 +181,9 @@ fun KzktApp(
                             darkTheme = it
                             scope.launch { viewModel.settingsRepo.saveThemeMode(if (it) "dark" else "light") }
                         },
+                        onThemeModeChange = { mode ->
+                            scope.launch { viewModel.settingsRepo.saveThemeMode(mode) }
+                        },
                         pureBlack = pureBlack,
                         onPureBlackChange = {
                             pureBlack = it
@@ -195,7 +198,10 @@ fun KzktApp(
                     )
                 }
                 composable("glossary") {
-                    GlossaryScreen(repository = viewModel.glossaryRepo)
+                    GlossaryScreen(
+                        repository = viewModel.glossaryRepo,
+                        onBack = { navController.popBackStack() },
+                    )
                 }
             }
         }

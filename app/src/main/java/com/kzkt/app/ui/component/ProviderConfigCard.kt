@@ -41,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -53,9 +54,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun ActiveProviderConfigCard(viewModel: MainViewModel) {
     val scope = rememberCoroutineScope()
-    // Read only the fields this card needs, each via its own derivedStateOf, so a
-    // change to any single setting recomposes just this card — not the whole
-    // Settings screen (recomposition storm).
     val providerKey by remember { derivedStateOf { viewModel.settings.value.llmProvider } }
     val meta = Config.PROVIDER_REGISTRY[providerKey] ?: return
 
@@ -88,8 +86,6 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
         }
     } }
 
-    // Live API-key / base-URL field states (hoisted so the "Test API Key" button
-    // validates what the user is actually typing, not the debounced saved value).
     var apiKeyText by remember(providerKey) { mutableStateOf(apiKey) }
     var apiKeyVisible by remember { mutableStateOf(false) }
     LaunchedEffect(apiKeyText) {
@@ -111,27 +107,25 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
     val allModels = remember(presetList, detected) { (presetList + detected).distinct().sorted() }
     val isLoading = viewModel.modelsLoading.value
 
-    // One unified card for all provider fields (API key / base URL / model) — a
-    // single shared background instead of separate boxes per input.
     Text(
         "${meta.displayName} Configuration",
-        style = MaterialTheme.typography.labelLarge,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
     )
-    val cardContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+
     Card(
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = cardContainerColor),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // API key field — hoisted state (see apiKeyText / apiKeyVisible above).
-            // The single debounced LaunchedEffect is the only write path.
+            // API key field
             OutlinedTextField(
                 value = apiKeyText,
                 onValueChange = { apiKeyText = it },
@@ -140,6 +134,7 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
                 visualTransformation = if (apiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                shape = RoundedCornerShape(12.dp),
                 trailingIcon = {
                     IconButton(onClick = { apiKeyVisible = !apiKeyVisible }) {
                         Icon(
@@ -149,8 +144,8 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
                     }
                 },
             )
-            // Base URL is only meaningful for the generic "Custom" provider — the
-            // built-in providers use their own fixed endpoints.
+
+            // Base URL (Custom provider only)
             if (providerKey == "custom") {
                 OutlinedTextField(
                     value = baseUrlText,
@@ -159,6 +154,7 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
                     placeholder = { Text(if (defaultBaseUrl.isNotBlank()) defaultBaseUrl else "https://api.example.com") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
                     trailingIcon = {
                         if (defaultBaseUrl.isNotBlank() && baseUrlText != defaultBaseUrl) {
                             TextButton(onClick = {
@@ -171,20 +167,15 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
                     }
                 )
             }
-            // Model field — editable text with a dropdown of presets / detected models.
-            // The previously saved model stays in the dropdown (ModelDropdownInput
-            // always keeps the current value in the list), so re-detecting never
-            // loses the selected model — the warning below only flags a model that
-            // the endpoint really does not list.
+
+            // Model dropdown
             ModelDropdownInput(
                 label = meta.displayName,
                 value = currentModel,
                 presets = if (allModels.isNotEmpty()) allModels else listOf(meta.defaultModel),
                 onValue = { scope.launch { viewModel.settingsRepo.saveModel(providerKey, it) } },
             )
-            // Stale-model guard: when the endpoint's model list is known and the
-            // saved model is not in it, surface a clear warning here instead of
-            // letting the user start a run that would hang in retry/timeout loops.
+
             if (detected.isNotEmpty() && currentModel.isNotBlank() && currentModel !in detected && currentModel !in presetList) {
                 Text(
                     "Model \"$currentModel\" was not found on this endpoint. Tap \"Fetch Models\" and pick one from the list.",
@@ -196,8 +187,6 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
         }
     }
 
-    // Detect (model auto-detection, network call) and Test (health check) are
-    // real actions, so they are buttons — side by side to keep the card compact.
     Spacer(Modifier.height(8.dp))
     val testState = viewModel.providerTestState.value
     Row(
@@ -208,7 +197,7 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
             onClick = { viewModel.fetchModelsForProvider(providerKey, baseUrl, apiKey) },
             enabled = !isLoading,
             modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(50),
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
@@ -228,11 +217,12 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
                 Text("Fetch Models")
             }
         }
+
         OutlinedButton(
             onClick = { viewModel.testProviderConnection(providerKey, baseUrlText, apiKeyText, currentModel) },
             enabled = testState?.loading != true,
             modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(50),
         ) {
             if (testState?.loading == true) {
                 CircularProgressIndicator(
@@ -253,6 +243,7 @@ fun ActiveProviderConfigCard(viewModel: MainViewModel) {
             }
         }
     }
+
     testState?.let { state ->
         if (!state.loading && state.message.isNotBlank()) {
             Spacer(Modifier.height(6.dp))
@@ -282,9 +273,6 @@ fun ModelDropdownInput(
     var textState by remember(value) { mutableStateOf(value) }
     var expanded by remember { mutableStateOf(false) }
 
-    // Debounce writes: typing a long model name would otherwise hit DataStore on
-    // every keystroke. Saving happens 350 ms after typing pauses (or immediately
-    // when picking from the dropdown).
     LaunchedEffect(textState) {
         if (textState != value) {
             delay(350)
@@ -305,6 +293,7 @@ fun ModelDropdownInput(
                 textState = newText
             },
             label = { Text(label) },
+            shape = RoundedCornerShape(12.dp),
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
             singleLine = true,

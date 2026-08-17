@@ -2,6 +2,7 @@ package com.kzkt.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -571,7 +573,7 @@ private fun HistoryFilterHeader(
     sortDescending: Boolean,
     onToggleSortDirection: () -> Unit,
 ) {
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -579,17 +581,18 @@ private fun HistoryFilterHeader(
             Text(
                 if (selectionMode) "Select ($selectedCount)" else "History",
                 style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 4.dp),
             )
             if (selectionMode) {
                 TextButton(onClick = onExitSelectMode) {
-                    Text("Done")
+                    Text("Done", fontWeight = FontWeight.SemiBold)
                 }
             } else {
                 TextButton(onClick = onSelectMode) {
-                    Text("Select")
+                    Text("Select", fontWeight = FontWeight.SemiBold)
                 }
             }
             IconButton(onClick = onClearAllClick, enabled = !selectionMode) {
@@ -601,14 +604,14 @@ private fun HistoryFilterHeader(
             }
         }
 
-        // Search field
+        // Pill Search field
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("Search history...") },
             leadingIcon = {
-                Icon(Icons.Filled.Search, contentDescription = null)
+                Icon(Icons.Filled.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             },
             trailingIcon = {
                 if (query.isNotEmpty()) {
@@ -616,17 +619,16 @@ private fun HistoryFilterHeader(
                         Icon(
                             Icons.Filled.Close,
                             contentDescription = "Clear search",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
             },
             singleLine = true,
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(50),
         )
 
-        // Sort controls: by time or by file name, plus a direction toggle that
-        // flips the pages inside each batch (page 1 first ↔ last page first).
-        // The two chips share the row width so the toggle sits at the far right.
+        // Pill Sort controls
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -636,6 +638,7 @@ private fun HistoryFilterHeader(
                 selected = sortMode == HistorySortMode.TIME,
                 onClick = { onSortModeChange(HistorySortMode.TIME) },
                 label = { Text("By Time") },
+                shape = RoundedCornerShape(50),
                 leadingIcon = if (sortMode == HistorySortMode.TIME) {
                     { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
                 } else null,
@@ -645,13 +648,18 @@ private fun HistoryFilterHeader(
                 selected = sortMode == HistorySortMode.NAME,
                 onClick = { onSortModeChange(HistorySortMode.NAME) },
                 label = { Text("By Name") },
+                shape = RoundedCornerShape(50),
                 leadingIcon = if (sortMode == HistorySortMode.NAME) {
                     { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
                 } else null,
                 modifier = Modifier.weight(1f),
             )
-            Divider(modifier = Modifier.height(24.dp).width(1.dp))
-            // Direction toggle — flips the order in the list AND in the reader.
+            Box(
+                modifier = Modifier
+                    .height(24.dp)
+                    .width(1.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            )
             IconButton(onClick = onToggleSortDirection) {
                 Icon(
                     if (sortDescending) Icons.Filled.ArrowDownward else Icons.Filled.ArrowUpward,
@@ -677,7 +685,7 @@ private fun HistoryFolderHeader(
     sortDescending: Boolean,
     onToggleSortDirection: () -> Unit,
 ) {
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -691,25 +699,24 @@ private fun HistoryFolderHeader(
             Text(
                 if (selectionMode) "Select ($selectedCount)" else title,
                 style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 4.dp),
             )
             if (selectionMode) {
                 TextButton(onClick = onExitSelectMode) {
-                    Text("Done")
+                    Text("Done", fontWeight = FontWeight.SemiBold)
                 }
             } else {
                 TextButton(onClick = onSelectMode) {
-                    Text("Select")
+                    Text("Select", fontWeight = FontWeight.SemiBold)
                 }
             }
         }
 
-        // Same sort controls as the main list — the pages inside the folder (and
-        // the reader opened from them) follow the chosen order.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -719,6 +726,7 @@ private fun HistoryFolderHeader(
                 selected = sortMode == HistorySortMode.TIME,
                 onClick = { onSortModeChange(HistorySortMode.TIME) },
                 label = { Text("By Time") },
+                shape = RoundedCornerShape(50),
                 leadingIcon = if (sortMode == HistorySortMode.TIME) {
                     { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
                 } else null,
@@ -728,12 +736,18 @@ private fun HistoryFolderHeader(
                 selected = sortMode == HistorySortMode.NAME,
                 onClick = { onSortModeChange(HistorySortMode.NAME) },
                 label = { Text("By Name") },
+                shape = RoundedCornerShape(50),
                 leadingIcon = if (sortMode == HistorySortMode.NAME) {
                     { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
                 } else null,
                 modifier = Modifier.weight(1f),
             )
-            Divider(modifier = Modifier.height(24.dp).width(1.dp))
+            Box(
+                modifier = Modifier
+                    .height(24.dp)
+                    .width(1.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            )
             IconButton(onClick = onToggleSortDirection) {
                 Icon(
                     if (sortDescending) Icons.Filled.ArrowDownward else Icons.Filled.ArrowUpward,

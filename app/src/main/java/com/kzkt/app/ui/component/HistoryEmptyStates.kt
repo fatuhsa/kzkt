@@ -1,5 +1,6 @@
 package com.kzkt.app.ui.component
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,70 +9,82 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 /** Full-screen placeholder shown when history has no entries at all. */
 @Composable
-fun EmptyHistoryPlaceholder() {
+fun EmptyHistoryPlaceholder(modifier: Modifier = Modifier) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxSize().padding(top = 120.dp),
+        verticalArrangement = Arrangement.Center,
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp),
     ) {
         Icon(
-            Icons.Outlined.History,
+            imageVector = Icons.AutoMirrored.Outlined.MenuBook,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+            modifier = Modifier.size(68.dp),
         )
         Spacer(Modifier.height(16.dp))
         Text(
-            "No history yet",
+            "No History Yet",
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
-            "Finished translations will appear here",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            "Finished translations and export archives will appear here.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp),
         )
     }
 }
 
-/** In-list empty state shown below the (still visible) search bar. */
+/** In-list empty state shown below the search bar when query matches nothing. */
 @Composable
-fun NoResultsItem() {
+fun NoResultsItem(modifier: Modifier = Modifier) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
+        verticalArrangement = Arrangement.Center,
+        modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 48.dp),
+            .padding(vertical = 48.dp, horizontal = 24.dp),
     ) {
         Icon(
-            Icons.Filled.Search,
+            imageVector = Icons.Filled.Search,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            modifier = Modifier.size(56.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.size(52.dp),
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            "No results found",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            "No Matching Results",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            "Try a different search or filter",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            "Try a different search term or sort filter.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
         )
     }
 }
