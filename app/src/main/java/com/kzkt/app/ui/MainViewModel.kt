@@ -199,11 +199,12 @@ class MainViewModel(
                         val latestResult = results.lastOrNull()
                         val editMeta =
                             latestResult?.let { r ->
-                                kotlinx.coroutines.withContext(Dispatchers.IO) {
-                                    com.kzkt.app.data
-                                        .EditMetadataRepository(getApplication())
-                                        .loadForOutput(r.path)
-                                }
+                                kotlinx.coroutines
+                                    .withContext(Dispatchers.IO) {
+                                        com.kzkt.app.data
+                                            .EditMetadataRepository(getApplication())
+                                            .loadForOutput(r.path)
+                                    }?.let { m -> r to m }
                             }
                         post {
                             if (logs.isNotEmpty()) translationLog.addAll(logs)
@@ -220,13 +221,14 @@ class MainViewModel(
                                 }
                                 currentPreviewPath.value = result.path
                             }
-                            if (editMeta != null && latestResult != null) {
+                            if (editMeta != null) {
+                                val (latest, meta) = editMeta
                                 lastResultForEditing.value =
                                     PipelineResult(
-                                        outputPath = latestResult.path,
-                                        originalBitmap = editMeta.originalBitmap,
-                                        translations = editMeta.translations,
-                                        coordinateMap = editMeta.coordinateMap,
+                                        outputPath = latest.path,
+                                        originalBitmap = meta.originalBitmap,
+                                        translations = meta.translations,
+                                        coordinateMap = meta.coordinateMap,
                                     )
                             }
                             if (completed) {

@@ -1,6 +1,7 @@
 package com.kzkt.app.util
 
 import com.google.gson.GsonBuilder
+import com.google.gson.Strictness
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
@@ -54,7 +55,7 @@ object JsonUtils {
     fun parseTranslationMap(cleanedJson: String): Map<String, String> {
         try {
             val type = object : TypeToken<Map<String, String>>() {}.type
-            val strict = GsonBuilder().setLenient().create().fromJson<Map<String, String>>(cleanedJson, type)
+            val strict = GsonBuilder().setStrictness(Strictness.LENIENT).create().fromJson<Map<String, String>>(cleanedJson, type)
             return strict ?: emptyMap()
         } catch (e: Exception) {
             // duplicate keys (or similar) → tolerant re-parse
@@ -66,7 +67,7 @@ object JsonUtils {
     private fun scanDuplicateTolerant(json: String): Map<String, String> {
         val result = linkedMapOf<String, String>()
         val reader = JsonReader(StringReader(json))
-        reader.isLenient = true
+        reader.setStrictness(Strictness.LENIENT)
         try {
             if (reader.peek() != JsonToken.BEGIN_OBJECT) return result
             reader.beginObject()

@@ -120,7 +120,7 @@ object ArchiveExtractor {
         val abs = paths.map { File(it).absoluteFile }
         var common = abs[0].parentFile?.absolutePath ?: return null
         for (i in 1 until abs.size) {
-            var parent = abs[i].parentFile ?: return null
+            var parent = abs[i].parentFile
             while (parent != null && !common.startsWith(parent.absolutePath + File.separator) && common != parent.absolutePath) {
                 parent = parent.parentFile
             }

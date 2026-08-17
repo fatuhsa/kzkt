@@ -2,6 +2,7 @@ package com.kzkt.app.core.providers
 
 import android.graphics.Bitmap
 import com.google.gson.JsonParser
+import com.google.gson.Strictness
 import com.google.gson.stream.JsonReader
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -58,7 +59,7 @@ class CustomProvider(
                         throw RuntimeException("Custom API error ${response.code}: ${body.take(200)}")
                     }
 
-                    val lenientReader = JsonReader(StringReader(body)).apply { isLenient = true }
+                    val lenientReader = JsonReader(StringReader(body)).apply { setStrictness(Strictness.LENIENT) }
                     val json = JsonParser.parseReader(lenientReader)
 
                     if (!json.isJsonObject) return@withContext body
