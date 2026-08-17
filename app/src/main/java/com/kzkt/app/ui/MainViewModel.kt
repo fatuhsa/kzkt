@@ -449,6 +449,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         com.kzkt.app.core.TranslationProgressTracker.clearCache()
     }
 
+    fun appendFiles(paths: List<String>) {
+        val newPaths = paths.filter { it !in selectedFiles }
+        if (newPaths.isNotEmpty()) {
+            selectedFiles.addAll(newPaths)
+            canRetry.value = false
+            com.kzkt.app.core.TranslationProgressTracker.clearCache()
+        }
+    }
+
+    fun removeFile(path: String) {
+        selectedFiles.remove(path)
+        pageStatus.remove(path)
+        if (selectedFiles.isEmpty()) {
+            clearFiles()
+        }
+    }
+
+    fun clearFiles() {
+        selectedFiles.clear()
+        pageStatus.clear()
+        canRetry.value = false
+        com.kzkt.app.core.TranslationProgressTracker.clearCache()
+    }
+
     /** Remove one entry from the Riwayat tab (and its persisted edit metadata). */
     fun deleteHistoryEntry(timestamp: Long) {
         viewModelScope.launch(Dispatchers.IO) {

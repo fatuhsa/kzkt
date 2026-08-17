@@ -3,27 +3,48 @@ package com.kzkt.app.ui
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.kzkt.app.ui.component.QuickSettingsCard
+import com.kzkt.app.ui.component.EmptyMangaPickerView
+import com.kzkt.app.ui.component.QuickConfigRow
 import com.kzkt.app.ui.component.ResultPreviewCard
-import com.kzkt.app.ui.component.TranslateActionButtons
-import com.kzkt.app.ui.component.TranslationLogCard
+import com.kzkt.app.ui.component.SelectedFilesSection
+import com.kzkt.app.ui.component.SystemLogsButton
+import com.kzkt.app.ui.component.TranslationLogBottomSheet
 import com.kzkt.app.ui.component.TranslationProgressBar
 import com.kzkt.app.ui.component.YoloStatusCard
 import kotlinx.coroutines.Dispatchers
@@ -36,16 +57,10 @@ fun MainScreen(
     val context = LocalContext.current
     val logListState = rememberLazyListState()
 
-    // Stable references to snapshot state lists — reading the list object itself
-    // does not trigger recomposition (F4: no per-tick copy).
     val logList = viewModel.translationLog
     val resultList = viewModel.resultPaths
 
-    // Auto-scroll log — non-animated jump, triggered only when the log grows (F2).
-    val logSize by remember { derivedStateOf { logList.size } }
-    LaunchedEffect(logSize) {
-        if (logSize > 0) logListState.scrollToItem(logSize - 1)
-    }
+    var showLogBottomSheet by remember { mutableStateOf(false) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -73,7 +88,11 @@ fun MainScreen(
         if (uris.isNotEmpty()) {
             val allPaths = FileUtils.resolvePickedUris(context, uris)
             if (allPaths.isNotEmpty()) {
-                viewModel.addFiles(allPaths)
+                if (viewModel.selectedFiles.isEmpty()) {
+                    viewModel.addFiles(allPaths)
+                } else {
+                    viewModel.appendFiles(allPaths)
+                }
             }
         }
     }
@@ -95,7 +114,11 @@ fun MainScreen(
                 val paths = uris.mapNotNull { FileUtils.copyUriToCache(context, it) }
                 kotlinx.coroutines.withContext(Dispatchers.Main) {
                     if (paths.isNotEmpty()) {
-                        viewModel.addFiles(paths)
+                        if (viewModel.selectedFiles.isEmpty()) {
+                            viewModel.addFiles(paths)
+                        } else {
+                            viewModel.appendFiles(paths)
+                        }
                         android.widget.Toast.makeText(toastContext, "Imported ${paths.size} images from folder", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -103,44 +126,157 @@ fun MainScreen(
         }
     }
 
+    val hasFiles by remember { derivedStateOf { viewModel.selectedFiles.isNotEmpty() } }
+    val active by remember { derivedStateOf { viewModel.translationActive.value } }
+    val yoloReady by remember { derivedStateOf { viewModel.yoloReady.value } }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Header — matches History / Settings screens
+        // Header: Title + YOLO badge
         Text(
             "Translate",
             style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(vertical = 8.dp),
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
         )
 
         YoloStatusCard(viewModel)
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(14.dp))
 
-        QuickSettingsCard(viewModel)
+        // Quick provider & target language chips
+        QuickConfigRow(viewModel)
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(14.dp))
 
-        TranslateActionButtons(viewModel, filePickerLauncher, folderPickerLauncher)
+        if (!hasFiles && !active) {
+            // System logs button (when idle with no files)
+            SystemLogsButton(
+                logCount = logList.size,
+                onClick = { showLogBottomSheet = true },
+            )
 
-        // ── Progress ──
-        if (viewModel.translationActive.value) {
-            Spacer(Modifier.height(8.dp))
-            TranslationProgressBar(viewModel)
+            // Center Empty State
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                EmptyMangaPickerView(
+                    onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
+                    onPickFolder = { folderPickerLauncher.launch(null) },
+                    enabled = !active,
+                )
+            }
+        } else {
+            // Action Button: Cancel (if active) / Translate (if idle) / Retry
+            if (active) {
+                Button(
+                    onClick = { viewModel.cancelTranslation() },
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Cancel", fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                // 3-Phase Stepper Progress Bar (Scan -> Translate -> Render)
+                TranslationProgressBar(viewModel)
+            } else {
+                val failedCount by remember {
+                    derivedStateOf {
+                        viewModel.pageStatus.values.count { it == "failed" }
+                    }
+                }
+                if (failedCount > 0) {
+                    OutlinedButton(
+                        onClick = { viewModel.retryFailedPages() },
+                        enabled = hasFiles && yoloReady,
+                        shape = RoundedCornerShape(50),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Retry Failed ($failedCount)", fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    val canRetry by remember { derivedStateOf { viewModel.canRetry.value } }
+                    if (canRetry) {
+                        Button(
+                            onClick = { viewModel.retryTranslation() },
+                            enabled = hasFiles && yoloReady,
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Retry", fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Button(
+                            onClick = { viewModel.startTranslation() },
+                            enabled = hasFiles && yoloReady,
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Translate", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            // Selected Files Section with Horizontal Cards & Add Button
+            SelectedFilesSection(
+                viewModel = viewModel,
+                onAddClick = { filePickerLauncher.launch(arrayOf("*/*")) },
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            // System logs button
+            SystemLogsButton(
+                logCount = logList.size,
+                onClick = { showLogBottomSheet = true },
+            )
+
+            Spacer(Modifier.weight(1f))
+
+            // Result preview card (if any finished results exist)
+            ResultPreviewCard(viewModel, resultList)
         }
+    }
 
-        Spacer(Modifier.height(12.dp))
-
-        // ── Log output ──
-        TranslationLogCard(
+    // Modal Bottom Sheet for System Logs
+    if (showLogBottomSheet) {
+        TranslationLogBottomSheet(
             viewModel = viewModel,
             logList = logList,
             logListState = logListState,
-            modifier = Modifier.weight(1f),
+            onDismiss = { showLogBottomSheet = false },
         )
-
-        ResultPreviewCard(viewModel, resultList)
     }
 }
