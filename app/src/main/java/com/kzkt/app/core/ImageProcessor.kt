@@ -37,7 +37,10 @@ object ImageProcessor {
         format: Bitmap.CompressFormat = Bitmap.CompressFormat.JPEG,
         quality: Int = 85,
     ): String {
-        val stream = ByteArrayOutputStream()
+        // Pre-allocate stream buffer based on estimated compressed size (~1/8 of raw ARGB)
+        // to avoid repeated internal array expansions during compression.
+        val estimatedSize = maxOf(32 * 1024, bitmap.byteCount / 8)
+        val stream = ByteArrayOutputStream(estimatedSize)
         bitmap.compress(format, quality, stream)
         val bytes = stream.toByteArray()
         return Base64.encodeToString(bytes, Base64.NO_WRAP)

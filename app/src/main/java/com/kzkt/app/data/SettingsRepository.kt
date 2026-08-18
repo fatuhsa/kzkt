@@ -124,7 +124,7 @@ class SettingsRepository(
         val modelCustom: String = "gpt-5.4-mini",
         val modelAnthropic: String = "claude-sonnet-4-5",
         val maxBubblesPerRequest: Int = 30,
-        val minRequestDelay: Float = 2.0f,
+        val minRequestDelay: Float = 0.5f,
         val filterSfxMode: String = "balanced",
         val padXRatio: Float = 0.40f,
         val padYRatio: Float = 0.25f,

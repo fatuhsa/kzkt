@@ -8,7 +8,7 @@ import kotlin.math.ceil
  * Rate limiter with retry and exponential backoff.
  */
 class RateLimiter(
-    private val minRequestDelayMs: Long = 2000L,
+    private val minRequestDelayMs: Long = 500L,
 ) {
     private var lastCallTimeMs: Long = 0L
 

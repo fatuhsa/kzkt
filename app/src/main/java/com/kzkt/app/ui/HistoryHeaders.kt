@@ -17,8 +17,11 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -26,7 +29,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +40,8 @@ import androidx.compose.ui.unit.dp
 internal fun HistoryFilterHeader(
     selectionMode: Boolean,
     selectedCount: Int,
+    allSelected: Boolean,
+    onToggleSelectAll: () -> Unit,
     query: String,
     onQueryChange: (String) -> Unit,
     onSelectMode: () -> Unit,
@@ -63,20 +67,35 @@ internal fun HistoryFilterHeader(
                         .padding(vertical = 4.dp),
             )
             if (selectionMode) {
-                TextButton(onClick = onExitSelectMode) {
-                    Text("Done", fontWeight = FontWeight.SemiBold)
+                IconButton(onClick = onToggleSelectAll) {
+                    Icon(
+                        if (allSelected) Icons.Filled.Deselect else Icons.Filled.SelectAll,
+                        contentDescription = if (allSelected) "Deselect all" else "Select all",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                IconButton(onClick = onExitSelectMode) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Done",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             } else {
-                TextButton(onClick = onSelectMode) {
-                    Text("Select", fontWeight = FontWeight.SemiBold)
+                IconButton(onClick = onSelectMode) {
+                    Icon(
+                        Icons.Outlined.Checklist,
+                        contentDescription = "Select items",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-            }
-            IconButton(onClick = onClearAllClick, enabled = !selectionMode) {
-                Icon(
-                    Icons.Filled.DeleteSweep,
-                    contentDescription = "Clear all history",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                IconButton(onClick = onClearAllClick) {
+                    Icon(
+                        Icons.Filled.DeleteSweep,
+                        contentDescription = "Clear all history",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
@@ -161,6 +180,8 @@ internal fun HistoryFolderHeader(
     onBack: () -> Unit,
     selectionMode: Boolean,
     selectedCount: Int,
+    allSelected: Boolean,
+    onToggleSelectAll: () -> Unit,
     onSelectMode: () -> Unit,
     onExitSelectMode: () -> Unit,
     sortMode: HistorySortMode,
@@ -191,12 +212,27 @@ internal fun HistoryFolderHeader(
                         .padding(vertical = 4.dp),
             )
             if (selectionMode) {
-                TextButton(onClick = onExitSelectMode) {
-                    Text("Done", fontWeight = FontWeight.SemiBold)
+                IconButton(onClick = onToggleSelectAll) {
+                    Icon(
+                        if (allSelected) Icons.Filled.Deselect else Icons.Filled.SelectAll,
+                        contentDescription = if (allSelected) "Deselect all" else "Select all",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                IconButton(onClick = onExitSelectMode) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Done",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             } else {
-                TextButton(onClick = onSelectMode) {
-                    Text("Select", fontWeight = FontWeight.SemiBold)
+                IconButton(onClick = onSelectMode) {
+                    Icon(
+                        Icons.Outlined.Checklist,
+                        contentDescription = "Select items",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }

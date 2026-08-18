@@ -58,10 +58,11 @@ fun HistorySelectionBar(
     onExportPdf: () -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Surface(
         modifier =
-            Modifier
+            modifier
                 .padding(16.dp),
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,

@@ -181,7 +181,7 @@ object Config {
 
         data class EngineParams(
             var maxBubblesPerRequest: Int = 30,
-            var minRequestDelay: Double = 2.0,
+            var minRequestDelay: Double = 0.5,
             var useLocalOcr: Boolean = false,
             var enableDevLogs: Boolean = false,
             var useImageUpscaler: Boolean = false,
