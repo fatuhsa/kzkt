@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [v1.37.0] - 2026-08-18
+
 ### Added
 
 - **History Multi-Select & Select All**: modernized selection mode with a dedicated checklist icon in the header, dynamic select all / deselect all action, and back-button handling to exit selection mode.
