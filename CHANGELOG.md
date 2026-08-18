@@ -10,51 +10,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- **First-Run Onboarding Tutorial & Guide**: interactive 4-step walkthrough modal upon first launch highlighting core features, crucial API Key configuration with one-tap shortcut to Settings, import workflows, and History touch-up editor. Can also be reopened anytime from Settings → Data & Updates → App Tutorial & Quick Guide.
-- **History Multi-Select & Select All**: modernized selection mode with a dedicated checklist icon in the header, dynamic select all / deselect all action, and back-button handling to exit selection mode.
-- **Interactive Quick Config Badges**: tap the Target Language (`→ [Language]`) or Provider badge on the main Translate screen to open a modal bottom sheet picker and switch preferences instantly without going to Settings.
-- **Modern Stepped Progress UI**: 3-phase translation progress tracker (`Scan` → `Translate` → `Render`) with active step highlighting and continuous progress indicator.
-- **Modal Bottom Sheet System Logs**: tap the System Logs button to view live logs in a slide-up modal bottom sheet with category color tags, log counter, and one-tap copy button.
-- **Integrated Inter UI Font**: bundled the Inter font family (Regular, Medium, SemiBold, Bold) across all Material 3 typography tokens for a crisp, modern UI.
-- **Top Jump Chips in Settings**: horizontal quick navigation bar to jump directly to any settings category.
-- **Back Navigation in Glossary**: integrated top navigation bar with back arrow in the Custom Glossary screen.
-- **Streaming (SSE) Responses**: all providers (OpenAI-compatible, Gemini, Anthropic) now stream responses over SSE with automatic fallback to plain requests when streaming is unsupported; a new *Streaming (SSE)* toggle in Settings disables streaming entirely, and stalled streams fall back after a 120-second deadline instead of hanging.
-- **Native Anthropic Provider**: dedicated Anthropic provider using the Messages API with `x-api-key` auth, vision + text support, and `content_block_delta` SSE parsing — no longer needs the Custom-endpoint workaround.
-- **Clean Render Style**: new flat render preset (solid patch, no stroke/uppercase) alongside the default manga style, selectable from the Render Style setting.
-- **Multi-Script Local OCR**: OCR script options for English, Japanese, Korean, Chinese and Auto — ML Kit loads the matching recognizer, so bubble and free-text OCR works on Korean/Chinese comics too.
-- **Auto-Detect & Verify Provider Models**: switching providers in Settings automatically fetches the endpoint's model list (no manual Detect needed); before a run starts, the saved model is checked against that list — an unknown model aborts fast with a clear log message instead of hanging for minutes, and is flagged under the model dropdown.
-- **In-App System Error Logs**: background failures (OpenCV init, YOLO model load, corrupted history, backup/restore, PDF MediaStore, API-key encryption) are no longer silent — Settings → Advanced → **System Logs** opens a bottom-sheet viewer with copy and clear buttons. The entry only appears while *Verbose Developer Logs* is enabled.
+- **First-Run Onboarding Tutorial**: 4-step walkthrough on initial launch with AI API Key setup instructions, workflow overview, and direct settings shortcut.
+- **History Multi-Select & Actions**: multi-selection mode with select all / deselect all, batch PDF/ZIP export, and batch deletion.
+- **Interactive Quick Config Badges**: tap the Target Language or Provider badge on the main screen to change preferences via modal bottom sheet.
+- **Stepped Translation Progress**: 3-stage progress indicator (`Scan` → `Translate` → `Render`) with active step highlighting.
+- **Translation Logs Modal**: slide-up modal bottom sheet to view and clear translation logs in real-time.
+- **Integrated Inter Font**: default typography updated to the Inter font family across all Material 3 components.
+- **Streaming (SSE) Responses**: real-time streaming translation support for OpenAI, Gemini, and Anthropic with fallback.
+- **Native Anthropic Provider**: dedicated Claude provider with Messages API and direct `x-api-key` authentication.
+- **Clean Render Style**: flat text rendering preset without stroke outlines.
+- **Multi-Script Local OCR**: ML Kit script options for English, Japanese, Korean, Chinese, and Auto.
+- **Auto-Detect Provider Models**: automatic model list fetching and pre-run model verification.
 
 ### Changed
 
-- **Settings & Editor Modularization**: extracted large components from `InteractiveEditorDialog` (`BubbleEditCard`, `BatchEditDialog`) and `SettingsScreen` (`SettingsSections`, `SettingsDialogs`) into focused modular files.
-- **Translation Logs UI**: renamed System Logs to Translation Logs on the main translation screen and added a one-tap clear logs button.
-- **Lock-Free Multi-Core OpenCV Inpainting**: parallelized bubble inpainting across all CPU cores without global mutex locks for significantly faster rendering.
-- **Mask-Aware Free Text Detection**: speech bubbles detected by YOLO are masked out before ML Kit OCR scans the full page, eliminating redundant recognition work.
-- **Adaptive Rate Limiting**: reduced default minimum request delay from 2.0s to 0.5s for faster multi-chunk and batch transitions while preserving exponential backoff on HTTP 429.
-- **Pre-Allocated Base64 JPEG Buffer**: pre-sized compression stream buffer to minimize memory re-allocations and GC pressure during vision payload preparation.
-- **Internal stability improvements**: refactored the monolithic image-processing and History UI modules into smaller focused units for easier maintenance — no behavior change.
-- **Settings Screen Reorganization**: streamlined settings into 5 structured categories (*AI & Provider*, *Detection & Engine*, *Text & Rendering*, *Appearance*, *Data & Updates*) with dedicated section icons and card containers.
-- **Full English Localization**: unified all UI labels, action buttons, descriptions, and empty state placeholders into standard English.
-- **History Screen Visual Upgrade**: pill-shaped search bar with clear button, pill sort chips, and updated folder/item card styling.
-- **Result Preview Card**: modernized result container with pill action buttons (*View in App*, *Gallery*, *Edit*, *Share*).
-- **History Folder View**: translation batches now render as folder cards with drill-down, two-level selection (folder selects all pages, page-level selection inside), and search result counts; single-image runs save directly to Downloads/KZKT.
-- **Numeric-Aware Sorting in History**: sorting by name now orders pages naturally (1, 2, 10) inside each batch instead of lexicographically.
-- **Coverage-Checked Vision Retry**: when a vision batch still misses bubbles after translation, the failed mosaic is split in half and retried for better coverage.
+- **Lock-Free Multi-Core Inpainting**: parallelized bubble inpainting across CPU cores without global mutex locks.
+- **Mask-Aware Free Text Detection**: YOLO-detected speech bubbles are masked out before full-page OCR scans.
+- **Adaptive Rate Limiting**: reduced default minimum request delay from 2.0s to 0.5s with exponential backoff on HTTP 429.
+- **Settings Screen Reorganization**: reorganized settings into structured categories with top quick-jump chips.
+- **History Folder Drill-Down**: translation runs grouped into folder cards with numeric-aware sorting.
 
 ### Fixed
 
-- **OpenCV Native Use-After-Free**: resolved fatal SIGSEGV crash in `PagePreparer` caused by releasing `cropMat` before bitmap conversion.
-- **Bitmap Allocation Overhead**: removed redundant OpenCV Mat allocations for dimension checks and non-inpainting renders in `TranslationPipeline`.
-- **Delicate GlobalScope API**: switched `PdfReaderDialog` lifecycle disposal to structured `CoroutineScope`.
-- **Exception Logging**: standardized raw `printStackTrace()` calls to structured Android log outputs.
-- **History Selection Action Bar Placement**: fixed floating ZIP/PDF/Delete action bar appearing at the top of the screen overlapping header controls; positioned at the bottom with animated slide transition and adjusted list content padding.
-- **Theme Mode Auto Persistence**: resolved issue where selecting `Auto` (system theme) was immediately overwritten with `dark` or `light` in DataStore.
-- **Appearance Spacing & Squeezed Labels**: resolved cramped layout in Theme Mode and Accent Color settings by moving selectors into full-width card description rows.
-- **Free Text Not Rendered in PDF Batches**: free-text crops in the batch path used page-prefixed ids that vision models dropped from their responses — they now use globally unique bare `ftN` ids (matching the working single-image format) with key normalization before render.
-- **"Immutable bitmap passed to Canvas" Crash**: the non-inpainting batch render path crashed with this error on translated pages — the bitmap is now copied before drawing.
-- **Silently Dropped OCR Batches**: when the LLM did not echo crop ids in its JSON, a batch was marked successful but pages were saved without translations — batches now detect missing ids and automatically fall back to the vision path (only for ids actually sent, so no-text bubbles no longer trigger pointless fallbacks or cancel/retry loops).
-- **Vision Fallback Crash Aborted the Whole Run**: an error inside the vision fallback (mosaic build) killed the run and forced a manual retry — it is now caught and logged, and the remaining batches continue.
+- **OpenCV Native Crash (SIGSEGV)**: fixed use-after-free in `PagePreparer` during bubble extraction.
+- **History Action Bar Placement**: fixed floating selection bar overlapping header controls.
+- **Theme Auto Persistence**: resolved system theme mode selection being overwritten on restart.
+- **Free Text in Batch Runs**: normalized free-text ID mapping in multi-page translation pipelines.
+- **Non-Inpainting Batch Crash**: fixed Canvas error when rendering non-inpainted immutable bitmaps.
+- **Missing OCR Batches**: automatically fall back to vision processing when LLM omits crop IDs in response.
 
 ## [v1.36.7] - 2026-08-16
 
