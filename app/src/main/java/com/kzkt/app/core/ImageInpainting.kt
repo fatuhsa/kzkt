@@ -58,10 +58,53 @@ object ImageInpainting {
     }
 
     /**
+     * Inpaint a single RGBA crop Mat in isolation. Thread-safe, no shared state.
+     * Returns a new RGBA Mat with text inpainted (caller must release), or null on failure.
+     */
+    fun inpaintCrop(crop: Mat): Mat? {
+        if (crop.empty()) return null
+        val gray = Mat()
+        val textMask = Mat()
+        val bgrCrop = Mat()
+        val inpainted = Mat()
+        val rgbaResult = Mat()
+        try {
+            Imgproc.cvtColor(crop, gray, Imgproc.COLOR_RGBA2GRAY)
+            val meanBrightness = Core.mean(gray).`val`[0]
+            if (meanBrightness > 128) {
+                // White/light background: threshold dark text strokes (inclusive of anti-aliasing)
+                Imgproc.threshold(gray, textMask, 190.0, 255.0, Imgproc.THRESH_BINARY_INV)
+            } else {
+                // Dark background: threshold light text strokes
+                Imgproc.threshold(gray, textMask, 90.0, 255.0, Imgproc.THRESH_BINARY)
+            }
+
+            val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(5.0, 5.0))
+            Imgproc.dilate(textMask, textMask, kernel)
+            kernel.release()
+
+            Imgproc.cvtColor(crop, bgrCrop, Imgproc.COLOR_RGBA2BGR)
+            org.opencv.photo.Photo
+                .inpaint(bgrCrop, textMask, inpainted, 3.0, org.opencv.photo.Photo.INPAINT_TELEA)
+
+            Imgproc.cvtColor(inpainted, rgbaResult, Imgproc.COLOR_BGR2RGBA)
+            return rgbaResult
+        } catch (e: Exception) {
+            Log.w("KZKT", "Inpainting crop failed: ${e.message}")
+            rgbaResult.release()
+            return null
+        } finally {
+            bgrCrop.release()
+            inpainted.release()
+            textMask.release()
+            gray.release()
+        }
+    }
+
+    /**
      * Pre-filters [translations] (dropping SKIP / blank values), then erases the
-     * original text strokes inside the matching bubbles of [mat] in parallel.
-     * Shared by the single-image and batch paths so the parallel inpainting
-     * boilerplate lives in exactly one place.
+     * original text strokes inside the matching bubbles of [mat] in parallel across
+     * all available CPU cores without lock contention.
      */
     suspend fun inpaintTranslated(
         mat: Mat,
@@ -73,16 +116,51 @@ object ImageInpainting {
                 val text = translations[id]
                 if (text != null && text.uppercase() != "SKIP" && text.isNotBlank()) box else null
             }
-        if (targets.isEmpty()) return
-        coroutineScope {
-            targets
-                .map { box ->
+        if (targets.isEmpty() || mat.empty()) return
+
+        val cols = mat.cols()
+        val rows = mat.rows()
+
+        // 1. Extract isolated submat clones for parallel processing
+        val tasks =
+            targets.mapNotNull { box ->
+                val x1 = box[0].coerceIn(0, maxOf(0, cols - 1))
+                val y1 = box[1].coerceIn(0, maxOf(0, rows - 1))
+                val w = (box[2] - x1).coerceIn(1, maxOf(1, cols - x1))
+                val h = (box[3] - y1).coerceIn(1, maxOf(1, rows - y1))
+                val rect = Rect(x1, y1, w, h)
+                val sub = mat.submat(rect)
+                if (sub.empty()) {
+                    sub.release()
+                    null
+                } else {
+                    val cloned = sub.clone()
+                    sub.release()
+                    rect to cloned
+                }
+            }
+        if (tasks.isEmpty()) return
+
+        // 2. Heavy inpainting computed in parallel across all CPU cores
+        val results =
+            coroutineScope {
+                tasks.map { (rect, crop) ->
                     async(Dispatchers.Default) {
-                        synchronized(mat) {
-                            inpaintBubbleText(mat, box)
-                        }
+                        val result = inpaintCrop(crop)
+                        crop.release()
+                        rect to result
                     }
                 }.awaitAll()
+            }
+
+        // 3. Fast sequential copy back onto original Mat
+        for ((rect, inpainted) in results) {
+            if (inpainted != null && !inpainted.empty()) {
+                val targetSubmat = mat.submat(rect)
+                inpainted.copyTo(targetSubmat)
+                targetSubmat.release()
+                inpainted.release()
+            }
         }
     }
 
@@ -109,44 +187,16 @@ object ImageInpainting {
             crop.release()
             return mat
         }
+        val cloned = crop.clone()
+        crop.release()
 
-        val gray = Mat()
-        val textMask = Mat()
-        val inpainted = Mat()
-        try {
-            Imgproc.cvtColor(crop, gray, Imgproc.COLOR_RGBA2GRAY)
-            val meanBrightness = Core.mean(gray).`val`[0]
-            if (meanBrightness > 128) {
-                // White/light background: threshold dark text strokes (inclusive of anti-aliasing)
-                Imgproc.threshold(gray, textMask, 190.0, 255.0, Imgproc.THRESH_BINARY_INV)
-            } else {
-                // Dark background: threshold light text strokes
-                Imgproc.threshold(gray, textMask, 90.0, 255.0, Imgproc.THRESH_BINARY)
-            }
-
-            val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(5.0, 5.0))
-            Imgproc.dilate(textMask, textMask, kernel)
-            kernel.release()
-
-            val bgrCrop = Mat()
-            Imgproc.cvtColor(crop, bgrCrop, Imgproc.COLOR_RGBA2BGR)
-            org.opencv.photo.Photo
-                .inpaint(bgrCrop, textMask, inpainted, 3.0, org.opencv.photo.Photo.INPAINT_TELEA)
-            bgrCrop.release()
-
-            val rgbaResult = Mat()
-            Imgproc.cvtColor(inpainted, rgbaResult, Imgproc.COLOR_BGR2RGBA)
-            val targetSubmat = mat.submat(rect)
-            rgbaResult.copyTo(targetSubmat)
-            targetSubmat.release()
-            rgbaResult.release()
-        } catch (e: Exception) {
-            Log.w("KZKT", "Inpainting failed: ${e.message}")
-        } finally {
+        val inpainted = inpaintCrop(cloned)
+        cloned.release()
+        if (inpainted != null && !inpainted.empty()) {
+            val target = mat.submat(rect)
+            inpainted.copyTo(target)
+            target.release()
             inpainted.release()
-            textMask.release()
-            gray.release()
-            crop.release()
         }
         return mat
     }

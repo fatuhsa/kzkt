@@ -63,7 +63,7 @@ class PagePreparer(
     ): List<IntArray> {
         if (isCancelled()) return emptyList()
         val script = OcrScript.fromKey(params.engine.ocrScript)
-        val regions = LocalOcrEngine.recognizeTextRegions(bitmap, script)
+        val regions = LocalOcrEngine.recognizeTextRegions(bitmap, script, excludeBoxes = bubbleBoxes)
         if (isCancelled()) return emptyList()
 
         val filtered =

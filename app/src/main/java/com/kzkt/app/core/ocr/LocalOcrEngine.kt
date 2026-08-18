@@ -139,17 +139,20 @@ object LocalOcrEngine {
     /**
      * Full-page text-block detection for the free-text feature. With
      * [OcrScript.AUTO], runs every model and unions the detected regions (the
-     * caller's merge step collapses overlapping boxes).
+     * caller's merge step collapses overlapping boxes). When [excludeBoxes] are
+     * provided (e.g. YOLO speech bubbles), those regions are masked out so
+     * ML Kit avoids scanning text that is already handled.
      */
     suspend fun recognizeTextRegions(
         bitmap: Bitmap,
         script: OcrScript = OcrScript.JAPANESE,
+        excludeBoxes: List<IntArray> = emptyList(),
     ): List<TextRegion> =
         withContext(Dispatchers.IO) {
             val scripts = script.resolve()
             val all = mutableListOf<TextRegion>()
             for (s in scripts) {
-                all.addAll(runRegionRecognition(bitmap, getRecognizer(s)))
+                all.addAll(runRegionRecognition(bitmap, getRecognizer(s), excludeBoxes))
             }
             all
         }
@@ -157,18 +160,40 @@ object LocalOcrEngine {
     private fun runRegionRecognition(
         bitmap: Bitmap,
         recognizer: TextRecognizer,
+        excludeBoxes: List<IntArray> = emptyList(),
     ): List<TextRegion> =
         try {
             val maxDim = maxOf(bitmap.width, bitmap.height)
             val scale = minOf(1f, MAX_DETECT_DIM.toFloat() / maxDim)
+            val targetW = maxOf(1, (bitmap.width * scale).toInt())
+            val targetH = maxOf(1, (bitmap.height * scale).toInt())
+
             val detectBmp =
-                if (scale < 1f) {
-                    Bitmap.createScaledBitmap(
-                        bitmap,
-                        maxOf(1, (bitmap.width * scale).toInt()),
-                        maxOf(1, (bitmap.height * scale).toInt()),
-                        true,
-                    )
+                if (excludeBoxes.isNotEmpty() || scale < 1f) {
+                    val bmp = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                    val canvas = android.graphics.Canvas(bmp)
+                    val srcRect = android.graphics.Rect(0, 0, bitmap.width, bitmap.height)
+                    val dstRect = android.graphics.Rect(0, 0, targetW, targetH)
+                    val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
+                    canvas.drawBitmap(bitmap, srcRect, dstRect, paint)
+
+                    if (excludeBoxes.isNotEmpty()) {
+                        val maskPaint =
+                            android.graphics.Paint().apply {
+                                color = android.graphics.Color.WHITE
+                                style = android.graphics.Paint.Style.FILL
+                            }
+                        for (b in excludeBoxes) {
+                            val left = (b[0] * scale).toInt().coerceIn(0, targetW)
+                            val top = (b[1] * scale).toInt().coerceIn(0, targetH)
+                            val right = (b[2] * scale).toInt().coerceIn(0, targetW)
+                            val bottom = (b[3] * scale).toInt().coerceIn(0, targetH)
+                            if (right > left && bottom > top) {
+                                canvas.drawRect(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat(), maskPaint)
+                            }
+                        }
+                    }
+                    bmp
                 } else {
                     bitmap
                 }

@@ -1,6 +1,11 @@
 package com.kzkt.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -114,6 +119,26 @@ fun HistoryScreen(viewModel: MainViewModel) {
         remember(openBatchKey, sortedFiltered) {
             if (openBatchKey == null) emptyList() else sortedFiltered.filter { batchKeyOf(it) == openBatchKey }
         }
+
+    val currentVisibleEntries =
+        remember(openBatchKey, sortedFiltered, folderEntries) {
+            if (openBatchKey == null) sortedFiltered else folderEntries
+        }
+    val allVisibleSelected =
+        remember(currentVisibleEntries, selectedTimestamps) {
+            currentVisibleEntries.isNotEmpty() && currentVisibleEntries.all { it.timestamp in selectedTimestamps }
+        }
+
+    fun toggleSelectAll() {
+        val visibleTimestamps = currentVisibleEntries.map { it.timestamp }.toSet()
+        if (visibleTimestamps.isEmpty()) return
+        selectedTimestamps =
+            if (visibleTimestamps.all { it in selectedTimestamps }) {
+                selectedTimestamps - visibleTimestamps
+            } else {
+                selectedTimestamps + visibleTimestamps
+            }
+    }
 
     fun openReaderForEntry(entry: HistoryEntry) {
         val file = File(entry.outputPath)
@@ -311,9 +336,13 @@ fun HistoryScreen(viewModel: MainViewModel) {
         }
     }
 
-    // System back closes the open folder before leaving the screen.
-    BackHandler(enabled = openBatchKey != null) {
-        openBatchKey = null
+    // System back exits selection mode first, then closes the open folder.
+    BackHandler(enabled = selectionMode || openBatchKey != null) {
+        if (selectionMode) {
+            exitSelectionMode()
+        } else {
+            openBatchKey = null
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -322,7 +351,12 @@ fun HistoryScreen(viewModel: MainViewModel) {
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                contentPadding =
+                    PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        bottom = if (selectionMode && selectedTimestamps.isNotEmpty()) 88.dp else 16.dp,
+                    ),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (openBatchKey == null) {
@@ -331,6 +365,8 @@ fun HistoryScreen(viewModel: MainViewModel) {
                         HistoryFilterHeader(
                             selectionMode = selectionMode,
                             selectedCount = selectedTimestamps.size,
+                            allSelected = allVisibleSelected,
+                            onToggleSelectAll = { toggleSelectAll() },
                             query = query,
                             onQueryChange = { query = it },
                             onSelectMode = { selectionMode = true },
@@ -418,6 +454,8 @@ fun HistoryScreen(viewModel: MainViewModel) {
                             onBack = { openBatchKey = null },
                             selectionMode = selectionMode,
                             selectedCount = selectedTimestamps.size,
+                            allSelected = allVisibleSelected,
+                            onToggleSelectAll = { toggleSelectAll() },
                             onSelectMode = { selectionMode = true },
                             onExitSelectMode = { exitSelectionMode() },
                             sortMode = sortMode,
@@ -456,11 +494,19 @@ fun HistoryScreen(viewModel: MainViewModel) {
 
         SnackbarHost(
             hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = if (selectionMode && selectedTimestamps.isNotEmpty()) 80.dp else 0.dp),
         )
 
         // ── Selection-mode action bar (export / delete / cancel) ──
-        if (selectionMode && selectedTimestamps.isNotEmpty()) {
+        AnimatedVisibility(
+            visible = selectionMode && selectedTimestamps.isNotEmpty(),
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
             HistorySelectionBar(
                 exporting = exporting,
                 onExportZip = { exportSelected(asPdf = false) },

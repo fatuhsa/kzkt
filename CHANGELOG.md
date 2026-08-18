@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **History Multi-Select & Select All**: modernized selection mode with a dedicated checklist icon in the header, dynamic select all / deselect all action, and back-button handling to exit selection mode.
 - **Interactive Quick Config Badges**: tap the Target Language (`→ [Language]`) or Provider badge on the main Translate screen to open a modal bottom sheet picker and switch preferences instantly without going to Settings.
 - **Modern Stepped Progress UI**: 3-phase translation progress tracker (`Scan` → `Translate` → `Render`) with active step highlighting and continuous progress indicator.
 - **Modal Bottom Sheet System Logs**: tap the System Logs button to view live logs in a slide-up modal bottom sheet with category color tags, log counter, and one-tap copy button.
@@ -23,6 +24,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Lock-Free Multi-Core OpenCV Inpainting**: parallelized bubble inpainting across all CPU cores without global mutex locks for significantly faster rendering.
+- **Mask-Aware Free Text Detection**: speech bubbles detected by YOLO are masked out before ML Kit OCR scans the full page, eliminating redundant recognition work.
+- **Adaptive Rate Limiting**: reduced default minimum request delay from 2.0s to 0.5s for faster multi-chunk and batch transitions while preserving exponential backoff on HTTP 429.
+- **Pre-Allocated Base64 JPEG Buffer**: pre-sized compression stream buffer to minimize memory re-allocations and GC pressure during vision payload preparation.
 - **Internal stability improvements**: refactored the monolithic image-processing and History UI modules into smaller focused units for easier maintenance — no behavior change.
 - **Settings Screen Reorganization**: streamlined settings into 5 structured categories (*AI & Provider*, *Detection & Engine*, *Text & Rendering*, *Appearance*, *Data & Updates*) with dedicated section icons and card containers.
 - **Full English Localization**: unified all UI labels, action buttons, descriptions, and empty state placeholders into standard English.
@@ -34,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **History Selection Action Bar Placement**: fixed floating ZIP/PDF/Delete action bar appearing at the top of the screen overlapping header controls; positioned at the bottom with animated slide transition and adjusted list content padding.
 - **Theme Mode Auto Persistence**: resolved issue where selecting `Auto` (system theme) was immediately overwritten with `dark` or `light` in DataStore.
 - **Appearance Spacing & Squeezed Labels**: resolved cramped layout in Theme Mode and Accent Color settings by moving selectors into full-width card description rows.
 - **Free Text Not Rendered in PDF Batches**: free-text crops in the batch path used page-prefixed ids that vision models dropped from their responses — they now use globally unique bare `ftN` ids (matching the working single-image format) with key normalization before render.
