@@ -94,118 +94,124 @@ fun OnboardingTutorialDialog(
         remember {
             listOf(
                 OnboardingStep(
-                    title = "Selamat Datang di KZKT",
-                    subtitle = "Aplikasi penerjemah manga & komik otomatis berbasis AI lokal dan cloud.",
-                    badgeText = "Alur Kerja",
+                    title = "Welcome to KZKT",
+                    subtitle = "On-device AI-powered automatic manga and comic translator.",
+                    badgeText = "Workflow",
                     headerIcon = Icons.Outlined.Translate,
                     points =
                         listOf(
                             OnboardingPoint(
                                 icon = Icons.Default.AutoAwesome,
-                                title = "1. Deteksi Balon Kata (YOLO Onnx)",
-                                description = "Deteksi lokasi teks manga secara otomatis dan instan tanpa butuh koneksi internet.",
+                                title = "1. Bubble Detection (YOLO ONNX)",
+                                description =
+                                    "Automatically detects manga speech bubble coordinates " +
+                                        "on-device without needing an internet connection.",
                             ),
                             OnboardingPoint(
                                 icon = Icons.Default.Translate,
-                                title = "2. Terjemahan Kontekstual (AI LLM)",
+                                title = "2. Contextual Translation (AI LLM)",
                                 description =
-                                    "Menerjemahkan dialog manga ke bahasa pilihan Anda (Indonesia, English, dll) " +
-                                        "dengan menjaga konteks cerita.",
+                                    "Translates manga dialog into your preferred language " +
+                                        "while preserving storytelling context.",
                             ),
                             OnboardingPoint(
                                 icon = Icons.Default.Edit,
-                                title = "3. Inpainting & Render Mulus",
-                                description = "Menghapus teks asli secara bersih dan menata teks baru sesuai bentuk balon kata.",
+                                title = "3. Inpainting & Clean Rendering",
+                                description =
+                                    "Erases original text strokes cleanly and fits translated text " +
+                                        "neatly into bubble bounds.",
                             ),
                         ),
                 ),
                 OnboardingStep(
-                    title = "Setup Kunci API AI",
-                    subtitle = "Langkah wajib pertama agar AI dapat memproses dan menerjemahkan teks komik.",
-                    badgeText = "Krusial / Wajib",
+                    title = "Setup AI API Key",
+                    subtitle = "Required first step so the AI engine can process and translate comic text.",
+                    badgeText = "Crucial / Required",
                     headerIcon = Icons.Outlined.Key,
                     points =
                         listOf(
                             OnboardingPoint(
                                 icon = Icons.Default.Key,
-                                title = "Google Gemini (Gratis & Cepat)",
+                                title = "Google Gemini (Free & Fast)",
                                 description =
-                                    "Dapatkan API Key gratis di Google AI Studio (aistudio.google.com) " +
-                                        "untuk mulai menerjemahkan secara instan.",
+                                    "Get a free API Key at Google AI Studio (aistudio.google.com) " +
+                                        "to start translating immediately.",
                                 isCrucial = true,
                             ),
                             OnboardingPoint(
                                 icon = Icons.Default.Settings,
-                                title = "Penyedia AI Lengkap",
+                                title = "Extensive AI Providers",
                                 description =
-                                    "Mendukung Google Gemini, OpenAI, Claude Anthropic, OpenRouter, " +
-                                        "DeepSeek, Groq, hingga Custom Endpoint.",
+                                    "Supports Google Gemini, OpenAI, Claude Anthropic, OpenRouter, " +
+                                        "DeepSeek, Groq, and Custom Endpoints.",
                             ),
                             OnboardingPoint(
                                 icon = Icons.Outlined.Settings,
-                                title = "Arah Menu Pengaturan",
-                                description = "Buka tab Settings (Pengaturan) → AI & Provider → Masukkan API Key Anda.",
+                                title = "Settings Menu Navigation",
+                                description = "Go to Settings tab → AI & Provider section → paste your API Key.",
                             ),
                         ),
-                    actionText = "Buka Pengaturan API Sekarang",
+                    actionText = "Open API Settings Now",
                     onAction = onNavigateToSettings,
                 ),
                 OnboardingStep(
-                    title = "Cara Impor & Menerjemahkan",
-                    subtitle = "Mendukung berbagai format berkas manga favorit Anda.",
-                    badgeText = "Menu Translate",
+                    title = "Import & Translate",
+                    subtitle = "Supports all your favorite comic and manga formats.",
+                    badgeText = "Translate Tab",
                     headerIcon = Icons.Outlined.Folder,
                     points =
                         listOf(
                             OnboardingPoint(
                                 icon = Icons.Default.Image,
-                                title = "Format Berkas Didukung",
+                                title = "Supported File Formats",
                                 description =
-                                    "Mendukung gambar tunggal (JPG/PNG/WebP), seluruh folder manga, " +
-                                        "file PDF, serta arsip ZIP/CBZ.",
+                                    "Supports single images (JPG/PNG/WebP), entire manga folders, " +
+                                        "PDF files, and ZIP/CBZ archives.",
                             ),
                             OnboardingPoint(
                                 icon = Icons.Default.Translate,
                                 title = "Quick Config Badges",
                                 description =
-                                    "Ketuk badge bahasa (→ Indonesian) atau provider di beranda Translate " +
-                                        "untuk mengganti preferensi secara instan.",
+                                    "Tap the target language (→ Indonesian) or provider badge " +
+                                        "on the Translate screen to switch preferences instantly.",
                             ),
                             OnboardingPoint(
                                 icon = Icons.Default.AutoAwesome,
                                 title = "Translation Logs",
                                 description =
-                                    "Pantau proses OCR, inpainting, dan terjemahan secara live " +
-                                        "melalui tombol log di bagian bawah.",
+                                    "Monitor OCR, inpainting, and translation progress live " +
+                                        "via the Translation Logs button at the bottom.",
                             ),
                         ),
                 ),
                 OnboardingStep(
-                    title = "Membaca & Touch-up Editor",
-                    subtitle = "Nikmati hasil terjemahan dan sesuaikan tampilan sesuai selera.",
-                    badgeText = "Menu History",
+                    title = "Reader & Touch-up Editor",
+                    subtitle = "Enjoy your translated manga and customize typography.",
+                    badgeText = "History Tab",
                     headerIcon = Icons.AutoMirrored.Outlined.MenuBook,
                     points =
                         listOf(
                             OnboardingPoint(
                                 icon = Icons.Default.History,
-                                title = "Tab History & In-App Reader",
-                                description = "Buka riwayat terjemahan kapan saja dengan mode baca Page ataupun Webtoon scroll vertikal.",
+                                title = "History Tab & In-App Reader",
+                                description =
+                                    "Open past translations anytime in Page or continuous " +
+                                        "Webtoon vertical scroll reading modes.",
                             ),
                             OnboardingPoint(
                                 icon = Icons.Default.Edit,
-                                title = "Touch-up Editor Interaktif",
+                                title = "Interactive Touch-up Editor",
                                 description =
-                                    "Sentuh balon kata pada gambar untuk mengedit terjemahan, " +
-                                        "memilih font kustom, atau mengubah ukuran teks.",
+                                    "Touch speech bubbles directly on the image to edit translations, " +
+                                        "pick custom fonts, or adjust text sizes.",
                             ),
                             OnboardingPoint(
                                 icon = Icons.Outlined.Folder,
-                                title = "Tersimpan Otomatis",
-                                description = "Hasil terjemahan gambar maupun PDF langsung tersimpan di folder Download/KZKT.",
+                                title = "Auto-Saved Outputs",
+                                description = "All translated images and PDFs are automatically saved to your Download/KZKT folder.",
                             ),
                         ),
-                    actionText = "Mulai Menerjemahkan",
+                    actionText = "Start Translating",
                     onAction = onNavigateToTranslate,
                 ),
             )
@@ -473,16 +479,16 @@ fun OnboardingTutorialDialog(
                                     androidx.compose.foundation.layout
                                         .PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                             ) {
-                                Icon(Icons.Default.ChevronLeft, contentDescription = "Sebelumnya", modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.ChevronLeft, contentDescription = "Previous", modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Kembali")
+                                Text("Back")
                             }
                         } else {
                             TextButton(
                                 onClick = onDismiss,
                                 shape = RoundedCornerShape(50),
                             ) {
-                                Text("Lewati", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Skip", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
 
@@ -500,7 +506,7 @@ fun OnboardingTutorialDialog(
                                 androidx.compose.foundation.layout
                                     .PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                         ) {
-                            Text(if (currentStep == steps.size - 1) "Mulai" else "Lanjut")
+                            Text(if (currentStep == steps.size - 1) "Get Started" else "Next")
                             Spacer(Modifier.width(4.dp))
                             Icon(
                                 imageVector = if (currentStep == steps.size - 1) Icons.Default.Check else Icons.Default.ChevronRight,
