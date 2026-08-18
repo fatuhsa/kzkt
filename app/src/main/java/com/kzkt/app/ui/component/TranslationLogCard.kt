@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -83,7 +84,7 @@ fun SystemLogsButton(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                "System Logs ($logCount)",
+                "Translation Logs ($logCount)",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -121,7 +122,7 @@ fun TranslationLogBottomSheet(
                     .fillMaxWidth()
                     .padding(bottom = 24.dp),
         ) {
-            // Header Row: Title on left, Entry count + Copy button on right
+            // Header Row: Title on left, Entry count + Copy button + Clear button on right
             Row(
                 modifier =
                     Modifier
@@ -131,7 +132,7 @@ fun TranslationLogBottomSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "System Logs (Advanced)",
+                    "Translation Logs",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -142,7 +143,7 @@ fun TranslationLogBottomSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (logList.isNotEmpty()) {
-                        Spacer(Modifier.width(6.dp))
+                        Spacer(Modifier.width(4.dp))
                         IconButton(
                             onClick = {
                                 val textToCopy = logList.joinToString("\n")
@@ -157,6 +158,18 @@ fun TranslationLogBottomSheet(
                                 imageVector = Icons.Outlined.ContentCopy,
                                 contentDescription = "Copy all logs",
                                 tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        IconButton(
+                            onClick = { logList.clear() },
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.DeleteOutline,
+                                contentDescription = "Clear logs",
+                                tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(16.dp),
                             )
                         }
@@ -242,7 +255,7 @@ fun TranslationLogCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "System Logs",
+                    "Translation Logs",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -253,7 +266,7 @@ fun TranslationLogCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (logList.isNotEmpty()) {
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(4.dp))
                         IconButton(
                             onClick = {
                                 val textToCopy = logList.joinToString("\n")
@@ -268,6 +281,18 @@ fun TranslationLogCard(
                                 imageVector = Icons.Outlined.ContentCopy,
                                 contentDescription = "Copy all logs",
                                 tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        IconButton(
+                            onClick = { logList.clear() },
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.DeleteOutline,
+                                contentDescription = "Clear logs",
+                                tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(16.dp),
                             )
                         }

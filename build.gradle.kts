@@ -45,3 +45,17 @@ tasks.register<JavaExec>("ktlint") {
         "buildSrc/src/test/**/*.kt",
     )
 }
+
+tasks.register<JavaExec>("ktlintFormat") {
+    group = "formatting"
+    description = "Auto-format Kotlin code style with ktlint"
+    classpath = ktlintConfig
+    mainClass.set("com.pinterest.ktlint.Main")
+    args(
+        "-F",
+        "app/src/main/**/*.kt",
+        "app/src/test/**/*.kt",
+        "buildSrc/src/main/**/*.kt",
+        "buildSrc/src/test/**/*.kt",
+    )
+}

@@ -17,37 +17,23 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.FormatAlignLeft
-import androidx.compose.material.icons.automirrored.filled.FormatAlignRight
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.FormatAlignCenter
-import androidx.compose.material.icons.filled.FormatBold
-import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatPaint
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -729,196 +715,47 @@ fun InteractiveEditorDialog(
 
                     // Edit section if bubble selected
                     selectedBubbleId?.let { id ->
-                        Card(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text("Editing Bubble #$id", style = MaterialTheme.typography.labelLarge)
-                                    if (bubbles[id]?.rawText != null) {
-                                        Text(
-                                            "Raw: ${bubbles[id]?.rawText}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            maxLines = 1,
-                                            modifier = Modifier.weight(1f, fill = false).padding(start = 8.dp),
-                                        )
-                                    }
-                                }
-                                OutlinedTextField(
-                                    value = editingText,
-                                    onValueChange = {
-                                        editingText = it
-                                        val bubble = bubbles[id]
-                                        if (bubble != null) {
-                                            bubbles[id] = bubble.copy(text = it)
-                                        }
-                                    },
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp),
-                                    singleLine = false,
-                                    maxLines = 3,
-                                )
-
-                                val bubble = bubbles[id]
-                                if (bubble != null) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                            IconToggleButton(
-                                                checked = bubble.isBold,
-                                                onCheckedChange = {
-                                                    bubbles[id] = bubble.copy(isBold = it)
-                                                    pushState()
-                                                },
-                                            ) { Icon(Icons.Default.FormatBold, "Bold") }
-
-                                            IconToggleButton(
-                                                checked = bubble.isItalic,
-                                                onCheckedChange = {
-                                                    bubbles[id] = bubble.copy(isItalic = it)
-                                                    pushState()
-                                                },
-                                            ) { Icon(Icons.Default.FormatItalic, "Italic") }
-
-                                            IconButton(
-                                                onClick = {
-                                                    val nextAlign =
-                                                        when (bubble.align) {
-                                                            android.graphics.Paint.Align.LEFT -> android.graphics.Paint.Align.CENTER
-                                                            android.graphics.Paint.Align.CENTER -> android.graphics.Paint.Align.RIGHT
-                                                            else -> android.graphics.Paint.Align.LEFT
-                                                        }
-                                                    bubbles[id] = bubble.copy(align = nextAlign)
-                                                    pushState()
-                                                },
-                                            ) {
-                                                Icon(
-                                                    when (bubble.align) {
-                                                        android.graphics.Paint.Align.LEFT -> Icons.AutoMirrored.Filled.FormatAlignLeft
-                                                        android.graphics.Paint.Align.RIGHT -> Icons.AutoMirrored.Filled.FormatAlignRight
-                                                        else -> Icons.Default.FormatAlignCenter
-                                                    },
-                                                    "Align",
-                                                )
-                                            }
-
-                                            var expanded by remember { mutableStateOf(false) }
-                                            Box {
-                                                TextButton(onClick = { expanded = true }) {
-                                                    Text(bubble.fontPreset, style = MaterialTheme.typography.labelSmall)
-                                                }
-                                                androidx.compose.material3.DropdownMenu(
-                                                    expanded = expanded,
-                                                    onDismissRequest = { expanded = false },
-                                                ) {
-                                                    val fontChoices =
-                                                        mutableListOf("Default", "Manga (Built-in)", "Serif", "Monospace", "Sans-Serif")
-                                                    if (customFontPath.isNotBlank()) fontChoices.add(1, "Custom")
-
-                                                    fontChoices.forEach { preset ->
-                                                        androidx.compose.material3.DropdownMenuItem(
-                                                            text = { Text(preset) },
-                                                            onClick = {
-                                                                bubbles[id] = bubble.copy(fontPreset = preset)
-                                                                pushState()
-                                                                expanded = false
-                                                            },
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        IconButton(
-                                            onClick = {
-                                                bubbles.remove(id)
-                                                pushState()
-                                                selectedBubbleId = null
-                                            },
-                                        ) {
-                                            Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
-                                        }
-                                    }
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.weight(1f),
-                                        ) {
-                                            Text("Size", style = MaterialTheme.typography.labelSmall)
-                                            androidx.compose.material3.Slider(
-                                                value = bubble.fontScale,
-                                                onValueChange = { bubbles[id] = bubble.copy(fontScale = it) },
-                                                onValueChangeFinished = { pushState() },
-                                                valueRange = 0.5f..2.5f,
-                                                modifier = Modifier.padding(horizontal = 8.dp),
-                                            )
-                                        }
-
-                                        var strokeExpanded by remember { mutableStateOf(false) }
-                                        Box {
-                                            TextButton(onClick = { strokeExpanded = true }) {
-                                                val currentStroke = bubble.strokeColor
-                                                val strokeName =
-                                                    when (currentStroke) {
-                                                        "#FF0000" -> "Red"
-                                                        "#00FF00" -> "Green"
-                                                        "#0000FF" -> "Blue"
-                                                        "#FFFF00" -> "Yellow"
-                                                        "#000000" -> "Black"
-                                                        "#FFFFFF" -> "White"
-                                                        else -> "Auto"
-                                                    }
-                                                Text("Edge: $strokeName", style = MaterialTheme.typography.labelSmall)
-                                            }
-                                            androidx.compose.material3.DropdownMenu(
-                                                expanded = strokeExpanded,
-                                                onDismissRequest = { strokeExpanded = false },
-                                            ) {
-                                                val strokeChoices =
-                                                    listOf(
-                                                        "Auto" to null,
-                                                        "Black" to "#000000",
-                                                        "White" to "#FFFFFF",
-                                                        "Red" to "#FF0000",
-                                                        "Green" to "#00FF00",
-                                                        "Blue" to "#0000FF",
-                                                        "Yellow" to "#FFFF00",
-                                                    )
-
-                                                strokeChoices.forEach { (name, hex) ->
-                                                    androidx.compose.material3.DropdownMenuItem(
-                                                        text = { Text(name) },
-                                                        onClick = {
-                                                            bubbles[id] = bubble.copy(strokeColor = hex)
-                                                            pushState()
-                                                            strokeExpanded = false
-                                                        },
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                        val bubble = bubbles[id]
+                        if (bubble != null) {
+                            BubbleEditCard(
+                                bubbleId = id,
+                                bubble = bubble,
+                                editingText = editingText,
+                                customFontPath = customFontPath,
+                                onTextChange = {
+                                    editingText = it
+                                    bubbles[id] = bubble.copy(text = it)
+                                },
+                                onBoldChange = {
+                                    bubbles[id] = bubble.copy(isBold = it)
+                                    pushState()
+                                },
+                                onItalicChange = {
+                                    bubbles[id] = bubble.copy(isItalic = it)
+                                    pushState()
+                                },
+                                onAlignChange = {
+                                    bubbles[id] = bubble.copy(align = it)
+                                    pushState()
+                                },
+                                onFontPresetChange = {
+                                    bubbles[id] = bubble.copy(fontPreset = it)
+                                    pushState()
+                                },
+                                onFontScaleChange = {
+                                    bubbles[id] = bubble.copy(fontScale = it)
+                                },
+                                onFontScaleChangeFinished = { pushState() },
+                                onStrokeColorChange = {
+                                    bubbles[id] = bubble.copy(strokeColor = it)
+                                    pushState()
+                                },
+                                onDelete = {
+                                    bubbles.remove(id)
+                                    pushState()
+                                    selectedBubbleId = null
+                                },
+                            )
                         }
                     }
 
@@ -1068,118 +905,4 @@ fun InteractiveEditorDialog(
             } // Close parent Box
         } // Close Surface
     } // Close Dialog
-} // Close Function
-
-/**
- * Batch Edit dialog: find & replace text across all bubbles, or apply one common
- * style (bold/italic/align/size) to every bubble. Pure presentational — all
- * mutations flow through the callbacks so the caller keeps full control of
- * history/undo snapshots.
- */
-@Composable
-private fun BatchEditDialog(
-    bubbles: Map<String, BubbleMeta>,
-    findText: String,
-    onFindTextChange: (String) -> Unit,
-    replaceText: String,
-    onReplaceTextChange: (String) -> Unit,
-    batchBold: Boolean,
-    onBatchBoldChange: (Boolean) -> Unit,
-    batchItalic: Boolean,
-    onBatchItalicChange: (Boolean) -> Unit,
-    batchAlign: android.graphics.Paint.Align,
-    onBatchAlignChange: (android.graphics.Paint.Align) -> Unit,
-    batchFontScale: Float,
-    onBatchFontScaleChange: (Float) -> Unit,
-    onReplaceAll: () -> Unit,
-    onApplyStyleAll: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Batch Edit") },
-        text = {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text("Find & Replace", style = MaterialTheme.typography.labelLarge)
-                OutlinedTextField(
-                    value = findText,
-                    onValueChange = onFindTextChange,
-                    label = { Text("Find") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = replaceText,
-                    onValueChange = onReplaceTextChange,
-                    label = { Text("Replace with") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Button(
-                    onClick = onReplaceAll,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Replace in all bubbles") }
-
-                HorizontalDivider()
-
-                Text("Apply style to ALL bubbles", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    FilterChip(
-                        selected = batchBold,
-                        onClick = { onBatchBoldChange(!batchBold) },
-                        label = { Text("Bold") },
-                    )
-                    FilterChip(
-                        selected = batchItalic,
-                        onClick = { onBatchItalicChange(!batchItalic) },
-                        label = { Text("Italic") },
-                    )
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Align", style = MaterialTheme.typography.labelSmall)
-                    Spacer(Modifier.width(8.dp))
-                    listOf(
-                        android.graphics.Paint.Align.LEFT to "Left",
-                        android.graphics.Paint.Align.CENTER to "Center",
-                        android.graphics.Paint.Align.RIGHT to "Right",
-                    ).forEach { (align, label) ->
-                        FilterChip(
-                            selected = batchAlign == align,
-                            onClick = { onBatchAlignChange(align) },
-                            label = { Text(label) },
-                        )
-                    }
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Size", style = MaterialTheme.typography.labelSmall)
-                    Slider(
-                        value = batchFontScale,
-                        onValueChange = onBatchFontScaleChange,
-                        valueRange = 0.5f..2.5f,
-                        modifier = Modifier.weight(1f).padding(start = 8.dp),
-                    )
-                    Text("%.1fx".format(batchFontScale), style = MaterialTheme.typography.labelSmall)
-                }
-                Button(
-                    onClick = onApplyStyleAll,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Apply to all") }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
-        },
-    )
 }

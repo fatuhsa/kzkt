@@ -183,7 +183,7 @@ fun PdfReaderDialog(
         onDispose {
             // Close off the main thread: close() waits (via its lock) for any
             // in-flight IO page render, which would otherwise stall dismissal.
-            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                 pdfState.close()
             }
         }

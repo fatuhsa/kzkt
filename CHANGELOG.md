@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **OpenCV Native Use-After-Free**: resolved fatal SIGSEGV crash in `PagePreparer` caused by releasing `cropMat` before bitmap conversion.
+- **Bitmap Allocation Overhead**: removed redundant OpenCV Mat allocations for dimension checks and non-inpainting renders in `TranslationPipeline`.
+- **Delicate GlobalScope API**: switched `PdfReaderDialog` lifecycle disposal to structured `CoroutineScope`.
+- **Exception Logging**: standardized raw `printStackTrace()` calls to structured Android log outputs.
+
+### Changed
+
+- **Settings & Editor Modularization**: extracted large components from `InteractiveEditorDialog` (`BubbleEditCard`, `BatchEditDialog`) and `SettingsScreen` (`SettingsSections`, `SettingsDialogs`) into focused modular files.
+- **Translation Logs UI**: renamed System Logs to Translation Logs on the main translation screen and added a one-tap clear logs button.
+
 ## [v1.37.0] - 2026-08-18
 
 ### Added

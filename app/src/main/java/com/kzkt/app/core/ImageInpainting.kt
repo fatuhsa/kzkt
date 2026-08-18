@@ -144,13 +144,14 @@ object ImageInpainting {
         // 2. Heavy inpainting computed in parallel across all CPU cores
         val results =
             coroutineScope {
-                tasks.map { (rect, crop) ->
-                    async(Dispatchers.Default) {
-                        val result = inpaintCrop(crop)
-                        crop.release()
-                        rect to result
-                    }
-                }.awaitAll()
+                tasks
+                    .map { (rect, crop) ->
+                        async(Dispatchers.Default) {
+                            val result = inpaintCrop(crop)
+                            crop.release()
+                            rect to result
+                        }
+                    }.awaitAll()
             }
 
         // 3. Fast sequential copy back onto original Mat
