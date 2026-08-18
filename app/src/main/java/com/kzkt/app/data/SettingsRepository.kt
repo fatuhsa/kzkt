@@ -97,6 +97,7 @@ class SettingsRepository(
         private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
         private val KEY_PURE_BLACK = booleanPreferencesKey("pure_black")
         private val KEY_ACCENT_COLOR = longPreferencesKey("accent_color")
+        private val KEY_HAS_COMPLETED_ONBOARDING = booleanPreferencesKey("has_completed_onboarding")
     }
 
     data class Settings(
@@ -159,6 +160,7 @@ class SettingsRepository(
         val themeMode: String = "system",
         val pureBlack: Boolean = false,
         val accentColor: Long = 0xFFED5564L,
+        val hasCompletedOnboarding: Boolean = false,
     ) {
         fun getBaseUrl(provider: String): String =
             when (provider) {
@@ -227,8 +229,13 @@ class SettingsRepository(
                 themeMode = prefs[KEY_THEME_MODE] ?: Defaults.settings.themeMode,
                 pureBlack = prefs[KEY_PURE_BLACK] ?: Defaults.settings.pureBlack,
                 accentColor = prefs[KEY_ACCENT_COLOR] ?: Defaults.settings.accentColor,
+                hasCompletedOnboarding = prefs[KEY_HAS_COMPLETED_ONBOARDING] ?: Defaults.settings.hasCompletedOnboarding,
             )
         }
+
+    suspend fun saveHasCompletedOnboarding(completed: Boolean) {
+        context.dataStore.edit { it[KEY_HAS_COMPLETED_ONBOARDING] = completed }
+    }
 
     suspend fun saveUseLocalOcr(enabled: Boolean) {
         context.dataStore.edit { it[KEY_USE_LOCAL_OCR] = enabled }

@@ -22,7 +22,6 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:largeHeap="true"
         android:requestLegacyExternalStorage="true"
-        android:extractNativeLibs="true"
         android:supportsRtl="false"
         android:theme="@style/Theme.KZKT">
 
