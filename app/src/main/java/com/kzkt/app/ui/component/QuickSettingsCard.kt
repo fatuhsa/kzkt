@@ -367,7 +367,7 @@ fun SelectedFilesSection(
             ) {
                 items(files, key = { it }) { path ->
                     val state = viewModel.pageStatus[path]
-                    val isProcessingThis = active && (state == "processing" || (state == null && viewModel.pageStatus.isEmpty()))
+                    val isProcessingThis = active && state != "done" && state != "failed"
 
                     Surface(
                         shape = RoundedCornerShape(14.dp),
