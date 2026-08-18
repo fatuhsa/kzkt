@@ -2,8 +2,8 @@ package com.kzkt.app.core.providers
 
 import android.graphics.Bitmap
 import com.google.gson.JsonParser
+import com.google.gson.Strictness
 import com.google.gson.stream.JsonReader
-import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.StringReader
@@ -25,20 +25,22 @@ class CustomProvider(
     authHeaderPrefix: String = "Bearer ",
     useSse: Boolean = true,
 ) : OpenAICompatProvider(apiKey, modelName, baseUrl, authHeaderName, authHeaderPrefix, useSse = useSse) {
-
     override val providerName: String = "Custom"
     override val defaultEndpoint: String = "https://api.openai.com/v1/chat/completions"
     override val textMaxTokens: Int? = null
 
-    override val httpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
-        .readTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
-        .writeTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
-        .connectionPool(ConnectionPool(10, 5, TimeUnit.MINUTES))
-        .retryOnConnectionFailure(true)
-        .build()
+    override val httpClient: OkHttpClient =
+        sharedClient
+            .newBuilder()
+            .connectTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
+            .readTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
+            .writeTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
+            .build()
 
-    override suspend fun translateImage(image: Bitmap, prompt: String): String? {
+    override suspend fun translateImage(
+        image: Bitmap,
+        prompt: String,
+    ): String? {
         if (customUrl.isBlank()) {
             throw RuntimeException("Custom provider base URL is not configured.")
         }
@@ -57,7 +59,7 @@ class CustomProvider(
                         throw RuntimeException("Custom API error ${response.code}: ${body.take(200)}")
                     }
 
-                    val lenientReader = JsonReader(StringReader(body)).apply { isLenient = true }
+                    val lenientReader = JsonReader(StringReader(body)).apply { setStrictness(Strictness.LENIENT) }
                     val json = JsonParser.parseReader(lenientReader)
 
                     if (!json.isJsonObject) return@withContext body

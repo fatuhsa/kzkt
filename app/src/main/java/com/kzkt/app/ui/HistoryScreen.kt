@@ -1,39 +1,23 @@
 package com.kzkt.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -61,9 +45,9 @@ import com.kzkt.app.ui.component.MangaReaderDialog
 import com.kzkt.app.ui.component.NoResultsItem
 import com.kzkt.app.ui.component.PdfReaderDialog
 import com.kzkt.app.ui.component.SwipeToDismissHistoryItem
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.io.File
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -135,6 +119,26 @@ fun HistoryScreen(viewModel: MainViewModel) {
         remember(openBatchKey, sortedFiltered) {
             if (openBatchKey == null) emptyList() else sortedFiltered.filter { batchKeyOf(it) == openBatchKey }
         }
+
+    val currentVisibleEntries =
+        remember(openBatchKey, sortedFiltered, folderEntries) {
+            if (openBatchKey == null) sortedFiltered else folderEntries
+        }
+    val allVisibleSelected =
+        remember(currentVisibleEntries, selectedTimestamps) {
+            currentVisibleEntries.isNotEmpty() && currentVisibleEntries.all { it.timestamp in selectedTimestamps }
+        }
+
+    fun toggleSelectAll() {
+        val visibleTimestamps = currentVisibleEntries.map { it.timestamp }.toSet()
+        if (visibleTimestamps.isEmpty()) return
+        selectedTimestamps =
+            if (visibleTimestamps.all { it in selectedTimestamps }) {
+                selectedTimestamps - visibleTimestamps
+            } else {
+                selectedTimestamps + visibleTimestamps
+            }
+    }
 
     fun openReaderForEntry(entry: HistoryEntry) {
         val file = File(entry.outputPath)
@@ -332,9 +336,13 @@ fun HistoryScreen(viewModel: MainViewModel) {
         }
     }
 
-    // System back closes the open folder before leaving the screen.
-    BackHandler(enabled = openBatchKey != null) {
-        openBatchKey = null
+    // System back exits selection mode first, then closes the open folder.
+    BackHandler(enabled = selectionMode || openBatchKey != null) {
+        if (selectionMode) {
+            exitSelectionMode()
+        } else {
+            openBatchKey = null
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -343,7 +351,12 @@ fun HistoryScreen(viewModel: MainViewModel) {
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                contentPadding =
+                    PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        bottom = if (selectionMode && selectedTimestamps.isNotEmpty()) 88.dp else 16.dp,
+                    ),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (openBatchKey == null) {
@@ -352,6 +365,8 @@ fun HistoryScreen(viewModel: MainViewModel) {
                         HistoryFilterHeader(
                             selectionMode = selectionMode,
                             selectedCount = selectedTimestamps.size,
+                            allSelected = allVisibleSelected,
+                            onToggleSelectAll = { toggleSelectAll() },
                             query = query,
                             onQueryChange = { query = it },
                             onSelectMode = { selectionMode = true },
@@ -439,6 +454,8 @@ fun HistoryScreen(viewModel: MainViewModel) {
                             onBack = { openBatchKey = null },
                             selectionMode = selectionMode,
                             selectedCount = selectedTimestamps.size,
+                            allSelected = allVisibleSelected,
+                            onToggleSelectAll = { toggleSelectAll() },
                             onSelectMode = { selectionMode = true },
                             onExitSelectMode = { exitSelectionMode() },
                             sortMode = sortMode,
@@ -477,11 +494,19 @@ fun HistoryScreen(viewModel: MainViewModel) {
 
         SnackbarHost(
             hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = if (selectionMode && selectedTimestamps.isNotEmpty()) 80.dp else 0.dp),
         )
 
         // ── Selection-mode action bar (export / delete / cancel) ──
-        if (selectionMode && selectedTimestamps.isNotEmpty()) {
+        AnimatedVisibility(
+            visible = selectionMode && selectedTimestamps.isNotEmpty(),
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
             HistorySelectionBar(
                 exporting = exporting,
                 onExportZip = { exportSelected(asPdf = false) },
@@ -572,222 +597,5 @@ fun HistoryScreen(viewModel: MainViewModel) {
                 TextButton(onClick = { confirmClearAll = false }) { Text("Cancel") }
             },
         )
-    }
-}
-
-/** History header: title + selection actions, search field and sort controls. */
-@Composable
-private fun HistoryFilterHeader(
-    selectionMode: Boolean,
-    selectedCount: Int,
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onSelectMode: () -> Unit,
-    onExitSelectMode: () -> Unit,
-    onClearAllClick: () -> Unit,
-    sortMode: HistorySortMode,
-    onSortModeChange: (HistorySortMode) -> Unit,
-    sortDescending: Boolean,
-    onToggleSortDirection: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                if (selectionMode) "Select ($selectedCount)" else "History",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .padding(vertical = 4.dp),
-            )
-            if (selectionMode) {
-                TextButton(onClick = onExitSelectMode) {
-                    Text("Done", fontWeight = FontWeight.SemiBold)
-                }
-            } else {
-                TextButton(onClick = onSelectMode) {
-                    Text("Select", fontWeight = FontWeight.SemiBold)
-                }
-            }
-            IconButton(onClick = onClearAllClick, enabled = !selectionMode) {
-                Icon(
-                    Icons.Filled.DeleteSweep,
-                    contentDescription = "Clear all history",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        // Pill Search field
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search history...") },
-            leadingIcon = {
-                Icon(Icons.Filled.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            },
-            trailingIcon = {
-                if (query.isNotEmpty()) {
-                    IconButton(onClick = { onQueryChange("") }) {
-                        Icon(
-                            Icons.Filled.Close,
-                            contentDescription = "Clear search",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(50),
-        )
-
-        // Pill Sort controls
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            FilterChip(
-                selected = sortMode == HistorySortMode.TIME,
-                onClick = { onSortModeChange(HistorySortMode.TIME) },
-                label = { Text("By Time") },
-                shape = RoundedCornerShape(50),
-                leadingIcon =
-                    if (sortMode == HistorySortMode.TIME) {
-                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-                    } else {
-                        null
-                    },
-                modifier = Modifier.weight(1f),
-            )
-            FilterChip(
-                selected = sortMode == HistorySortMode.NAME,
-                onClick = { onSortModeChange(HistorySortMode.NAME) },
-                label = { Text("By Name") },
-                shape = RoundedCornerShape(50),
-                leadingIcon =
-                    if (sortMode == HistorySortMode.NAME) {
-                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-                    } else {
-                        null
-                    },
-                modifier = Modifier.weight(1f),
-            )
-            Box(
-                modifier =
-                    Modifier
-                        .height(24.dp)
-                        .width(1.dp)
-                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-            )
-            IconButton(onClick = onToggleSortDirection) {
-                Icon(
-                    if (sortDescending) Icons.Filled.ArrowDownward else Icons.Filled.ArrowUpward,
-                    contentDescription = if (sortDescending) "Sort descending" else "Sort ascending",
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-    }
-}
-
-/** Folder drill-down header: back button, folder title and the same sort controls. */
-@Composable
-private fun HistoryFolderHeader(
-    title: String,
-    onBack: () -> Unit,
-    selectionMode: Boolean,
-    selectedCount: Int,
-    onSelectMode: () -> Unit,
-    onExitSelectMode: () -> Unit,
-    sortMode: HistorySortMode,
-    onSortModeChange: (HistorySortMode) -> Unit,
-    sortDescending: Boolean,
-    onToggleSortDirection: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                )
-            }
-            Text(
-                if (selectionMode) "Select ($selectedCount)" else title,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .padding(vertical = 4.dp),
-            )
-            if (selectionMode) {
-                TextButton(onClick = onExitSelectMode) {
-                    Text("Done", fontWeight = FontWeight.SemiBold)
-                }
-            } else {
-                TextButton(onClick = onSelectMode) {
-                    Text("Select", fontWeight = FontWeight.SemiBold)
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            FilterChip(
-                selected = sortMode == HistorySortMode.TIME,
-                onClick = { onSortModeChange(HistorySortMode.TIME) },
-                label = { Text("By Time") },
-                shape = RoundedCornerShape(50),
-                leadingIcon =
-                    if (sortMode == HistorySortMode.TIME) {
-                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-                    } else {
-                        null
-                    },
-                modifier = Modifier.weight(1f),
-            )
-            FilterChip(
-                selected = sortMode == HistorySortMode.NAME,
-                onClick = { onSortModeChange(HistorySortMode.NAME) },
-                label = { Text("By Name") },
-                shape = RoundedCornerShape(50),
-                leadingIcon =
-                    if (sortMode == HistorySortMode.NAME) {
-                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-                    } else {
-                        null
-                    },
-                modifier = Modifier.weight(1f),
-            )
-            Box(
-                modifier =
-                    Modifier
-                        .height(24.dp)
-                        .width(1.dp)
-                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-            )
-            IconButton(onClick = onToggleSortDirection) {
-                Icon(
-                    if (sortDescending) Icons.Filled.ArrowDownward else Icons.Filled.ArrowUpward,
-                    contentDescription = if (sortDescending) "Sort descending" else "Sort ascending",
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
     }
 }

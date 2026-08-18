@@ -6,10 +6,9 @@ import kotlin.math.ceil
 
 /**
  * Rate limiter with retry and exponential backoff.
- * Ported from the original Python rate limiter
  */
 class RateLimiter(
-    private val minRequestDelayMs: Long = 2000L,
+    private val minRequestDelayMs: Long = 500L,
 ) {
     private var lastCallTimeMs: Long = 0L
 
@@ -17,15 +16,18 @@ class RateLimiter(
 
     suspend fun waitForSlot() {
         if (minRequestDelayMs <= 0) return
-        val sleepTime = synchronized(lock) {
-            val now = System.currentTimeMillis()
-            val elapsed = now - lastCallTimeMs
-            if (elapsed < minRequestDelayMs) {
-                minRequestDelayMs - elapsed
-            } else 0L
-        }
+        val sleepTime =
+            synchronized(lock) {
+                val now = System.currentTimeMillis()
+                val elapsed = now - lastCallTimeMs
+                if (elapsed < minRequestDelayMs) {
+                    minRequestDelayMs - elapsed
+                } else {
+                    0L
+                }
+            }
         if (sleepTime > 0) {
-            delay(sleepTime)  // cancellable — STOP works instantly
+            delay(sleepTime) // cancellable — STOP works instantly
         }
         synchronized(lock) {
             lastCallTimeMs = System.currentTimeMillis()
@@ -71,8 +73,9 @@ class RateLimiter(
                 ) {
                     var waitSeconds = 5.0 * (2.0.pow(attempt))
                     // Try to parse retry-after from message
-                    val match = Regex("retry in (\\d+(?:\\.\\d+)?)s", RegexOption.IGNORE_CASE)
-                        .find(errStr)
+                    val match =
+                        Regex("retry in (\\d+(?:\\.\\d+)?)s", RegexOption.IGNORE_CASE)
+                            .find(errStr)
                     if (match != null) {
                         val parsed = match.groupValues[1].toDoubleOrNull()
                         if (parsed != null) waitSeconds = parsed + 1.5
@@ -83,24 +86,25 @@ class RateLimiter(
                     val totalSecs = ceil(waitSeconds).toInt()
                     for (s in totalSecs downTo 1) {
                         if (isCancelled()) return null
-                        onWait?.invoke("[Rate Limit] Hit rate limit for ${providerName}. Retrying in ${s}s...")
+                        onWait?.invoke("[Rate Limit] Hit rate limit for $providerName. Retrying in ${s}s...")
                         delay(1000L)
                     }
                     continue
                 }
 
                 // ── 2. Transient network / timeout ──
-                val isTimeout = errStr.contains("timeout") ||
-                    errStr.contains("timed out") ||
-                    errStr.contains("connection") ||
-                    errStr.contains("socket") ||
-                    errStr.contains("reset")
+                val isTimeout =
+                    errStr.contains("timeout") ||
+                        errStr.contains("timed out") ||
+                        errStr.contains("connection") ||
+                        errStr.contains("socket") ||
+                        errStr.contains("reset")
 
                 if (isTimeout) {
                     if (attempt == maxRetries - 1) throw ex
                     for (s in 2 downTo 1) {
                         if (isCancelled()) return null
-                        val msg = "[Network Warning] Attempt ${attempt + 1}/${maxRetries} for $providerName timed out. Retrying in ${s}s..."
+                        val msg = "[Network Warning] Attempt ${attempt + 1}/$maxRetries for $providerName timed out. Retrying in ${s}s..."
                         Log.w("KZKT", msg)
                         onWait?.invoke(msg)
                         delay(1000L)

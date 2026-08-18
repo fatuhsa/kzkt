@@ -10,7 +10,6 @@ class OpenRouterProvider(
     customUrl: String = "",
     useSse: Boolean = true,
 ) : OpenAICompatProvider(apiKey, modelName, customUrl, useSse = useSse) {
-
     override val providerName: String = "OpenRouter"
     override val defaultEndpoint: String = "https://openrouter.ai/api/v1/chat/completions"
     override val textMaxTokens: Int? = null

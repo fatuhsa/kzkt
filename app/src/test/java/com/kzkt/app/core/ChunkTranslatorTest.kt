@@ -16,8 +16,6 @@ import org.junit.Test
  * bitmap or network access is needed.
  */
 class ChunkTranslatorTest {
-
-    /** Deterministic fake provider: returns a canned response or throws on demand. */
     /** Fake whose repair call (2nd translateText) returns valid JSON. */
     private class RepairProvider(
         override val providerName: String,
@@ -28,12 +26,18 @@ class ChunkTranslatorTest {
         override val modelName: String = "test-model"
         var calls = 0
 
-        override suspend fun translateImage(image: Bitmap, prompt: String): String? {
+        override suspend fun translateImage(
+            image: Bitmap,
+            prompt: String,
+        ): String? {
             calls++
             return broken
         }
 
-        override suspend fun translateText(textJson: String, prompt: String): String? {
+        override suspend fun translateText(
+            textJson: String,
+            prompt: String,
+        ): String? {
             calls++
             return if (calls == 1) broken else fixed
         }
@@ -49,13 +53,19 @@ class ChunkTranslatorTest {
         var imageCalls = 0
         var textCalls = 0
 
-        override suspend fun translateImage(image: Bitmap, prompt: String): String? {
+        override suspend fun translateImage(
+            image: Bitmap,
+            prompt: String,
+        ): String? {
             imageCalls++
             error?.let { throw it }
             return response
         }
 
-        override suspend fun translateText(textJson: String, prompt: String): String? {
+        override suspend fun translateText(
+            textJson: String,
+            prompt: String,
+        ): String? {
             textCalls++
             error?.let { throw it }
             return response
@@ -86,11 +96,12 @@ class ChunkTranslatorTest {
         onProgress: (String) -> Unit = {},
     ): Pair<Boolean, MutableMap<String, String>> {
         val allTranslations = mutableMapOf<String, String>()
-        val ok = translator(provider, fallbacks, isCancelled, onProgress).translateWithProviders(
-            request = { prov -> prov.translateText("{\"1\":\"x\"}", "prompt") },
-            cropItems = emptyList(),
-            allTranslations = allTranslations,
-        )
+        val ok =
+            translator(provider, fallbacks, isCancelled, onProgress).translateWithProviders(
+                request = { prov -> prov.translateText("{\"1\":\"x\"}", "prompt") },
+                cropItems = emptyList(),
+                allTranslations = allTranslations,
+            )
         return ok to allTranslations
     }
 
@@ -145,11 +156,12 @@ class ChunkTranslatorTest {
 
     @Test
     fun `hasTranslation matches normalized LLM keys`() {
-        val all = mapOf(
-            "1_1" to "a",
-            "2_ft1" to "b",
-            "ft3" to "c",
-        )
+        val all =
+            mapOf(
+                "1_1" to "a",
+                "2_ft1" to "b",
+                "ft3" to "c",
+            )
         assertTrue(ChunkTranslator.hasTranslation("1_1", all))
         // LLM rewrote the key with a prefix / extra text — still matches.
         assertTrue(ChunkTranslator.hasTranslation("ft3", mapOf("ft3" to "c")))
@@ -158,10 +170,11 @@ class ChunkTranslatorTest {
 
     @Test
     fun `hasTranslation is false when the LLM dropped the id`() {
-        val all = mapOf(
-            "1_1" to "a",
-            "2_1" to "b",
-        )
+        val all =
+            mapOf(
+                "1_1" to "a",
+                "2_1" to "b",
+            )
         // Bubble 3_1 exists in the page but the LLM never echoed it.
         assertFalse(ChunkTranslator.hasTranslation("3_1", all))
         assertFalse(ChunkTranslator.hasTranslation("ft1", all))
@@ -171,129 +184,140 @@ class ChunkTranslatorTest {
     // ── translateWithProviders core loop ───────────────────────────
 
     @Test
-    fun `primary success merges translations and skips fallbacks`() = runBlocking {
-        val primary = FakeProvider("Primary", response = """{"1":"halo","2_1":"selamat"}""")
-        val fallback = FakeProvider("Fallback", response = """{"1":"fallback"}""")
+    fun `primary success merges translations and skips fallbacks`() =
+        runBlocking {
+            val primary = FakeProvider("Primary", response = """{"1":"halo","2_1":"selamat"}""")
+            val fallback = FakeProvider("Fallback", response = """{"1":"fallback"}""")
 
-        val (ok, translations) = runChain(primary, listOf(fallback))
+            val (ok, translations) = runChain(primary, listOf(fallback))
 
-        assertTrue(ok)
-        assertEquals("halo", translations["1"])
-        assertEquals("selamat", translations["2_1"])
-        assertEquals(1, primary.textCalls)
-        assertEquals(0, fallback.textCalls)
-    }
-
-    @Test
-    fun `unparseable primary output falls through to fallback`() = runBlocking {
-        val primary = FakeProvider("Primary", response = "not json at all")
-        val fallback = FakeProvider("Fallback", response = """{"1":"dari fallback"}""")
-        val progress = mutableListOf<String>()
-
-        val (ok, translations) = runChain(primary, listOf(fallback), onProgress = { progress.add(it) })
-
-        assertTrue(ok)
-        assertEquals("dari fallback", translations["1"])
-        // Initial call + one JSON-repair attempt (which returns the same broken text).
-        assertEquals(2, primary.textCalls)
-        assertEquals(1, fallback.textCalls)
-        assertTrue(progress.any { it.contains("unparseable") })
-    }
-
-    @Test
-    fun `unparseable primary output is repaired by the same provider`() = runBlocking {
-        val primary = RepairProvider("Primary", broken = "bukan json", fixed = """{"1":"diperbaiki"}""")
-        val fallback = FakeProvider("Fallback", response = """{"1":"fallback"}""")
-        val progress = mutableListOf<String>()
-
-        val (ok, translations) = runChain(primary, listOf(fallback), onProgress = { progress.add(it) })
-
-        assertTrue(ok)
-        assertEquals("diperbaiki", translations["1"])
-        assertEquals(2, primary.calls)
-        assertEquals(0, fallback.textCalls)
-        assertTrue(progress.any { it.contains("repair") })
-    }
-
-    @Test
-    fun `null response from primary falls through to fallback`() = runBlocking {
-        val primary = FakeProvider("Primary", response = null)
-        val fallback = FakeProvider("Fallback", response = """{"1":"ok"}""")
-
-        val (ok, translations) = runChain(primary, listOf(fallback))
-
-        assertTrue(ok)
-        assertEquals("ok", translations["1"])
-        assertEquals(1, primary.textCalls)
-        assertEquals(1, fallback.textCalls)
-    }
-
-    @Test
-    fun `all providers failing returns false and logs failover`() = runBlocking {
-        val primary = FakeProvider("Primary", error = IllegalStateException("boom"))
-        val fallback = FakeProvider("Fallback", error = IllegalStateException("boom"))
-        val progress = mutableListOf<String>()
-
-        val (ok, translations) = runChain(primary, listOf(fallback), onProgress = { progress.add(it) })
-
-        assertFalse(ok)
-        assertTrue(translations.isEmpty())
-        // Both providers fail, so each logs its own failover line.
-        assertEquals(2, progress.count { it.contains("Trying fallback provider") })
-        assertEquals(2, progress.count { it.contains("failed (boom)") })
-    }
-
-    @Test
-    fun `cancellation stops the chain without calling providers`() = runBlocking {
-        val primary = FakeProvider("Primary", response = """{"1":"x"}""")
-
-        val (ok, translations) = runChain(primary, isCancelled = { true })
-
-        assertFalse(ok)
-        assertTrue(translations.isEmpty())
-        assertEquals(0, primary.textCalls)
-    }
-
-    @Test
-    fun `cancellation inside provider call propagates`() = runBlocking {
-        val primary = FakeProvider("Primary", error = CancellationException("stopped"))
-        val fallback = FakeProvider("Fallback", response = """{"1":"x"}""")
-
-        val thrown = try {
-            runChain(primary, listOf(fallback))
-            null
-        } catch (e: CancellationException) {
-            e
+            assertTrue(ok)
+            assertEquals("halo", translations["1"])
+            assertEquals("selamat", translations["2_1"])
+            assertEquals(1, primary.textCalls)
+            assertEquals(0, fallback.textCalls)
         }
 
-        assertTrue(thrown is CancellationException)
-        assertEquals(0, fallback.textCalls)
-    }
+    @Test
+    fun `unparseable primary output falls through to fallback`() =
+        runBlocking {
+            val primary = FakeProvider("Primary", response = "not json at all")
+            val fallback = FakeProvider("Fallback", response = """{"1":"dari fallback"}""")
+            val progress = mutableListOf<String>()
+
+            val (ok, translations) = runChain(primary, listOf(fallback), onProgress = { progress.add(it) })
+
+            assertTrue(ok)
+            assertEquals("dari fallback", translations["1"])
+            // Initial call + one JSON-repair attempt (which returns the same broken text).
+            assertEquals(2, primary.textCalls)
+            assertEquals(1, fallback.textCalls)
+            assertTrue(progress.any { it.contains("unparseable") })
+        }
 
     @Test
-    fun `empty translations from successful provider treated as failure`() = runBlocking {
-        val primary = FakeProvider("Primary", response = """{}""")
-        val fallback = FakeProvider("Fallback", response = """{"1":"ok"}""")
+    fun `unparseable primary output is repaired by the same provider`() =
+        runBlocking {
+            val primary = RepairProvider("Primary", broken = "bukan json", fixed = """{"1":"diperbaiki"}""")
+            val fallback = FakeProvider("Fallback", response = """{"1":"fallback"}""")
+            val progress = mutableListOf<String>()
 
-        val (ok, translations) = runChain(primary, listOf(fallback))
+            val (ok, translations) = runChain(primary, listOf(fallback), onProgress = { progress.add(it) })
 
-        assertTrue(ok)
-        assertEquals("ok", translations["1"])
-    }
+            assertTrue(ok)
+            assertEquals("diperbaiki", translations["1"])
+            assertEquals(2, primary.calls)
+            assertEquals(0, fallback.textCalls)
+            assertTrue(progress.any { it.contains("repair") })
+        }
 
     @Test
-    fun `translateOcrChunk with empty chunk returns empty result`() = runBlocking {
-        val provider = FakeProvider("Primary", response = """{"1":"x"}""")
-        val result = translator(provider).translateOcrChunk(
-            chunk = emptyList(),
-            cropItems = emptyList(),
-            allTranslations = mutableMapOf(),
-            rawTexts = mutableMapOf(),
-            textPrompt = { "prompt: $it" },
-        )
+    fun `null response from primary falls through to fallback`() =
+        runBlocking {
+            val primary = FakeProvider("Primary", response = null)
+            val fallback = FakeProvider("Fallback", response = """{"1":"ok"}""")
 
-        assertTrue(result.ocrMap.isEmpty())
-        assertFalse(result.translated)
-        assertEquals(0, provider.textCalls)
-    }
+            val (ok, translations) = runChain(primary, listOf(fallback))
+
+            assertTrue(ok)
+            assertEquals("ok", translations["1"])
+            assertEquals(1, primary.textCalls)
+            assertEquals(1, fallback.textCalls)
+        }
+
+    @Test
+    fun `all providers failing returns false and logs failover`() =
+        runBlocking {
+            val primary = FakeProvider("Primary", error = IllegalStateException("boom"))
+            val fallback = FakeProvider("Fallback", error = IllegalStateException("boom"))
+            val progress = mutableListOf<String>()
+
+            val (ok, translations) = runChain(primary, listOf(fallback), onProgress = { progress.add(it) })
+
+            assertFalse(ok)
+            assertTrue(translations.isEmpty())
+            // Both providers fail, so each logs its own failover line.
+            assertEquals(2, progress.count { it.contains("Trying fallback provider") })
+            assertEquals(2, progress.count { it.contains("failed (boom)") })
+        }
+
+    @Test
+    fun `cancellation stops the chain without calling providers`() =
+        runBlocking {
+            val primary = FakeProvider("Primary", response = """{"1":"x"}""")
+
+            val (ok, translations) = runChain(primary, isCancelled = { true })
+
+            assertFalse(ok)
+            assertTrue(translations.isEmpty())
+            assertEquals(0, primary.textCalls)
+        }
+
+    @Test
+    fun `cancellation inside provider call propagates`() =
+        runBlocking {
+            val primary = FakeProvider("Primary", error = CancellationException("stopped"))
+            val fallback = FakeProvider("Fallback", response = """{"1":"x"}""")
+
+            val thrown =
+                try {
+                    runChain(primary, listOf(fallback))
+                    null
+                } catch (e: CancellationException) {
+                    e
+                }
+
+            assertTrue(thrown is CancellationException)
+            assertEquals(0, fallback.textCalls)
+        }
+
+    @Test
+    fun `empty translations from successful provider treated as failure`() =
+        runBlocking {
+            val primary = FakeProvider("Primary", response = """{}""")
+            val fallback = FakeProvider("Fallback", response = """{"1":"ok"}""")
+
+            val (ok, translations) = runChain(primary, listOf(fallback))
+
+            assertTrue(ok)
+            assertEquals("ok", translations["1"])
+        }
+
+    @Test
+    fun `translateOcrChunk with empty chunk returns empty result`() =
+        runBlocking {
+            val provider = FakeProvider("Primary", response = """{"1":"x"}""")
+            val result =
+                translator(provider).translateOcrChunk(
+                    chunk = emptyList(),
+                    cropItems = emptyList(),
+                    allTranslations = mutableMapOf(),
+                    rawTexts = mutableMapOf(),
+                    textPrompt = { "prompt: $it" },
+                )
+
+            assertTrue(result.ocrMap.isEmpty())
+            assertFalse(result.translated)
+            assertEquals(0, provider.textCalls)
+        }
 }

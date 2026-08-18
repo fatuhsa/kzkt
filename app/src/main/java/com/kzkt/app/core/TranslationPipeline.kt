@@ -1,18 +1,22 @@
 package com.kzkt.app.core
 
 import android.content.Context
-import android.graphics.*
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import com.kzkt.app.core.Config.TweakParams
 import com.kzkt.app.core.ocr.LocalOcrEngine
 import com.kzkt.app.core.providers.LlmProvider
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.withPermit
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Main translation pipeline: detection → filter → mosaic → LLM → render → save.
- * Ported from the original Python translator
  */
 class TranslationPipeline(
     private val config: PipelineConfig,
@@ -34,22 +38,13 @@ class TranslationPipeline(
     private val onStepProgress: (Int, String) -> Unit = callbacks.onStepProgress
     private val isCancelled: () -> Boolean = callbacks.isCancelled
 
-    companion object {
-        /** Peak page bitmaps loaded / detected concurrently (bounds memory). */
-        private const val MAX_CONCURRENT_PAGE_LOADS = 3
-
-        /** ML Kit recognizes at most this many bubbles per OCR request. */
-        private const val OCR_MAX_BATCH_SIZE = 12
-
-        // Overall progress bar (0-100) phase boundaries for single + batch paths.
-        private const val PROGRESS_DETECTION_END = 25
-        private const val PROGRESS_TRANSLATE_END = 90
-        private const val PROGRESS_RENDER_END = 100
-    }
     /**
      * Process a single manga page image.
      */
-    suspend fun processSingleImage(inputPath: String, outputDir: String): PipelineResult {
+    suspend fun processSingleImage(
+        inputPath: String,
+        outputDir: String,
+    ): PipelineResult {
         if (isCancelled()) return PipelineResult(null, failed = true)
 
         val imgFile = File(inputPath)
@@ -58,7 +53,7 @@ class TranslationPipeline(
         var bitmap = ImageProcessor.loadBitmap(inputPath) ?: return PipelineResult(null, failed = true)
 
         if (params.engine.useImageUpscaler) {
-            val upscaled = ImageProcessor.upscaleBitmap(bitmap)
+            val upscaled = ImageInpainting.upscaleBitmap(bitmap)
             bitmap.recycle()
             bitmap = upscaled
             if (params.engine.enableDevLogs) onProgress("  Image upscaled (resolution doubled).")
@@ -74,7 +69,10 @@ class TranslationPipeline(
     }
 
     private suspend fun processLandscape(
-        bitmap: Bitmap, inputPath: String, outputDir: String, splitCount: Int
+        bitmap: Bitmap,
+        inputPath: String,
+        outputDir: String,
+        splitCount: Int,
     ): PipelineResult {
         onProgress("[Auto-Split] Wide image detected. Splitting into $splitCount parts...")
         val imgHeight = bitmap.height
@@ -91,10 +89,11 @@ class TranslationPipeline(
             val xStart = if (i == splitCount - 1) 0 else xEnd - splitWidth
 
             val partBitmap = Bitmap.createBitmap(bitmap, xStart, 0, xEnd - xStart, imgHeight)
-            val partPath = File(
-                outputDir,
-                "${File(inputPath).nameWithoutExtension}_split${i + 1}.png"
-            ).absolutePath
+            val partPath =
+                File(
+                    outputDir,
+                    "${File(inputPath).nameWithoutExtension}_split${i + 1}.png",
+                ).absolutePath
             imageSaver.save(partBitmap, partPath)
 
             onProgress("  Translating Part ${i + 1}...")
@@ -114,12 +113,15 @@ class TranslationPipeline(
             // Recombine right-to-left (manga order): part 0 was the rightmost strip.
             val images = partPaths.mapNotNull { ImageProcessor.loadBitmap(it) }.reversed()
             val targetH = images.maxOf { it.height }
-            val resized = images.map { bmp ->
-                if (bmp.height != targetH) {
-                    val scale = targetH.toDouble() / bmp.height
-                    Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), targetH, true)
-                } else bmp
-            }
+            val resized =
+                images.map { bmp ->
+                    if (bmp.height != targetH) {
+                        val scale = targetH.toDouble() / bmp.height
+                        Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), targetH, true)
+                    } else {
+                        bmp
+                    }
+                }
 
             val totalW = resized.sumOf { it.width }
             val combined = Bitmap.createBitmap(totalW, targetH, Bitmap.Config.ARGB_8888)
@@ -199,7 +201,9 @@ class TranslationPipeline(
     }
 
     private suspend fun processBitmap(
-        bitmap: Bitmap, inputPath: String, outputDir: String
+        bitmap: Bitmap,
+        inputPath: String,
+        outputDir: String,
     ): PipelineResult {
         onProgress("Translating: ${File(inputPath).name}")
 
@@ -208,11 +212,12 @@ class TranslationPipeline(
         val imgWidth = mat.cols()
 
         // ── YOLO Detection (3-stage cascade) + box filtering ──
-        val filtered = try {
-            pagePreparer.detectBubbles(bitmap, isCancelled)
-        } finally {
-            mat.release()
-        }
+        val filtered =
+            try {
+                pagePreparer.detectBubbles(bitmap, isCancelled)
+            } finally {
+                mat.release()
+            }
         if (isCancelled()) return PipelineResult(null, failed = true)
 
         if (params.engine.enableDevLogs) {
@@ -263,35 +268,43 @@ class TranslationPipeline(
         val allRawTexts = mutableMapOf<String, String>()
         if (cropsToTranslate.isNotEmpty()) {
             if (params.engine.useLocalOcr) {
-                onProgress("  [Local OCR Engine] Extracting text from ${cropsToTranslate.size} speech bubbles via Google ML Kit (auto: Japanese + Latin)...")
-                val maxPerBatch = minOf(params.engine.maxBubblesPerRequest, OCR_MAX_BATCH_SIZE)
+                onProgress(
+                    "  [Local OCR Engine] Extracting text from ${cropsToTranslate.size} speech bubbles via Google ML Kit (auto: Japanese + Latin)...",
+                )
+                val maxPerBatch = minOf(params.engine.maxBubblesPerRequest, Constants.OCR_MAX_BATCH_SIZE)
                 val ocrCropItems = cropsToTranslate.map { MosaicBuilder.CropItem(it.id, it.bitmap) }
                 val chunks = MosaicBuilder.chunkCrops(ocrCropItems, maxPerBatch)
 
                 for ((chunkIdx, chunk) in chunks.withIndex()) {
                     if (isCancelled()) break
                     if (chunks.size > 1) {
-                        onProgress("  [Local OCR Chunk ${chunkIdx + 1}/${chunks.size}] Processing bubbles ${chunk.first().id}..${chunk.last().id}")
+                        onProgress(
+                            "  [Local OCR Chunk ${chunkIdx + 1}/${chunks.size}] Processing bubbles ${chunk.first().id}..${chunk.last().id}",
+                        )
                     }
-                    val ocrResult = chunkTranslator.translateOcrChunk(
-                        chunk = chunk,
-                        cropItems = ocrCropItems,
-                        allTranslations = allTranslations,
-                        rawTexts = allRawTexts,
-                        textPrompt = { textJson ->
-                            val sfxInstruction = if (params.engine.translateSfx) {
-                                " Sound effects (SFX) like ドドド, バキ, ゴゴゴ MUST be translated into $targetLanguage onomatopoeia (never skip them)."
-                            } else {
-                                ""
-                            }
-                            "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage.$sfxInstruction Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
-                        },
-                    )
+                    val ocrResult =
+                        chunkTranslator.translateOcrChunk(
+                            chunk = chunk,
+                            cropItems = ocrCropItems,
+                            allTranslations = allTranslations,
+                            rawTexts = allRawTexts,
+                            textPrompt = { textJson ->
+                                val sfxInstruction =
+                                    if (params.engine.translateSfx) {
+                                        " Sound effects (SFX) like ドドド, バキ, ゴゴゴ MUST be translated into $targetLanguage onomatopoeia (never skip them)."
+                                    } else {
+                                        ""
+                                    }
+                                "You are an expert comic text translator. Translate the text values in the following JSON map into $targetLanguage.$sfxInstruction Return ONLY a valid JSON map with exact matching keys.\n\nInput JSON:\n$textJson"
+                            },
+                        )
                     if (ocrResult.ocrMap.isEmpty()) {
                         // ML Kit found no text (stylized fonts / tiny crops / screentones):
                         // fall back to the vision LLM for this chunk instead of dropping it,
                         // which previously failed the entire page.
-                        onProgress("  [Local OCR] No text recognized in chunk ${chunkIdx + 1} — falling back to vision for ${chunk.size} bubbles.")
+                        onProgress(
+                            "  [Local OCR] No text recognized in chunk ${chunkIdx + 1} — falling back to vision for ${chunk.size} bubbles.",
+                        )
                         translateChunkViaVision(chunk, allTranslations, cropItems)
                         continue
                     }
@@ -331,28 +344,30 @@ class TranslationPipeline(
         }
 
         val workingMat = ImageProcessor.bitmapToMat(bitmap)
-        val resultBitmap = try {
-            if (params.render.useInpainting) {
-                onProgress("  [OpenCV Inpainting] Erasing original text strokes (Parallel)...")
-                ImageProcessor.inpaintTranslated(workingMat, normalizedTranslations, coordinateMap)
+        val resultBitmap =
+            try {
+                if (params.render.useInpainting) {
+                    onProgress("  [OpenCV Inpainting] Erasing original text strokes (Parallel)...")
+                    ImageInpainting.inpaintTranslated(workingMat, normalizedTranslations, coordinateMap)
+                }
+                ImageProcessor.matToBitmap(workingMat)
+            } finally {
+                workingMat.release()
             }
-            ImageProcessor.matToBitmap(workingMat)
-        } finally {
-            workingMat.release()
-        }
 
         val canvas = Canvas(resultBitmap)
 
         val freeTextIds = coordinateMap.keys.filter { ChunkTranslator.isFreeTextId(it) }.toSet()
-        val translatedCount = resultRenderer.render(
-            canvas = canvas,
-            translations = normalizedTranslations,
-            coordinateMap = coordinateMap,
-            bubbleColors = bubbleColors,
-            imgWidth = imgWidth,
-            imgHeight = imgHeight,
-            freeTextIds = freeTextIds,
-        )
+        val translatedCount =
+            resultRenderer.render(
+                canvas = canvas,
+                translations = normalizedTranslations,
+                coordinateMap = coordinateMap,
+                bubbleColors = bubbleColors,
+                imgWidth = imgWidth,
+                imgHeight = imgHeight,
+                freeTextIds = freeTextIds,
+            )
 
         val outputPath = MosaicBuilder.makeOutputPath(inputPath, targetLanguage, outputDir)
         imageSaver.save(resultBitmap, outputPath)
@@ -464,9 +479,10 @@ class TranslationPipeline(
 
         // Path-indexed map of previously detected pages (fast retry support).
         // Pages whose bitmaps were recycled are filtered out — they cannot be reused.
-        val cacheByPath: Map<String, PageData> = cachedPages
-            ?.filter { !it.pil.isRecycled }
-            ?.associateBy { it.path } ?: emptyMap()
+        val cacheByPath: Map<String, PageData> =
+            cachedPages
+                ?.filter { !it.pil.isRecycled }
+                ?.associateBy { it.path } ?: emptyMap()
 
         if (params.engine.enableDevLogs) {
             onProgress(
@@ -474,11 +490,11 @@ class TranslationPipeline(
                     "[Multi-Page Batch] Reusing ${cacheByPath.size} cached pages where available (skipping YOLO)."
                 } else {
                     "[Multi-Page Batch] Processing ${imagePaths.size} pages..."
-                }
+                },
             )
         }
 
-        val semaphore = kotlinx.coroutines.sync.Semaphore(MAX_CONCURRENT_PAGE_LOADS)
+        val semaphore = kotlinx.coroutines.sync.Semaphore(Constants.MAX_CONCURRENT_PAGE_LOADS)
         val completedCount = AtomicInteger(0)
         // Globally unique free-text id counter across the whole batch. Bare `ftN`
         // ids (no page prefix) are echoed reliably by vision LLMs — page-prefixed
@@ -486,127 +502,174 @@ class TranslationPipeline(
         // free-text translation while single images worked fine.
         val ftIdCounter = AtomicInteger(0)
 
-        val pageDataList = coroutineScope {
-            imagePaths.mapIndexed { idx, imgPath ->
-                async(Dispatchers.Default) {
-                    if (isCancelled()) {
-                        val doneCount = completedCount.incrementAndGet()
-                        return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), 0, 0,
-                            mutableListOf(), mutableMapOf(), failed = true)
-                    }
+        val pageDataList =
+            coroutineScope {
+                imagePaths
+                    .mapIndexed { idx, imgPath ->
+                        async(Dispatchers.Default) {
+                            if (isCancelled()) {
+                                val doneCount = completedCount.incrementAndGet()
+                                return@async PageData(
+                                    imgPath,
+                                    Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888),
+                                    0,
+                                    0,
+                                    mutableListOf(),
+                                    mutableMapOf(),
+                                    failed = true,
+                                )
+                            }
 
-                    val actualPageNum = pageOffset + idx + 1
-                    val totalPages = if (totalBatchPages > 0) totalBatchPages else imagePaths.size
+                            val actualPageNum = pageOffset + idx + 1
+                            val totalPages = if (totalBatchPages > 0) totalBatchPages else imagePaths.size
 
-                    // Fast retry: reuse a previously detected page, skipping YOLO entirely.
-                    // The reused page is marked borrowed so this run never recycles its
-                    // bitmaps — they are still owned by the retry cache.
-                    cacheByPath[imgPath]?.let { cached ->
-                        val doneCount = completedCount.incrementAndGet()
-                        val msg = if (params.engine.enableDevLogs) {
-                            "  [Page $actualPageNum/$totalPages] Reusing cached ${File(imgPath).name} (${cached.crops.size} bubbles)"
-                        } else {
-                            "  [Page $actualPageNum/$totalPages] Reusing cached page"
-                        }
-                        onProgress(msg)
-                        onStepProgress((PROGRESS_DETECTION_END.toFloat() * doneCount / imagePaths.size).toInt().coerceIn(1, PROGRESS_DETECTION_END), msg)
-                        return@async cached.copy(borrowed = true)
-                    }
+                            // Fast retry: reuse a previously detected page, skipping YOLO entirely.
+                            // The reused page is marked borrowed so this run never recycles its
+                            // bitmaps — they are still owned by the retry cache.
+                            cacheByPath[imgPath]?.let { cached ->
+                                val doneCount = completedCount.incrementAndGet()
+                                val msg =
+                                    if (params.engine.enableDevLogs) {
+                                        "  [Page $actualPageNum/$totalPages] Reusing cached ${File(
+                                            imgPath,
+                                        ).name} (${cached.crops.size} bubbles)"
+                                    } else {
+                                        "  [Page $actualPageNum/$totalPages] Reusing cached page"
+                                    }
+                                onProgress(msg)
+                                onStepProgress(
+                                    (Constants.PROGRESS_DETECTION_END.toFloat() * doneCount / imagePaths.size).toInt().coerceIn(
+                                        1,
+                                        Constants.PROGRESS_DETECTION_END,
+                                    ),
+                                    msg,
+                                )
+                                return@async cached.copy(borrowed = true)
+                            }
 
-                    val expectedOutput = MosaicBuilder.makeOutputPath(imgPath, targetLanguage, outputDir)
-                    if (File(expectedOutput).exists()) {
-                        val doneCount = completedCount.incrementAndGet()
-                        if (params.engine.enableDevLogs) {
-                            onProgress("  [Page $actualPageNum/$totalPages] Skipping ${File(imgPath).name} (Already translated).")
-                        } else {
-                            onProgress("  [Page $actualPageNum/$totalPages] Skipping (Already translated).")
-                        }
-                        return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), 0, 0,
-                            mutableListOf(), mutableMapOf(), alreadyDone = true)
-                    }
+                            val expectedOutput = MosaicBuilder.makeOutputPath(imgPath, targetLanguage, outputDir)
+                            if (File(expectedOutput).exists()) {
+                                val doneCount = completedCount.incrementAndGet()
+                                if (params.engine.enableDevLogs) {
+                                    onProgress("  [Page $actualPageNum/$totalPages] Skipping ${File(imgPath).name} (Already translated).")
+                                } else {
+                                    onProgress("  [Page $actualPageNum/$totalPages] Skipping (Already translated).")
+                                }
+                                return@async PageData(
+                                    imgPath,
+                                    Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888),
+                                    0,
+                                    0,
+                                    mutableListOf(),
+                                    mutableMapOf(),
+                                    alreadyDone = true,
+                                )
+                            }
 
-                    var bitmap = ImageProcessor.loadBitmap(imgPath)
+                            var bitmap = ImageProcessor.loadBitmap(imgPath)
 
-                    if (bitmap != null && params.engine.useImageUpscaler) {
-                        val upscaled = ImageProcessor.upscaleBitmap(bitmap)
-                        bitmap.recycle()
-                        bitmap = upscaled
-                    }
-                    if (bitmap == null) {
-                        val doneCount = completedCount.incrementAndGet()
-                        onProgress("  [Page $actualPageNum/$totalPages] Failed to load image.")
-                        return@async PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), 0, 0,
-                            mutableListOf(), mutableMapOf(), failed = true)
-                    }
+                            if (bitmap != null && params.engine.useImageUpscaler) {
+                                val upscaled = ImageInpainting.upscaleBitmap(bitmap)
+                                bitmap.recycle()
+                                bitmap = upscaled
+                            }
+                            if (bitmap == null) {
+                                val doneCount = completedCount.incrementAndGet()
+                                onProgress("  [Page $actualPageNum/$totalPages] Failed to load image.")
+                                return@async PageData(
+                                    imgPath,
+                                    Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888),
+                                    0,
+                                    0,
+                                    mutableListOf(),
+                                    mutableMapOf(),
+                                    failed = true,
+                                )
+                            }
 
-                    val imgHeight = bitmap.height
-                    val imgWidth = bitmap.width
+                            val imgHeight = bitmap.height
+                            val imgWidth = bitmap.width
 
-                    val result = semaphore.withPermit {
-                        if (isCancelled()) {
-                            PageData(imgPath, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), 0, 0,
-                                mutableListOf(), mutableMapOf(), failed = true)
-                        } else {
-                            val filtered = pagePreparer.detectBubbles(bitmap)
-
-                            // Use the loaded page bitmap directly as the render surface — the
-                            // full-res copy was redundant (rendering draws on page.pil when not
-                            // inpainting, and inpainting builds a fresh bitmap anyway). Saves
-                            // ~23-93 MB per page × 3 concurrent pages in batch mode.
-                            val cropResult = pagePreparer.cropBubbles(bitmap, filtered, idPrefix = "${actualPageNum}_")
-
-                            val ftResult =
-                                if (params.engine.translateFreeText) {
-                                    val ftBoxes = pagePreparer.detectFreeText(bitmap, filtered)
-                                    if (ftBoxes.isNotEmpty()) {
-                                        pagePreparer.cropFreeText(
-                                            bitmap,
-                                            ftBoxes,
-                                            idPrefix = "",
-                                            idStart = ftIdCounter.getAndAdd(ftBoxes.size),
+                            val result =
+                                semaphore.withPermit {
+                                    if (isCancelled()) {
+                                        PageData(
+                                            imgPath,
+                                            Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888),
+                                            0,
+                                            0,
+                                            mutableListOf(),
+                                            mutableMapOf(),
+                                            failed = true,
                                         )
                                     } else {
-                                        PagePreparer.CropResult(mutableListOf(), mutableMapOf(), mutableMapOf())
+                                        val filtered = pagePreparer.detectBubbles(bitmap)
+
+                                        // Use the loaded page bitmap directly as the render surface — the
+                                        // full-res copy was redundant (rendering draws on page.pil when not
+                                        // inpainting, and inpainting builds a fresh bitmap anyway). Saves
+                                        // ~23-93 MB per page × 3 concurrent pages in batch mode.
+                                        val cropResult = pagePreparer.cropBubbles(bitmap, filtered, idPrefix = "${actualPageNum}_")
+
+                                        val ftResult =
+                                            if (params.engine.translateFreeText) {
+                                                val ftBoxes = pagePreparer.detectFreeText(bitmap, filtered)
+                                                if (ftBoxes.isNotEmpty()) {
+                                                    pagePreparer.cropFreeText(
+                                                        bitmap,
+                                                        ftBoxes,
+                                                        idPrefix = "",
+                                                        idStart = ftIdCounter.getAndAdd(ftBoxes.size),
+                                                    )
+                                                } else {
+                                                    PagePreparer.CropResult(mutableListOf(), mutableMapOf(), mutableMapOf())
+                                                }
+                                            } else {
+                                                PagePreparer.CropResult(mutableListOf(), mutableMapOf(), mutableMapOf())
+                                            }
+
+                                        val crops = (cropResult.crops + ftResult.crops).toMutableList()
+                                        val coordMap = (cropResult.coordMap + ftResult.coordMap).toMutableMap()
+                                        val colors = (cropResult.bubbleColors + ftResult.bubbleColors).toMutableMap()
+
+                                        PageData(imgPath, bitmap, imgWidth, imgHeight, crops, coordMap, colors)
                                     }
-                                } else {
-                                    PagePreparer.CropResult(mutableListOf(), mutableMapOf(), mutableMapOf())
                                 }
 
-                            val crops = (cropResult.crops + ftResult.crops).toMutableList()
-                            val coordMap = (cropResult.coordMap + ftResult.coordMap).toMutableMap()
-                            val colors = (cropResult.bubbleColors + ftResult.bubbleColors).toMutableMap()
-
-                            PageData(imgPath, bitmap, imgWidth, imgHeight, crops, coordMap, colors)
+                            val doneCount = completedCount.incrementAndGet()
+                            val phase1Percent =
+                                (Constants.PROGRESS_DETECTION_END.toFloat() * doneCount / imagePaths.size).toInt().coerceIn(
+                                    1,
+                                    Constants.PROGRESS_DETECTION_END,
+                                )
+                            val msg =
+                                if (!result.failed) {
+                                    if (params.engine.enableDevLogs) {
+                                        "  [Page $actualPageNum/$totalPages] Processed ${File(
+                                            imgPath,
+                                        ).name} (Found ${result.crops.size} bubbles)"
+                                    } else {
+                                        "  [Page $actualPageNum/$totalPages] Processed (${result.crops.size} bubbles)"
+                                    }
+                                } else {
+                                    "  [Page $actualPageNum/$totalPages] Failed ${File(imgPath).name}"
+                                }
+                            onProgress(msg)
+                            onStepProgress(phase1Percent, msg)
+                            if (params.engine.enableDevLogs && params.engine.translateFreeText) {
+                                val ftCount = result.coordMap.keys.count { ChunkTranslator.isFreeTextId(it) }
+                                if (ftCount > 0) {
+                                    onProgress("  [Free Text] Page $actualPageNum/$totalPages: detected $ftCount text regions.")
+                                } else {
+                                    val ocrErr = LocalOcrEngine.lastError
+                                    val ocrDetail = if (ocrErr != null) "error: $ocrErr" else "found none"
+                                    onProgress("  [Free Text] Page $actualPageNum/$totalPages: no text regions (ML Kit $ocrDetail).")
+                                }
+                            }
+                            result
                         }
-                    }
-
-                    val doneCount = completedCount.incrementAndGet()
-                    val phase1Percent = (PROGRESS_DETECTION_END.toFloat() * doneCount / imagePaths.size).toInt().coerceIn(1, PROGRESS_DETECTION_END)
-                    val msg = if (!result.failed) {
-                        if (params.engine.enableDevLogs) {
-                            "  [Page $actualPageNum/$totalPages] Processed ${File(imgPath).name} (Found ${result.crops.size} bubbles)"
-                        } else {
-                            "  [Page $actualPageNum/$totalPages] Processed (${result.crops.size} bubbles)"
-                        }
-                    } else {
-                        "  [Page $actualPageNum/$totalPages] Failed ${File(imgPath).name}"
-                    }
-                    onProgress(msg)
-                    onStepProgress(phase1Percent, msg)
-                    if (params.engine.enableDevLogs && params.engine.translateFreeText) {
-                        val ftCount = result.coordMap.keys.count { ChunkTranslator.isFreeTextId(it) }
-                        if (ftCount > 0) {
-                            onProgress("  [Free Text] Page $actualPageNum/$totalPages: detected $ftCount text regions.")
-                        } else {
-                            val ocrErr = LocalOcrEngine.lastError
-                            val ocrDetail = if (ocrErr != null) "error: $ocrErr" else "found none"
-                            onProgress("  [Free Text] Page $actualPageNum/$totalPages: no text regions (ML Kit $ocrDetail).")
-                        }
-                    }
-                    result
-                }
-            }.awaitAll()
-        }
+                    }.awaitAll()
+            }
         // Save detected pages for fast retry support — only when this run started from
         // scratch; retry runs consume the cache instead of replacing it.
         // Completed pages are recycled (and their outputs exist on disk, so retry skips
@@ -619,17 +682,25 @@ class TranslationPipeline(
         // Phase 2: Collect all crops across pages and batch. Borrowed (retry-cache) pages
         // are INCLUDED so their bubbles get re-translated on retry; only their bitmaps must
         // never be recycled here because the retry cache still owns them.
-        val allCrops = pageDataList.filter { !it.alreadyDone && !it.failed }
-            .flatMap { it.crops }
-        val borrowedBitmaps: Set<Bitmap> = pageDataList
-            .filter { it.borrowed }
-            .flatMap { it.crops }
-            .map { it.second }
-            .toHashSet()
+        val allCrops =
+            pageDataList
+                .filter { !it.alreadyDone && !it.failed }
+                .flatMap { it.crops }
+        val borrowedBitmaps: Set<Bitmap> =
+            pageDataList
+                .filter { it.borrowed }
+                .flatMap { it.crops }
+                .map { it.second }
+                .toHashSet()
 
         if (allCrops.isEmpty()) {
-            return pageDataList.map { PipelineResult(MosaicBuilder.makeOutputPath(it.path, targetLanguage, outputDir),
-                alreadyDone = it.alreadyDone, failed = it.failed) }
+            return pageDataList.map {
+                PipelineResult(
+                    MosaicBuilder.makeOutputPath(it.path, targetLanguage, outputDir),
+                    alreadyDone = it.alreadyDone,
+                    failed = it.failed,
+                )
+            }
         }
 
         if (params.engine.enableDevLogs) onProgress("  Total bubbles across all pages: ${allCrops.size}")
@@ -652,7 +723,9 @@ class TranslationPipeline(
         if (params.engine.useLocalOcr) {
             if (cropsToTranslate.isNotEmpty()) {
                 if (params.engine.enableDevLogs) {
-                    onProgress("  [Local OCR Engine] Extracting text from ${cropsToTranslate.size} bubbles via Google ML Kit (auto: Japanese + Latin)...")
+                    onProgress(
+                        "  [Local OCR Engine] Extracting text from ${cropsToTranslate.size} bubbles via Google ML Kit (auto: Japanese + Latin)...",
+                    )
                 } else {
                     onProgress("  [Local OCR] Extracting text from ${cropsToTranslate.size} bubbles...")
                 }
@@ -663,37 +736,44 @@ class TranslationPipeline(
             for ((chunkIdx, chunk) in chunks.withIndex()) {
                 if (isCancelled()) break
                 if (params.engine.enableDevLogs && chunks.size > 1) {
-                    onProgress("  [Local OCR Batch ${chunkIdx + 1}/${chunks.size}] Processing bubbles ${chunk.first().id}..${chunk.last().id}")
+                    onProgress(
+                        "  [Local OCR Batch ${chunkIdx + 1}/${chunks.size}] Processing bubbles ${chunk.first().id}..${chunk.last().id}",
+                    )
                 }
-                val ocrResult = chunkTranslator.translateOcrChunk(
-                    chunk = chunk,
-                    cropItems = cropItems,
-                    allTranslations = allTranslations,
-                    rawTexts = batchRawTexts,
-                    textPrompt = { textJson ->
-                        """
-                        You are a master comic & manga translator and editor.
-                        The input JSON map contains text extracted via local OCR (which may contain typos, missing characters, OCR noise, or broken words).
+                val ocrResult =
+                    chunkTranslator.translateOcrChunk(
+                        chunk = chunk,
+                        cropItems = cropItems,
+                        allTranslations = allTranslations,
+                        rawTexts = batchRawTexts,
+                        textPrompt = { textJson ->
+                            """
+                            You are a master comic & manga translator and editor.
+                            The input JSON map contains text extracted via local OCR (which may contain typos, missing characters, OCR noise, or broken words).
 
-                        INSTRUCTIONS:
-                        1. Smart OCR Correction: Infer and auto-correct any OCR errors, misread characters, typos, or incomplete words using comic/manga dialogue context before translating.
-                        2. Natural Translation: Translate the corrected meaning naturally into $targetLanguage while preserving tone, emotion, and nuance suitable for manga speech bubbles.
-                        ${if (params.engine.translateSfx) "3. Sound effects (SFX) like ドドド, バキ, ゴゴゴ MUST be translated into $targetLanguage onomatopoeia (never skip them)." else ""}
-                        4. Strict Output Format: Return ONLY a valid JSON object mapping the exact input keys to their translated values. Do not wrap in markdown or add commentary.
+                            INSTRUCTIONS:
+                            1. Smart OCR Correction: Infer and auto-correct any OCR errors, misread characters, typos, or incomplete words using comic/manga dialogue context before translating.
+                            2. Natural Translation: Translate the corrected meaning naturally into $targetLanguage while preserving tone, emotion, and nuance suitable for manga speech bubbles.
+                            ${if (params.engine.translateSfx) "3. Sound effects (SFX) like ドドド, バキ, ゴゴゴ MUST be translated into $targetLanguage onomatopoeia (never skip them)." else ""}
+                            4. Strict Output Format: Return ONLY a valid JSON object mapping the exact input keys to their translated values. Do not wrap in markdown or add commentary.
 
-                        Input JSON:
-                        $textJson
-                        """.trimIndent()
-                    },
-                )
+                            Input JSON:
+                            $textJson
+                            """.trimIndent()
+                        },
+                    )
                 if (ocrResult.ocrMap.isEmpty()) {
-                    onProgress("  [Local OCR] No text recognized in batch ${chunkIdx + 1} — falling back to vision for ${chunk.size} bubbles.")
+                    onProgress(
+                        "  [Local OCR] No text recognized in batch ${chunkIdx + 1} — falling back to vision for ${chunk.size} bubbles.",
+                    )
                     translateChunkViaVision(chunk, allTranslations, cropItems)
                     continue
                 }
 
                 if (!ocrResult.translated) {
-                    onProgress("  [!] Batch ${chunkIdx + 1}/${chunks.size} failed all providers (no response received; skipping these bubbles).")
+                    onProgress(
+                        "  [!] Batch ${chunkIdx + 1}/${chunks.size} failed all providers (no response received; skipping these bubbles).",
+                    )
                 } else {
                     // A provider may return valid JSON whose keys do not correspond to
                     // the sent crop ids (e.g. it drops the page prefix or rewrites the
@@ -707,7 +787,7 @@ class TranslationPipeline(
                     // round-trip (and re-render the original script when the vision
                     // model fails to translate it).
                     val sentIds = ocrResult.ocrMap.keys.toHashSet()
-                    val missing = chunk.filter { it.id in sentIds && !ChunkTranslator.hasTranslation(it.id, allTranslations) }
+                    val missing = BatchTranslationPlanner.missingEchoedIds(chunk, sentIds, allTranslations)
                     if (missing.isNotEmpty()) {
                         if (params.engine.enableDevLogs) {
                             val ids = missing.joinToString(", ") { it.id }
@@ -728,8 +808,12 @@ class TranslationPipeline(
 
             for ((chunkIdx, chunk) in chunks.withIndex()) {
                 if (isCancelled()) return emptyList()
-                val batchPercent = (PROGRESS_DETECTION_END + ((PROGRESS_TRANSLATE_END - PROGRESS_DETECTION_END).toFloat() * (chunkIdx + 1) / chunks.size)).toInt()
-                    .coerceIn(PROGRESS_DETECTION_END, PROGRESS_TRANSLATE_END)
+                val batchPercent =
+                    (
+                        Constants.PROGRESS_DETECTION_END +
+                            ((Constants.PROGRESS_TRANSLATE_END - Constants.PROGRESS_DETECTION_END).toFloat() * (chunkIdx + 1) / chunks.size)
+                    ).toInt()
+                        .coerceIn(Constants.PROGRESS_DETECTION_END, Constants.PROGRESS_TRANSLATE_END)
                 val batchMsg = "  [Batch ${chunkIdx + 1}/${chunks.size}] ${chunk.size} bubbles..."
                 onProgress(batchMsg)
                 onStepProgress(batchPercent, batchMsg)
@@ -766,111 +850,25 @@ class TranslationPipeline(
         // model that rewrote an id (e.g. "1_ft1" -> "ft1" or "1 ft1") silently
         // dropped that free-text region at render — bubbles usually survived
         // because plain numeric ids are echoed verbatim.
-        val normalizedAll = mutableMapOf<String, String>()
         // "ft1" -> translation for ids the model returned WITHOUT the page prefix
         // ("1_ft1" -> "ft1"). Page-prefixed ids always win; the bare form is only
         // a fallback for exactly this rewrite.
-        val bareFtLookup = mutableMapOf<String, String>()
-        for ((key, text) in allTranslations) {
-            val id = ChunkTranslator.normalizeIdKey(key) ?: continue
-            normalizedAll[id] = text
-            if (ChunkTranslator.isFreeTextId(id)) {
-                bareFtLookup.putIfAbsent(id.substringAfterLast('_'), text)
-            }
-        }
+        val normalized = BatchTranslationPlanner.normalizeTranslations(allTranslations)
+        val normalizedAll = normalized.byId
+        val bareFtLookup = normalized.bareFtLookup
 
         val results = mutableListOf<PipelineResult>()
         for ((pageIdx, page) in pageDataList.withIndex()) {
-            val renderPercent = (PROGRESS_TRANSLATE_END + ((PROGRESS_RENDER_END - PROGRESS_TRANSLATE_END).toFloat() * (pageIdx + 1) / pageDataList.size)).toInt()
-                .coerceIn(PROGRESS_TRANSLATE_END, PROGRESS_RENDER_END)
-            val renderMsg = "  Rendering page ${pageIdx + 1}/${pageDataList.size}..."
-            onStepProgress(renderPercent, renderMsg)
-
-            if (page.alreadyDone) {
-                results.add(PipelineResult(MosaicBuilder.makeOutputPath(page.path, targetLanguage, outputDir), alreadyDone = true))
-                recyclePage(page)
-                continue
-            }
-            if (page.failed) {
-                results.add(PipelineResult(null, failed = true))
-                recyclePage(page)
-                continue
-            }
-
-            // Skip pages whose output already exists — avoid re-translating on re-runs
-            val pageOutputPath = MosaicBuilder.makeOutputPath(page.path, targetLanguage, outputDir)
-            if (File(pageOutputPath).exists()) {
-                results.add(PipelineResult(pageOutputPath, alreadyDone = true))
-                recyclePage(page)
-                continue
-            }
-
-            // Resolve this page's translations from the normalized map. Every page
-            // coordinate id is looked up directly; free-text ids additionally fall
-            // back to the bare "ftN" form in case the model dropped the page prefix.
-            val pageTranslations = mutableMapOf<String, String>()
-            for (id in page.coordMap.keys) {
-                val text =
-                    if (ChunkTranslator.isFreeTextId(id)) {
-                        normalizedAll[id] ?: bareFtLookup[id.substringAfterLast('_')]
-                    } else {
-                        normalizedAll[id]
-                    }
-                if (text != null) pageTranslations[id] = text
-            }
-            if (params.engine.enableDevLogs && params.engine.translateFreeText) {
-                val ftInPage = page.coordMap.keys.count { ChunkTranslator.isFreeTextId(it) }
-                val ftMatched = pageTranslations.keys.count { ChunkTranslator.isFreeTextId(it) }
-                if (ftInPage > 0) {
-                    onProgress("  [Free Text] Page ${pageIdx + 1}: matched $ftMatched/$ftInPage free-text regions for render.")
-                }
-            }
-            if (params.engine.enableDevLogs && page.coordMap.isNotEmpty()) {
-                val matchedAll = pageTranslations.size
-                val totalAll = page.coordMap.size
-                if (matchedAll == 0) {
-                    onProgress("  [!] Page ${pageIdx + 1}: 0/$totalAll regions matched — page will be saved WITHOUT translations.")
-                } else {
-                    onProgress("  [Render] Page ${pageIdx + 1}: matched $matchedAll/$totalAll regions.")
-                }
-            }
-
-            val renderBitmap = if (params.render.useInpainting) {
-                onProgress("  [OpenCV Inpainting] Erasing original text strokes for ${File(page.path).name}...")
-                val workingMat = ImageProcessor.bitmapToMat(page.pil)
-                try {
-                    ImageProcessor.inpaintTranslated(workingMat, pageTranslations, page.coordMap)
-                    ImageProcessor.matToBitmap(workingMat)
-                } finally {
-                    workingMat.release()
-                }
-            } else {
-                // page.pil is an immutable decodeFile() bitmap; the Canvas below needs a
-                // mutable surface (regression from ed0031b4 which dropped the render copy).
-                page.pil.copy(Bitmap.Config.ARGB_8888, true)
-            }
-
-            val canvas = Canvas(renderBitmap)
-            val freeTextIds =
-                page.coordMap.keys
-                    .filter { ChunkTranslator.isFreeTextId(it) }
-                    .toSet()
-            val translatedCount = resultRenderer.render(
-                canvas = canvas,
-                translations = pageTranslations,
-                coordinateMap = page.coordMap,
-                bubbleColors = page.bubbleColors,
-                imgWidth = page.imgWidth,
-                imgHeight = page.imgHeight,
-                freeTextIds = freeTextIds,
+            results.add(
+                renderBatchPage(
+                    page = page,
+                    pageIdx = pageIdx,
+                    pageCount = pageDataList.size,
+                    normalized = normalized,
+                    outputDir = outputDir,
+                    batchRawTexts = batchRawTexts,
+                ),
             )
-
-            imageSaver.save(renderBitmap, pageOutputPath)
-            results.add(PipelineResult(pageOutputPath, bubblesFound = page.crops.size, bubblesTranslated = translatedCount, rawTexts = if (params.engine.useLocalOcr) batchRawTexts else emptyMap()))
-
-            // Immediately recycle page full-res bitmap, render bitmap, and crop bitmaps for this page
-            if (renderBitmap != page.pil && !renderBitmap.isRecycled) renderBitmap.recycle()
-            recyclePage(page)
         }
 
         // Final safety cleanup for any remaining crop bitmaps across allCrops
@@ -885,6 +883,110 @@ class TranslationPipeline(
     }
 
     /**
+     * Render one page of a multi-page batch: resolve its translations, draw the
+     * translated text (with optional inpainting), save the output, and recycle
+     * the page's bitmaps. Returns the [PipelineResult] for this page.
+     */
+    private suspend fun renderBatchPage(
+        page: PageData,
+        pageIdx: Int,
+        pageCount: Int,
+        normalized: BatchTranslationPlanner.NormalizedTranslations,
+        outputDir: String,
+        batchRawTexts: Map<String, String>,
+    ): PipelineResult {
+        val renderPercent =
+            (
+                Constants.PROGRESS_TRANSLATE_END +
+                    ((Constants.PROGRESS_RENDER_END - Constants.PROGRESS_TRANSLATE_END).toFloat() * (pageIdx + 1) / pageCount)
+            ).toInt()
+                .coerceIn(Constants.PROGRESS_TRANSLATE_END, Constants.PROGRESS_RENDER_END)
+        val renderMsg = "  Rendering page ${pageIdx + 1}/$pageCount..."
+        onStepProgress(renderPercent, renderMsg)
+
+        if (page.alreadyDone) {
+            val alreadyPath = MosaicBuilder.makeOutputPath(page.path, targetLanguage, outputDir)
+            recyclePage(page)
+            return PipelineResult(alreadyPath, alreadyDone = true)
+        }
+        if (page.failed) {
+            recyclePage(page)
+            return PipelineResult(null, failed = true)
+        }
+
+        // Skip pages whose output already exists — avoid re-translating on re-runs
+        val pageOutputPath = MosaicBuilder.makeOutputPath(page.path, targetLanguage, outputDir)
+        if (File(pageOutputPath).exists()) {
+            recyclePage(page)
+            return PipelineResult(pageOutputPath, alreadyDone = true)
+        }
+
+        // Resolve this page's translations from the normalized map. Every page
+        // coordinate id is looked up directly; free-text ids additionally fall
+        // back to the bare "ftN" form in case the model dropped the page prefix.
+        val pageTranslations = BatchTranslationPlanner.resolvePageTranslations(page.coordMap.keys, normalized)
+        if (params.engine.enableDevLogs && params.engine.translateFreeText) {
+            val (ftMatched, ftInPage) = BatchTranslationPlanner.freeTextMatchCounts(page.coordMap.keys, pageTranslations)
+            if (ftInPage > 0) {
+                onProgress("  [Free Text] Page ${pageIdx + 1}: matched $ftMatched/$ftInPage free-text regions for render.")
+            }
+        }
+        if (params.engine.enableDevLogs && page.coordMap.isNotEmpty()) {
+            val matchedAll = pageTranslations.size
+            val totalAll = page.coordMap.size
+            if (matchedAll == 0) {
+                onProgress("  [!] Page ${pageIdx + 1}: 0/$totalAll regions matched — page will be saved WITHOUT translations.")
+            } else {
+                onProgress("  [Render] Page ${pageIdx + 1}: matched $matchedAll/$totalAll regions.")
+            }
+        }
+
+        val renderBitmap =
+            if (params.render.useInpainting) {
+                onProgress("  [OpenCV Inpainting] Erasing original text strokes for ${File(page.path).name}...")
+                val workingMat = ImageProcessor.bitmapToMat(page.pil)
+                try {
+                    ImageInpainting.inpaintTranslated(workingMat, pageTranslations, page.coordMap)
+                    ImageProcessor.matToBitmap(workingMat)
+                } finally {
+                    workingMat.release()
+                }
+            } else {
+                // page.pil is an immutable decodeFile() bitmap; the Canvas below needs a
+                // mutable surface (regression from ed0031b4 which dropped the render copy).
+                page.pil.copy(Bitmap.Config.ARGB_8888, true)
+            }
+
+        val canvas = Canvas(renderBitmap)
+        val freeTextIds =
+            page.coordMap.keys
+                .filter { ChunkTranslator.isFreeTextId(it) }
+                .toSet()
+        val translatedCount =
+            resultRenderer.render(
+                canvas = canvas,
+                translations = pageTranslations,
+                coordinateMap = page.coordMap,
+                bubbleColors = page.bubbleColors,
+                imgWidth = page.imgWidth,
+                imgHeight = page.imgHeight,
+                freeTextIds = freeTextIds,
+            )
+
+        imageSaver.save(renderBitmap, pageOutputPath)
+
+        // Immediately recycle page full-res bitmap, render bitmap, and crop bitmaps for this page
+        if (renderBitmap != page.pil && !renderBitmap.isRecycled) renderBitmap.recycle()
+        recyclePage(page)
+        return PipelineResult(
+            pageOutputPath,
+            bubblesFound = page.crops.size,
+            bubblesTranslated = translatedCount,
+            rawTexts = if (params.engine.useLocalOcr) batchRawTexts else emptyMap(),
+        )
+    }
+
+    /**
      * Recycle a page's bitmaps unless it was borrowed from the retry cache
      * (whose bitmaps are still owned by [TranslationProgressTracker]).
      */
@@ -895,5 +997,4 @@ class TranslationPipeline(
         }
         if (!page.pil.isRecycled) page.pil.recycle()
     }
-
 }

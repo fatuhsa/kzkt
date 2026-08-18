@@ -1,40 +1,47 @@
 package com.kzkt.app.core
 
 import android.content.Context
-import android.graphics.*
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
 import android.util.Log
 import java.util.regex.Pattern
 
 /**
  * Font management and text rendering.
- * Ported from the original Python font + text rendering services
  */
-class TextRenderer(private val context: Context) {
-
+class TextRenderer(
+    private val context: Context,
+) {
     // Cache base Typeface per font file, not per (font, size) — the size is applied via Paint.textSize.
     // Keeps 2 entries (Komika Axis + KosugiMaru) instead of unbounded growth from dynamic font sizing.
     private val fontCache = mutableMapOf<String, Typeface>()
 
     // Font paths
-    private val FONT_MANGA = "fonts/Komika Axis.ttf"
-    private val FONT_UNIVERSAL = "fonts/KosugiMaru.ttf"
+    private val fontManga = "fonts/Komika Axis.ttf"
+    private val fontUniversal = "fonts/KosugiMaru.ttf"
 
     // Non-Latin Unicode ranges: Hiragana, Katakana, CJK, Hangul, Thai, Cyrillic, Arabic
-    private val NON_LATIN_PATTERN = Pattern.compile(
-        "[\\u3040-\\u309f\\u30a0-\\u30ff\\u4e00-\\u9fff\\uac00-\\ud7af\\u0e00-\\u0e7f\\u0400-\\u04ff\\u0600-\\u06ff]"
-    )
+    private val nonLatinPattern =
+        Pattern.compile(
+            "[\\u3040-\\u309f\\u30a0-\\u30ff\\u4e00-\\u9fff\\uac00-\\ud7af\\u0e00-\\u0e7f\\u0400-\\u04ff\\u0600-\\u06ff]",
+        )
 
-    fun hasNonLatin(text: String): Boolean {
-        return NON_LATIN_PATTERN.matcher(text).find()
-    }
+    fun hasNonLatin(text: String): Boolean = nonLatinPattern.matcher(text).find()
 
-    private fun getTypeface(text: String, customFontPath: String = "", fontPreset: String = "Default"): Typeface {
+    private fun getTypeface(
+        text: String,
+        customFontPath: String = "",
+        fontPreset: String = "Default",
+    ): Typeface {
         if (fontPreset == "Serif") return Typeface.SERIF
         if (fontPreset == "Monospace") return Typeface.MONOSPACE
         if (fontPreset == "Sans-Serif") return Typeface.SANS_SERIF
 
         val isNonLatin = hasNonLatin(text)
-        val builtinFontPath = if (isNonLatin) FONT_UNIVERSAL else FONT_MANGA
+        val builtinFontPath = if (isNonLatin) fontUniversal else fontManga
 
         val loadBuiltin = {
             fontCache.getOrPut(builtinFontPath) {
@@ -65,7 +72,7 @@ class TextRenderer(private val context: Context) {
 
         if (fontPreset == "Manga (Built-in)") return loadBuiltin()
         if (fontPreset == "Custom" && customFontPath.isNotBlank()) return loadCustom()
-        
+
         // Default behavior: use custom if available, else built-in
         if (customFontPath.isNotBlank()) {
             return loadCustom()
@@ -85,7 +92,11 @@ class TextRenderer(private val context: Context) {
         val minFont: Int,
     )
 
-    private fun pickTextSettings(boxWidth: Int, boxHeight: Int, text: String): TextSettings {
+    private fun pickTextSettings(
+        boxWidth: Int,
+        boxHeight: Int,
+        text: String,
+    ): TextSettings {
         val cleanText = text.replace(" ", "").replace("\n", "")
         val charCount = cleanText.length
         val area = boxWidth * boxHeight
@@ -103,15 +114,20 @@ class TextRenderer(private val context: Context) {
 
     // ── Word Wrapping ──────────────────────────────────────────────
 
-    private fun wrapTextPerWord(paint: Paint, text: String, maxWidth: Float): String {
+    private fun wrapTextPerWord(
+        paint: Paint,
+        text: String,
+        maxWidth: Float,
+    ): String {
         if (text.isEmpty()) return ""
 
         val isCjk = hasNonLatin(text) && !text.contains(" ")
-        val rawWords: List<String> = if (isCjk) {
-            text.toList().map { it.toString() }
-        } else {
-            text.split(" ")
-        }
+        val rawWords: List<String> =
+            if (isCjk) {
+                text.toList().map { it.toString() }
+            } else {
+                text.split(" ")
+            }
 
         if (rawWords.isEmpty()) return ""
 
@@ -123,8 +139,12 @@ class TextRenderer(private val context: Context) {
             val measuredWidth = paint.measureText(candidate)
 
             if (measuredWidth <= maxWidth || currentLine.isEmpty()) {
-                currentLine = if (currentLine.isEmpty()) StringBuilder(word)
-                    else StringBuilder("$currentLine $word")
+                currentLine =
+                    if (currentLine.isEmpty()) {
+                        StringBuilder(word)
+                    } else {
+                        StringBuilder("$currentLine $word")
+                    }
             } else {
                 lines.add(currentLine.toString())
                 currentLine = StringBuilder(word)
@@ -224,13 +244,25 @@ class TextRenderer(private val context: Context) {
         // Binary Search for optimal font size (O(log N) instead of linear scan)
         while (low <= high) {
             val fSize = (low + high) / 2
-            val paint = Paint().apply {
-                val baseTypeface = getTypeface(displayText, customFontPath, effectiveFontPreset)
-                val style = if (isBold && isItalic) Typeface.BOLD_ITALIC else if (isBold) Typeface.BOLD else if (isItalic) Typeface.ITALIC else Typeface.NORMAL
-                typeface = Typeface.create(baseTypeface, style)
-                textSize = fSize.toFloat()
-                isAntiAlias = true
-            }
+            val paint =
+                Paint().apply {
+                    val baseTypeface = getTypeface(displayText, customFontPath, effectiveFontPreset)
+                    val style =
+                        if (isBold &&
+                            isItalic
+                        ) {
+                            Typeface.BOLD_ITALIC
+                        } else if (isBold) {
+                            Typeface.BOLD
+                        } else if (isItalic) {
+                            Typeface.ITALIC
+                        } else {
+                            Typeface.NORMAL
+                        }
+                    typeface = Typeface.create(baseTypeface, style)
+                    textSize = fSize.toFloat()
+                    isAntiAlias = true
+                }
 
             val spacing = maxOf(1, (fSize * settings.spacingRatio).toInt()).toFloat()
             val wrapped = wrapTextPerWord(paint, displayText, maxW)
@@ -255,14 +287,26 @@ class TextRenderer(private val context: Context) {
 
         // Final render calculation
         bestFontSize = maxOf(minFontSize, (bestFontSize * settings.fontScale * fontScale).toInt())
-        val finalPaint = Paint().apply {
-            val baseTypeface = getTypeface(displayText, customFontPath, effectiveFontPreset)
-            val style = if (isBold && isItalic) Typeface.BOLD_ITALIC else if (isBold) Typeface.BOLD else if (isItalic) Typeface.ITALIC else Typeface.NORMAL
-            typeface = Typeface.create(baseTypeface, style)
-            textSize = bestFontSize.toFloat()
-            isAntiAlias = true
-            this.textAlign = Paint.Align.LEFT
-        }
+        val finalPaint =
+            Paint().apply {
+                val baseTypeface = getTypeface(displayText, customFontPath, effectiveFontPreset)
+                val style =
+                    if (isBold &&
+                        isItalic
+                    ) {
+                        Typeface.BOLD_ITALIC
+                    } else if (isBold) {
+                        Typeface.BOLD
+                    } else if (isItalic) {
+                        Typeface.ITALIC
+                    } else {
+                        Typeface.NORMAL
+                    }
+                typeface = Typeface.create(baseTypeface, style)
+                textSize = bestFontSize.toFloat()
+                isAntiAlias = true
+                this.textAlign = Paint.Align.LEFT
+            }
 
         val finalWrapped = wrapTextPerWord(finalPaint, displayText, maxW)
         val finalLines = finalWrapped.split("\n")
@@ -283,26 +327,37 @@ class TextRenderer(private val context: Context) {
         val strokeW = if (isCleanStyle && strokeColorHex == null) 0f else maxOf(1f, bestFontSize / 11f)
         val isDarkBg = isDarkColor(bgColor)
         val autoTextColor = if (isDarkBg) Color.WHITE else Color.BLACK
-        val textColor = textColorHex?.let {
-            try { android.graphics.Color.parseColor(it) } catch (e: Exception) { autoTextColor }
-        } ?: autoTextColor
+        val textColor =
+            textColorHex?.let {
+                try {
+                    android.graphics.Color.parseColor(it)
+                } catch (e: Exception) {
+                    autoTextColor
+                }
+            } ?: autoTextColor
         // Outline always contrasts with the chosen text colour so a forced colour
         // stays legible on any bubble background.
         val autoStrokeColor = if (textColor == Color.WHITE) Color.BLACK else Color.WHITE
-        val strokeColor = strokeColorHex?.let {
-            try { android.graphics.Color.parseColor(it) } catch (e: Exception) { autoStrokeColor }
-        } ?: autoStrokeColor
+        val strokeColor =
+            strokeColorHex?.let {
+                try {
+                    android.graphics.Color.parseColor(it)
+                } catch (e: Exception) {
+                    autoStrokeColor
+                }
+            } ?: autoStrokeColor
 
         // Background patch
         if (backgroundPatch) {
             val padX = maxOf(4f, boxWidth * 0.05f)
             val padY = maxOf(4f, boxHeight * 0.05f)
-            val rect = RectF(
-                x1.toFloat() - padX,
-                y1.toFloat() - padY,
-                x2.toFloat() + padX,
-                y2.toFloat() + padY
-            )
+            val rect =
+                RectF(
+                    x1.toFloat() - padX,
+                    y1.toFloat() - padY,
+                    x2.toFloat() + padX,
+                    y2.toFloat() + padY,
+                )
             val radius = maxOf(8f, minOf(boxWidth.toFloat(), boxHeight.toFloat()) / 5f)
             val patchPaint = Paint().apply { color = bgColor }
             try {
@@ -316,30 +371,33 @@ class TextRenderer(private val context: Context) {
         var currentY = centerY
         for (line in finalLines) {
             val lineWidth = finalPaint.measureText(line)
-            val lineX = when (textAlign) {
-                Paint.Align.LEFT -> centerX
-                Paint.Align.RIGHT -> centerX + textWidth - lineWidth
-                else -> centerX + (textWidth - lineWidth) / 2f
-            }
+            val lineX =
+                when (textAlign) {
+                    Paint.Align.LEFT -> centerX
+                    Paint.Align.RIGHT -> centerX + textWidth - lineWidth
+                    else -> centerX + (textWidth - lineWidth) / 2f
+                }
 
             // Stroke (outline for contrast) — skipped entirely in clean style so the
             // text looks flat like Google Translate.
             if (strokeW > 0f) {
-                val strokePaint = Paint(finalPaint).apply {
-                    style = Paint.Style.STROKE
-                    strokeWidth = strokeW
-                    strokeCap = Paint.Cap.ROUND
-                    strokeJoin = Paint.Join.ROUND
-                    color = strokeColor
-                }
+                val strokePaint =
+                    Paint(finalPaint).apply {
+                        style = Paint.Style.STROKE
+                        strokeWidth = strokeW
+                        strokeCap = Paint.Cap.ROUND
+                        strokeJoin = Paint.Join.ROUND
+                        color = strokeColor
+                    }
                 canvas.drawText(line, lineX, currentY - finalPaint.fontMetrics.ascent, strokePaint)
             }
 
             // Fill (text color)
-            val fillPaint = Paint(finalPaint).apply {
-                style = Paint.Style.FILL
-                color = textColor
-            }
+            val fillPaint =
+                Paint(finalPaint).apply {
+                    style = Paint.Style.FILL
+                    color = textColor
+                }
             canvas.drawText(line, lineX, currentY - finalPaint.fontMetrics.ascent, fillPaint)
 
             currentY += finalPaint.textSize + bestSpacing
@@ -351,8 +409,10 @@ class TextRenderer(private val context: Context) {
     private fun renderJapaneseVertical(
         canvas: Canvas,
         text: String,
-        x1: Int, y1: Int,
-        x2: Int, y2: Int,
+        x1: Int,
+        y1: Int,
+        x2: Int,
+        y2: Int,
         settings: TextSettings,
         backgroundPatch: Boolean,
         bgColor: Int = Color.WHITE,
@@ -403,13 +463,25 @@ class TextRenderer(private val context: Context) {
         }
 
         bestFontSize = maxOf(minFontSize, (bestFontSize * settings.fontScale * fontScale).toInt())
-        val paint = Paint().apply {
-            val baseTypeface = getTypeface(cleanText, customFontPath = customFontPath, fontPreset = fontPreset)
-            val style = if (isBold && isItalic) Typeface.BOLD_ITALIC else if (isBold) Typeface.BOLD else if (isItalic) Typeface.ITALIC else Typeface.NORMAL
-            typeface = Typeface.create(baseTypeface, style)
-            textSize = bestFontSize.toFloat()
-            isAntiAlias = true
-        }
+        val paint =
+            Paint().apply {
+                val baseTypeface = getTypeface(cleanText, customFontPath = customFontPath, fontPreset = fontPreset)
+                val style =
+                    if (isBold &&
+                        isItalic
+                    ) {
+                        Typeface.BOLD_ITALIC
+                    } else if (isBold) {
+                        Typeface.BOLD
+                    } else if (isItalic) {
+                        Typeface.ITALIC
+                    } else {
+                        Typeface.NORMAL
+                    }
+                typeface = Typeface.create(baseTypeface, style)
+                textSize = bestFontSize.toFloat()
+                isAntiAlias = true
+            }
 
         val fontMetrics = paint.fontMetrics
         val charH = paint.textSize
@@ -423,38 +495,51 @@ class TextRenderer(private val context: Context) {
 
         val isDarkBg = isDarkColor(bgColor)
         val autoTextColor = if (isDarkBg) Color.WHITE else Color.BLACK
-        val textColor = textColorHex?.let {
-            try { android.graphics.Color.parseColor(it) } catch (e: Exception) { autoTextColor }
-        } ?: autoTextColor
+        val textColor =
+            textColorHex?.let {
+                try {
+                    android.graphics.Color.parseColor(it)
+                } catch (e: Exception) {
+                    autoTextColor
+                }
+            } ?: autoTextColor
         val autoStrokeColor = if (textColor == Color.WHITE) Color.BLACK else Color.WHITE
-        val strokeColor = strokeColorHex?.let {
-            try { android.graphics.Color.parseColor(it) } catch (e: Exception) { autoStrokeColor }
-        } ?: autoStrokeColor
+        val strokeColor =
+            strokeColorHex?.let {
+                try {
+                    android.graphics.Color.parseColor(it)
+                } catch (e: Exception) {
+                    autoStrokeColor
+                }
+            } ?: autoStrokeColor
 
         val noStroke = renderStyle.equals("clean", ignoreCase = true) && strokeColorHex == null
         val strokeW = if (noStroke) 0f else maxOf(1f, bestFontSize / 11f)
-        val strokePaint = Paint(paint).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = strokeW
-            strokeCap = Paint.Cap.ROUND
-            strokeJoin = Paint.Join.ROUND
-            color = strokeColor
-        }
-        val fillPaint = Paint(paint).apply {
-            style = Paint.Style.FILL
-            color = textColor
-        }
+        val strokePaint =
+            Paint(paint).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = strokeW
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
+                color = strokeColor
+            }
+        val fillPaint =
+            Paint(paint).apply {
+                style = Paint.Style.FILL
+                color = textColor
+            }
 
         // Background patch
         if (backgroundPatch) {
             val padX = maxOf(4f, boxWidth * 0.05f)
             val padY = maxOf(4f, boxHeight * 0.05f)
-            val rect = RectF(
-                x1.toFloat() - padX,
-                y1.toFloat() - padY,
-                x2.toFloat() + padX,
-                y2.toFloat() + padY
-            )
+            val rect =
+                RectF(
+                    x1.toFloat() - padX,
+                    y1.toFloat() - padY,
+                    x2.toFloat() + padX,
+                    y2.toFloat() + padY,
+                )
             val radius = maxOf(8f, minOf(boxWidth.toFloat(), boxHeight.toFloat()) / 5f)
             val patchPaint = Paint().apply { color = bgColor }
             try {
@@ -471,15 +556,16 @@ class TextRenderer(private val context: Context) {
             for (ch in col) {
                 var offsetX = 0f
                 var offsetY = 0f
-                val displayChar = when (ch) {
-                    '。', '、', '.' -> {
-                        offsetX = charW * 0.6f
-                        offsetY = -charW * 0.6f
-                        ch
+                val displayChar =
+                    when (ch) {
+                        '。', '、', '.' -> {
+                            offsetX = charW * 0.6f
+                            offsetY = -charW * 0.6f
+                            ch
+                        }
+                        'ー' -> '︱'
+                        else -> ch
                     }
-                    'ー' -> '︱'
-                    else -> ch
-                }
 
                 val cx = curX + offsetX
                 val cy = curY + offsetY

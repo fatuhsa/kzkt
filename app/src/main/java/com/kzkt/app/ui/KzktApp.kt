@@ -28,13 +28,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.launch
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.kzkt.app.ui.theme.KzktTheme
+import kotlinx.coroutines.launch
 
 private enum class BottomTab(
     val route: String,
@@ -93,7 +93,7 @@ fun KzktApp(
                 "dark" -> true
                 "light" -> false
                 else -> systemDark
-            }
+            },
         )
     }
     var pureBlack by remember { mutableStateOf(initialSettings.pureBlack) }
@@ -103,11 +103,12 @@ fun KzktApp(
     // Re-apply the persisted theme once DataStore emits (async) on a fresh start.
     val settingsSnapshot = viewModel.settings.value
     LaunchedEffect(settingsSnapshot.themeMode, settingsSnapshot.pureBlack, settingsSnapshot.accentColor) {
-        darkTheme = when (settingsSnapshot.themeMode) {
-            "dark" -> true
-            "light" -> false
-            else -> systemDark
-        }
+        darkTheme =
+            when (settingsSnapshot.themeMode) {
+                "dark" -> true
+                "light" -> false
+                else -> systemDark
+            }
         pureBlack = settingsSnapshot.pureBlack
         themeColor = Color(settingsSnapshot.accentColor)
     }
@@ -154,9 +155,10 @@ fun KzktApp(
                                 )
                             },
                             label = { Text(tab.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-                            ),
+                            colors =
+                                NavigationBarItemDefaults.colors(
+                                    indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                                ),
                         )
                     }
                 }

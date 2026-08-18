@@ -3,6 +3,7 @@ package com.kzkt.app.data
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.kzkt.app.util.KLog
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -57,6 +58,7 @@ object KeyCipher {
         } catch (e: Exception) {
             // Keystore unavailable (unlikely on API 26+): fall back to plaintext so
             // keys are never lost — at-rest protection degrades gracefully.
+            KLog.w("KZKT", "KeyCipher: encrypt failed — storing API key in plaintext: ${e.message}")
             plain
         }
     }
@@ -76,6 +78,7 @@ object KeyCipher {
             cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
             String(cipher.doFinal(encrypted), Charsets.UTF_8)
         } catch (e: Exception) {
+            KLog.w("KZKT", "KeyCipher: decrypt failed — returning value as-is (may be an API key that no longer works): ${e.message}")
             stored
         }
     }

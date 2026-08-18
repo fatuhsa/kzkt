@@ -2,6 +2,7 @@ package com.kzkt.app.data
 
 import android.content.Context
 import android.net.Uri
+import com.kzkt.app.util.KLog
 import org.json.JSONObject
 import java.io.File
 
@@ -11,10 +12,12 @@ import java.io.File
  * another device (e.g. via KDE Connect) and restored there.
  */
 object BackupManager {
-
     const val BACKUP_VERSION = 1
 
-    data class BackupResult(val ok: Boolean, val message: String)
+    data class BackupResult(
+        val ok: Boolean,
+        val message: String,
+    )
 
     /**
      * Build the backup JSON from the current repositories. Returns the JSON string
@@ -32,7 +35,15 @@ object BackupManager {
         root.put("glossary", JSONObject(glossary))
 
         val historyArr = org.json.JSONArray()
-        history.forEach { historyArr.put(JSONObject(com.google.gson.Gson().toJson(it))) }
+        history.forEach {
+            historyArr.put(
+                JSONObject(
+                    com.google.gson
+                        .Gson()
+                        .toJson(it),
+                ),
+            )
+        }
         root.put("history", historyArr)
 
         // Translation cache (translation memory) — optional, wrapped so a corrupt
@@ -42,7 +53,8 @@ object BackupManager {
             if (cacheFile.exists()) {
                 root.put("cache", JSONObject(cacheFile.readText()))
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            KLog.w("KZKT", "Backup: failed to include translation cache in backup: ${e.message}")
         }
 
         return root.toString()
@@ -71,9 +83,14 @@ object BackupManager {
                 val entries = mutableListOf<HistoryEntry>()
                 for (i in 0 until arr.length()) {
                     try {
-                        val entry = com.google.gson.Gson().fromJson(arr.get(i).toString(), HistoryEntry::class.java)
+                        val entry =
+                            com.google.gson
+                                .Gson()
+                                .fromJson(arr.get(i).toString(), HistoryEntry::class.java)
                         entries.add(entry)
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) {
+                        KLog.w("KZKT", "Backup: skipped corrupt history entry #$i during restore: ${e.message}")
+                    }
                 }
                 historyRepo.restoreAll(entries)
             }
@@ -99,7 +116,9 @@ object BackupManager {
             if (root.has("cache")) {
                 try {
                     File(context.filesDir, "translation_cache.json").writeText(root.getJSONObject("cache").toString())
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    KLog.w("KZKT", "Backup: failed to restore translation cache: ${e.message}")
+                }
             }
 
             BackupResult(true, "Backup restored successfully")
@@ -109,7 +128,10 @@ object BackupManager {
     }
 
     /** Write a backup string to a cache file (later shared / moved to MediaStore). */
-    fun writeToCache(context: Context, json: String): File {
+    fun writeToCache(
+        context: Context,
+        json: String,
+    ): File {
         val dir = File(context.cacheDir, "backups")
         dir.mkdirs()
         val file = File(dir, "kzkt_backup_${System.currentTimeMillis()}.json")
@@ -118,11 +140,17 @@ object BackupManager {
     }
 
     /** Read a backup string from any content URI. */
-    fun readFromUri(context: Context, uri: Uri): String? {
-        return try {
-            context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-        } catch (_: Exception) {
+    fun readFromUri(
+        context: Context,
+        uri: Uri,
+    ): String? =
+        try {
+            context.contentResolver
+                .openInputStream(uri)
+                ?.bufferedReader()
+                ?.use { it.readText() }
+        } catch (e: Exception) {
+            KLog.w("KZKT", "Backup: failed to read backup from URI $uri: ${e.message}")
             null
         }
-    }
 }

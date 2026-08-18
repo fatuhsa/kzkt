@@ -1,34 +1,38 @@
 package com.kzkt.app.ui
 
 import android.app.Application
-import com.kzkt.app.KzktApplication
-import android.net.Uri
-import android.os.Environment
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.gson.JsonParser
+import com.kzkt.app.KzktApplication
 import com.kzkt.app.core.Config
 import com.kzkt.app.core.PipelineResult
 import com.kzkt.app.core.TextRenderer
 import com.kzkt.app.core.YoloOnnx
+import com.kzkt.app.core.modelsEndpointFor
 import com.kzkt.app.data.HistoryEntry
 import com.kzkt.app.data.HistoryRepository
 import com.kzkt.app.data.SettingsRepository
-import com.google.gson.JsonParser
+import com.kzkt.app.util.KLog
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
-class MainViewModel(application: Application) : AndroidViewModel(application) {
-
+class MainViewModel(
+    application: Application,
+) : AndroidViewModel(application) {
     val settingsRepo = SettingsRepository(application)
     val historyRepo = HistoryRepository(application)
-    val glossaryRepo = com.kzkt.app.data.GlossaryRepository(application)
+    val glossaryRepo =
+        com.kzkt.app.data
+            .GlossaryRepository(application)
 
     // Observable state — all writes happen on the Main thread (see [post]).
     val settings = mutableStateOf(SettingsRepository.Settings())
@@ -46,6 +50,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val translationTotal = mutableStateOf(0)
     val translationDone = mutableStateOf(0)
     val canRetry = mutableStateOf(false)
+
     // Per-file batch status: path -> "processing" / "done" / "failed" (feature 1.35.0).
     val pageStatus = mutableStateMapOf<String, String>()
 
@@ -64,7 +69,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val modelsLoading = mutableStateOf(false)
 
     // Provider health-check state ("Test API Key")
-    data class ProviderTestState(val loading: Boolean = false, val ok: Boolean? = null, val message: String = "")
+    data class ProviderTestState(
+        val loading: Boolean = false,
+        val ok: Boolean? = null,
+        val message: String = "",
+    )
+
     val providerTestState = mutableStateOf<ProviderTestState?>(null)
 
     // ── Self-update state (GitHub Releases) ──
@@ -79,8 +89,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val error: String? = null,
         val upToDate: Boolean = false,
     )
+
     val updateState = mutableStateOf(UpdateUiState())
     private var autoCheckDone = false
+
     // Guards against concurrent checks. Can't rely on `updateState.checking` for
     // this because background checks never set it (that flag only shows the
     // dialog for manual checks). Volatile: written on the IO thread (finally)
@@ -124,20 +136,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 when (event) {
                     is com.kzkt.app.core.UpdateDownloadTracker.Event.Progress -> {
                         val s = updateState.value
-                        updateState.value = s.copy(
-                            downloading = true,
-                            downloadProgress = event.progress.fraction,
-                            downloadedBytes = event.progress.downloadedBytes,
-                            totalBytes = event.progress.totalBytes,
-                            downloadSpeedBps = event.progress.speedBytesPerSec,
-                        )
+                        updateState.value =
+                            s.copy(
+                                downloading = true,
+                                downloadProgress = event.progress.fraction,
+                                downloadedBytes = event.progress.downloadedBytes,
+                                totalBytes = event.progress.totalBytes,
+                                downloadSpeedBps = event.progress.speedBytesPerSec,
+                            )
                     }
                     com.kzkt.app.core.UpdateDownloadTracker.Event.Completed -> updateState.value = UpdateUiState()
                     com.kzkt.app.core.UpdateDownloadTracker.Event.Cancelled -> updateState.value = UpdateUiState()
-                    is com.kzkt.app.core.UpdateDownloadTracker.Event.Failed -> updateState.value = updateState.value.copy(
-                        downloading = false,
-                        error = event.message,
-                    )
+                    is com.kzkt.app.core.UpdateDownloadTracker.Event.Failed ->
+                        updateState.value =
+                            updateState.value.copy(
+                                downloading = false,
+                                error = event.message,
+                            )
                 }
             }
         }
@@ -165,81 +180,88 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             fun scheduleFlush() {
                 if (flushJob?.isActive == true) return
-                flushJob = viewModelScope.launch {
-                    kotlinx.coroutines.delay(33) // coalesce window (~30 Hz max UI updates)
-                    val logs = pendingLogs.toList()
-                    val progress = pendingProgress
-                    val results = pendingResults.toList()
-                    val completed = pendingCompleted
-                    val error = pendingError
-                    pendingLogs.clear()
-                    pendingProgress = null
-                    pendingResults.clear()
-                    pendingCompleted = false
-                    pendingError = null
-                    // Restore the touch-up editor data (bubbles + translations) for the
-                    // latest finished file — decoded off the main thread, then handed to
-                    // the UI so the reader's pencil button works for fresh results too.
-                    val latestResult = results.lastOrNull()
-                    val editMeta = latestResult?.let { r ->
-                        kotlinx.coroutines.withContext(Dispatchers.IO) {
-                            com.kzkt.app.data.EditMetadataRepository(getApplication()).loadForOutput(r.path)
-                        }
-                    }
-                    post {
-                        if (logs.isNotEmpty()) translationLog.addAll(logs)
-                        if (pendingStatus.isNotEmpty()) pageStatus.putAll(pendingStatus)
-                        if (progress != null) {
-                            translationProgress.value = progress.done.toFloat() / maxOf(1, progress.total)
-                            translationDone.value = progress.done
-                            translationTotal.value = progress.total
-                            translationActive.value = progress.done < progress.total
-                        }
-                        for (result in results) {
-                            if (!resultPaths.contains(result.path)) {
-                                resultPaths.add(result.path)
+                flushJob =
+                    viewModelScope.launch {
+                        kotlinx.coroutines.delay(33) // coalesce window (~30 Hz max UI updates)
+                        val logs = pendingLogs.toList()
+                        val progress = pendingProgress
+                        val results = pendingResults.toList()
+                        val completed = pendingCompleted
+                        val error = pendingError
+                        pendingLogs.clear()
+                        pendingProgress = null
+                        pendingResults.clear()
+                        pendingCompleted = false
+                        pendingError = null
+                        // Restore the touch-up editor data (bubbles + translations) for the
+                        // latest finished file — decoded off the main thread, then handed to
+                        // the UI so the reader's pencil button works for fresh results too.
+                        val latestResult = results.lastOrNull()
+                        val editMeta =
+                            latestResult?.let { r ->
+                                kotlinx.coroutines
+                                    .withContext(Dispatchers.IO) {
+                                        com.kzkt.app.data
+                                            .EditMetadataRepository(getApplication())
+                                            .loadForOutput(r.path)
+                                    }?.let { m -> r to m }
                             }
-                            currentPreviewPath.value = result.path
+                        post {
+                            if (logs.isNotEmpty()) translationLog.addAll(logs)
+                            if (pendingStatus.isNotEmpty()) pageStatus.putAll(pendingStatus)
+                            if (progress != null) {
+                                translationProgress.value = progress.done.toFloat() / maxOf(1, progress.total)
+                                translationDone.value = progress.done
+                                translationTotal.value = progress.total
+                                translationActive.value = progress.done < progress.total
+                            }
+                            for (result in results) {
+                                if (!resultPaths.contains(result.path)) {
+                                    resultPaths.add(result.path)
+                                }
+                                currentPreviewPath.value = result.path
+                            }
+                            if (editMeta != null) {
+                                val (latest, meta) = editMeta
+                                lastResultForEditing.value =
+                                    PipelineResult(
+                                        outputPath = latest.path,
+                                        originalBitmap = meta.originalBitmap,
+                                        translations = meta.translations,
+                                        coordinateMap = meta.coordinateMap,
+                                    )
+                            }
+                            if (completed) {
+                                // Tail events (final Progress + Completed) can arrive while a
+                                // flush is already in flight — force the UI to the finished
+                                // state even if the last Progress event was coalesced away.
+                                translationActive.value = false
+                                canRetry.value = false
+                                translationDone.value = translationTotal.value
+                                translationProgress.value = 1f
+                            }
+                            if (error != null) {
+                                translationLog.add("[!] Error: $error")
+                                translationActive.value = false
+                                canRetry.value = com.kzkt.app.core.TranslationProgressTracker.cachedPageData != null
+                            }
                         }
-                        if (editMeta != null && latestResult != null) {
-                            lastResultForEditing.value = PipelineResult(
-                                outputPath = latestResult.path,
-                                originalBitmap = editMeta.originalBitmap,
-                                translations = editMeta.translations,
-                                coordinateMap = editMeta.coordinateMap,
-                            )
-                        }
-                        if (completed) {
-                            // Tail events (final Progress + Completed) can arrive while a
-                            // flush is already in flight — force the UI to the finished
-                            // state even if the last Progress event was coalesced away.
-                            translationActive.value = false
-                            canRetry.value = false
-                            translationDone.value = translationTotal.value
-                            translationProgress.value = 1f
-                        }
-                        if (error != null) {
-                            translationLog.add("[!] Error: $error")
-                            translationActive.value = false
-                            canRetry.value = com.kzkt.app.core.TranslationProgressTracker.cachedPageData != null
+                        // Tail-drain: events that arrived while this flush was suspended
+                        // (inside the 33 ms window or the IO edit-meta load) sat in the
+                        // pending buffers but scheduleFlush() bailed because flushJob was
+                        // still active. Without this second pass the UI can stick on e.g.
+                        // "3/4" with a Cancel button after the worker already finished.
+                        flushJob = null
+                        if (
+                            pendingLogs.isNotEmpty() ||
+                            pendingProgress != null ||
+                            pendingResults.isNotEmpty() ||
+                            pendingCompleted ||
+                            pendingError != null
+                        ) {
+                            scheduleFlush()
                         }
                     }
-                    // Tail-drain: events that arrived while this flush was suspended
-                    // (inside the 33 ms window or the IO edit-meta load) sat in the
-                    // pending buffers but scheduleFlush() bailed because flushJob was
-                    // still active. Without this second pass the UI can stick on e.g.
-                    // "3/4" with a Cancel button after the worker already finished.
-                    flushJob = null
-                    if (
-                        pendingLogs.isNotEmpty() ||
-                        pendingProgress != null ||
-                        pendingResults.isNotEmpty() ||
-                        pendingCompleted ||
-                        pendingError != null
-                    ) {
-                        scheduleFlush()
-                    }
-                }
             }
 
             com.kzkt.app.core.TranslationProgressTracker.progressFlow.collect { event ->
@@ -261,15 +283,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         pipelineLaunched = true
 
         viewModelScope.launch(Dispatchers.IO) {
-            val yInstance = KzktApplication.yolo ?: YoloOnnx(context).also {
-                val ok = it.initialize()
-                if (ok) {
-                    KzktApplication.yolo = it
+            val yInstance =
+                KzktApplication.yolo ?: YoloOnnx(context).also {
+                    val ok = it.initialize()
+                    if (ok) {
+                        KzktApplication.yolo = it
+                    }
                 }
-            }
-            val rInstance = KzktApplication.textRenderer ?: TextRenderer(context).also {
-                KzktApplication.textRenderer = it
-            }
+            val rInstance =
+                KzktApplication.textRenderer ?: TextRenderer(context).also {
+                    KzktApplication.textRenderer = it
+                }
             yolo = yInstance
             textRenderer = rInstance
 
@@ -295,7 +319,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         translationActive.value = true
         canRetry.value = false
-        com.kzkt.app.core.TranslationProgressTracker.clearCache()
+        com.kzkt.app.core.TranslationProgressTracker
+            .clearCache()
         translationLog.clear()
         resultPaths.clear()
         pageStatus.clear()
@@ -341,7 +366,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun launchTranslationWorker() {
-        com.kzkt.app.core.TranslationWorker.startTranslation(getApplication(), selectedFiles.toList())
+        com.kzkt.app.core.TranslationWorker
+            .startTranslation(getApplication(), selectedFiles.toList())
     }
 
     private fun apiKeyFor(
@@ -384,7 +410,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         translationActive.value = true
         canRetry.value = false
-        com.kzkt.app.core.TranslationProgressTracker.clearCache()
+        com.kzkt.app.core.TranslationProgressTracker
+            .clearCache()
         translationLog.clear()
         resultPaths.clear()
         pageStatus.clear()
@@ -396,7 +423,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         showInteractiveEditor.value = false
         translationLog.add("[System] Retrying ${failed.size} failed page(s)...")
 
-        com.kzkt.app.core.TranslationWorker.startTranslation(getApplication(), failed)
+        com.kzkt.app.core.TranslationWorker
+            .startTranslation(getApplication(), failed)
     }
 
     /**
@@ -412,7 +440,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         translationActive.value = true
         canRetry.value = false
-        com.kzkt.app.core.TranslationProgressTracker.clearCache()
+        com.kzkt.app.core.TranslationProgressTracker
+            .clearCache()
         translationLog.clear()
         resultPaths.clear()
         pageStatus.clear()
@@ -424,7 +453,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         showInteractiveEditor.value = false
         translationLog.add("[System] Retrying \"${entry.fileName}\" from History...")
 
-        com.kzkt.app.core.TranslationWorker.startTranslation(getApplication(), listOf(entry.inputPath))
+        com.kzkt.app.core.TranslationWorker
+            .startTranslation(getApplication(), listOf(entry.inputPath))
     }
 
     fun retryTranslation() {
@@ -432,11 +462,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         translationActive.value = true
         translationLog.add("[System] Retrying from last cached step...")
-        com.kzkt.app.core.TranslationWorker.startTranslation(getApplication(), selectedFiles.toList(), retry = true)
+        com.kzkt.app.core.TranslationWorker
+            .startTranslation(getApplication(), selectedFiles.toList(), retry = true)
     }
 
     fun cancelTranslation() {
-        com.kzkt.app.core.TranslationWorker.cancelTranslation(getApplication())
+        com.kzkt.app.core.TranslationWorker
+            .cancelTranslation(getApplication())
         translationActive.value = false
         canRetry.value = com.kzkt.app.core.TranslationProgressTracker.cachedPageData != null
     }
@@ -446,7 +478,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         selectedFiles.addAll(paths)
         canRetry.value = false
         pageStatus.clear()
-        com.kzkt.app.core.TranslationProgressTracker.clearCache()
+        com.kzkt.app.core.TranslationProgressTracker
+            .clearCache()
     }
 
     fun appendFiles(paths: List<String>) {
@@ -693,17 +726,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         apiKey: String,
     ): List<String> {
         return try {
-            var normalized = baseUrl.trimEnd('/')
-            if (normalized.endsWith("/chat/completions")) normalized = normalized.removeSuffix("/chat/completions")
-            if (normalized.endsWith("/v1")) normalized = normalized.removeSuffix("/v1")
-            val endpoint =
-                if (providerKey == "gemini") {
-                    val base = if (normalized.endsWith("/v1beta")) normalized else "$normalized/v1beta"
-                    "$base/models"
-                } else {
-                    "$normalized/v1/models"
-                }
-
+            val endpoint = modelsEndpointFor(providerKey, baseUrl)
             val requestBuilder = Request.Builder().url(endpoint)
             if (apiKey.isNotBlank()) {
                 when (providerKey) {
@@ -729,6 +752,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             models
         } catch (e: Exception) {
+            KLog.w("KZKT", "Failed to fetch provider models: ${e.message}")
             emptyList()
         }
     }

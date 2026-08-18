@@ -9,7 +9,6 @@ class OpenCodeGoProvider(
     customUrl: String = "",
     useSse: Boolean = true,
 ) : OpenAICompatProvider(apiKey, modelName, customUrl, useSse = useSse) {
-
     override val providerName: String = "OpenCode Go"
     override val defaultEndpoint: String = "https://opencode.ai/zen/go/v1/chat/completions"
 }

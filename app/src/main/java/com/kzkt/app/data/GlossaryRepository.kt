@@ -6,16 +6,17 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.File
 
-class GlossaryRepository(private val context: Context) {
-
+class GlossaryRepository(
+    private val context: Context,
+) {
     // All disk I/O runs on this scope so constructing the repo (MainViewModel field,
     // UI thread) and add/remove taps never block the main thread.
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -84,7 +85,10 @@ class GlossaryRepository(private val context: Context) {
         }
     }
 
-    fun addTerm(original: String, translation: String) {
+    fun addTerm(
+        original: String,
+        translation: String,
+    ) {
         if (original.isBlank() || translation.isBlank()) return
         ioScope.launch {
             mutationMutex.withLock {

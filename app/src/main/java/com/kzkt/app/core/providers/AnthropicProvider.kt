@@ -24,7 +24,6 @@ class AnthropicProvider(
     /** When false, skip the SSE stream and use the plain Messages call. */
     private val useSse: Boolean = true,
 ) : LlmProvider {
-
     override val providerName: String = "Anthropic"
     private val apiBaseUrl = if (customUrl.isNotBlank()) customUrl.trimEnd('/') else "https://api.anthropic.com"
 
@@ -32,48 +31,63 @@ class AnthropicProvider(
     // payload stays small for the translation mosaics.
     private val maxImageDimension: Int = 4096
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
-        .readTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
-        .writeTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
-        .build()
+    private val client =
+        OkHttpClient
+            .Builder()
+            .connectTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
+            .readTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
+            .writeTimeout(timeoutSec.toLong(), TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
 
     private val gson = Gson()
 
-    override suspend fun translateImage(image: Bitmap, prompt: String): String? {
+    override suspend fun translateImage(
+        image: Bitmap,
+        prompt: String,
+    ): String? {
         val prepared = ImageProcessor.prepareImageForProvider(image, maxImageDimension)
         val base64 = ImageProcessor.bitmapToBase64(prepared)
         if (prepared !== image && !prepared.isRecycled) prepared.recycle()
-        val payload = mapOf(
-            "model" to modelName,
-            "max_tokens" to 4096,
-            "temperature" to 0,
-            "messages" to listOf(mapOf(
-                "role" to "user",
-                "content" to listOf(
-                    mapOf(
-                        "type" to "image",
-                        "source" to mapOf(
-                            "type" to "base64",
-                            "media_type" to "image/jpeg",
-                            "data" to base64,
+        val payload =
+            mapOf(
+                "model" to modelName,
+                "max_tokens" to 4096,
+                "temperature" to 0,
+                "messages" to
+                    listOf(
+                        mapOf(
+                            "role" to "user",
+                            "content" to
+                                listOf(
+                                    mapOf(
+                                        "type" to "image",
+                                        "source" to
+                                            mapOf(
+                                                "type" to "base64",
+                                                "media_type" to "image/jpeg",
+                                                "data" to base64,
+                                            ),
+                                    ),
+                                    mapOf("type" to "text", "text" to prompt),
+                                ),
                         ),
                     ),
-                    mapOf("type" to "text", "text" to prompt),
-                ),
-            )),
-        )
+            )
         return executeWithStreamFallback(payload)
     }
 
-    override suspend fun translateText(textJson: String, prompt: String): String? {
-        val payload = mapOf(
-            "model" to modelName,
-            "max_tokens" to 4096,
-            "temperature" to 0,
-            "messages" to listOf(mapOf("role" to "user", "content" to prompt)),
-        )
+    override suspend fun translateText(
+        textJson: String,
+        prompt: String,
+    ): String? {
+        val payload =
+            mapOf(
+                "model" to modelName,
+                "max_tokens" to 4096,
+                "temperature" to 0,
+                "messages" to listOf(mapOf("role" to "user", "content" to prompt)),
+            )
         return executeWithStreamFallback(payload)
     }
 
@@ -96,15 +110,15 @@ class AnthropicProvider(
         }
     }
 
-    private fun buildRequest(payload: Map<String, Any>): Request {
-        return Request.Builder()
+    private fun buildRequest(payload: Map<String, Any>): Request =
+        Request
+            .Builder()
             .url("$apiBaseUrl/v1/messages")
             .addHeader("Content-Type", "application/json")
             .addHeader("x-api-key", apiKey)
             .addHeader("anthropic-version", "2023-06-01")
             .post(gson.toJson(payload).toRequestBody("application/json".toMediaTypeOrNull()))
             .build()
-    }
 
     private suspend fun executePlain(request: Request): String? {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {

@@ -1,6 +1,7 @@
 package com.kzkt.app.util
 
 import com.google.gson.GsonBuilder
+import com.google.gson.Strictness
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
@@ -8,10 +9,8 @@ import java.io.StringReader
 
 /**
  * JSON utilities — parsing and sanitizing LLM responses.
- * Ported from the original Python image service bersihkan_json_dari_gemini()
  */
 object JsonUtils {
-
     /**
      * Strip markdown code fences and extract the first JSON object from raw text.
      * Handles ```json ... ```, ``` ... ```, and plain JSON.
@@ -56,10 +55,11 @@ object JsonUtils {
     fun parseTranslationMap(cleanedJson: String): Map<String, String> {
         try {
             val type = object : TypeToken<Map<String, String>>() {}.type
-            val strict = GsonBuilder().setLenient().create().fromJson<Map<String, String>>(cleanedJson, type)
+            val strict = GsonBuilder().setStrictness(Strictness.LENIENT).create().fromJson<Map<String, String>>(cleanedJson, type)
             return strict ?: emptyMap()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             // duplicate keys (or similar) → tolerant re-parse
+            KLog.w("KZKT", "Strict translation JSON parse failed — falling back to tolerant scan: ${e.message}")
         }
         return scanDuplicateTolerant(cleanedJson)
     }
@@ -67,7 +67,7 @@ object JsonUtils {
     private fun scanDuplicateTolerant(json: String): Map<String, String> {
         val result = linkedMapOf<String, String>()
         val reader = JsonReader(StringReader(json))
-        reader.isLenient = true
+        reader.setStrictness(Strictness.LENIENT)
         try {
             if (reader.peek() != JsonToken.BEGIN_OBJECT) return result
             reader.beginObject()
@@ -86,8 +86,9 @@ object JsonUtils {
                 }
             }
             reader.endObject()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             // Malformed LLM output: salvage whatever complete pairs we got before the failure.
+            KLog.w("KZKT", "Tolerant translation JSON scan failed after partial progress (${result.size} pairs kept): ${e.message}")
         }
         return result
     }

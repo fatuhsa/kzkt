@@ -5,21 +5,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ConstantsTest {
-
     @Test
     fun `prompt embeds target language and example translations`() {
         val prompt = Constants.buildPrompt("Indonesian")
         assertTrue(prompt.contains("to Indonesian"))
-        assertTrue(prompt.contains("Cepat bangun!"))     // example value 1
-        assertTrue(prompt.contains("Ibu... tunggu..."))  // example value 3
+        assertTrue(prompt.contains("Cepat bangun!")) // example value 1
+        assertTrue(prompt.contains("Ibu... tunggu...")) // example value 3
     }
 
     @Test
     fun `glossary rules are injected when glossary provided`() {
-        val prompt = Constants.buildPrompt(
-            "English",
-            glossary = mapOf("Roronoa Zoro" to "Roronoa Zoro", "Bankai" to "Final Release")
-        )
+        val prompt =
+            Constants.buildPrompt(
+                "English",
+                glossary = mapOf("Roronoa Zoro" to "Roronoa Zoro", "Bankai" to "Final Release"),
+            )
         assertTrue(prompt.contains("Bankai"))
         assertTrue(prompt.contains("GLOSSARY RULES"))
     }

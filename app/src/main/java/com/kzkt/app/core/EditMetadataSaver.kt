@@ -2,6 +2,8 @@ package com.kzkt.app.core
 
 import android.content.Context
 import android.graphics.Bitmap
+import com.kzkt.app.util.KLog
+import java.io.File
 
 /**
  * Persists bubble coordinates + translations + the original page bitmap so the
@@ -12,7 +14,6 @@ class EditMetadataSaver(
     private val context: Context?,
     private val targetLanguage: String,
 ) {
-
     /**
      * Keyed by output file name, which is preserved when publishing to MediaStore.
      */
@@ -21,15 +22,17 @@ class EditMetadataSaver(
         original: Bitmap,
         translations: Map<String, String>,
         coordinates: Map<String, IntArray>,
-        rawTexts: Map<String, String> = emptyMap()
+        rawTexts: Map<String, String> = emptyMap(),
     ) {
         val ctx = context ?: return
         if (translations.isEmpty() || coordinates.isEmpty()) return
         try {
-            com.kzkt.app.data.EditMetadataRepository(ctx)
+            com.kzkt.app.data
+                .EditMetadataRepository(ctx)
                 .saveForOutput(outputPath, original, translations, coordinates, targetLanguage, rawTexts.ifEmpty { null })
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             // Best-effort — never fail a translation because metadata couldn't be saved.
+            KLog.w("KZKT", "Edit metadata: save skipped for ${File(outputPath).name}: ${e.message}")
         }
     }
 
@@ -69,10 +72,12 @@ class EditMetadataSaver(
         }
         if (translations.isEmpty() || coords.isEmpty()) return
         try {
-            com.kzkt.app.data.EditMetadataRepository(ctx)
+            com.kzkt.app.data
+                .EditMetadataRepository(ctx)
                 .saveForOutput(outputPath, combined, translations, coords, targetLanguage, rawTexts.ifEmpty { null })
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             // Best-effort — never fail a translation because metadata couldn't be saved.
+            KLog.w("KZKT", "Edit metadata: landscape save skipped for ${File(outputPath).name}: ${e.message}")
         }
     }
 }

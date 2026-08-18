@@ -30,7 +30,10 @@ import androidx.compose.ui.unit.dp
  * theme (colors/fonts come from the surrounding [MaterialTheme]).
  */
 @Composable
-fun MarkdownText(markdown: String, modifier: Modifier = Modifier) {
+fun MarkdownText(
+    markdown: String,
+    modifier: Modifier = Modifier,
+) {
     val colors = MaterialTheme.colorScheme
     val blocks = remember(markdown) { parseBlocks(markdown) }
 
@@ -47,9 +50,18 @@ fun MarkdownText(markdown: String, modifier: Modifier = Modifier) {
 
 /** One parsed block of a markdown document (header / bullet / paragraph). */
 private sealed interface Block {
-    data class Header(val level: Int, val raw: String) : Block
-    data class Bullet(val raw: String) : Block
-    data class Paragraph(val raw: String) : Block
+    data class Header(
+        val level: Int,
+        val raw: String,
+    ) : Block
+
+    data class Bullet(
+        val raw: String,
+    ) : Block
+
+    data class Paragraph(
+        val raw: String,
+    ) : Block
 }
 
 /** Pure parse step — no composables involved, safe to call from [remember]. */
@@ -103,12 +115,17 @@ private fun parseBlocks(markdown: String): List<Block> {
 }
 
 @Composable
-private fun MarkdownHeader(raw: String, level: Int, colors: ColorScheme) {
-    val style = when (level) {
-        1 -> MaterialTheme.typography.titleLarge
-        2 -> MaterialTheme.typography.titleMedium
-        else -> MaterialTheme.typography.titleSmall
-    }
+private fun MarkdownHeader(
+    raw: String,
+    level: Int,
+    colors: ColorScheme,
+) {
+    val style =
+        when (level) {
+            1 -> MaterialTheme.typography.titleLarge
+            2 -> MaterialTheme.typography.titleMedium
+            else -> MaterialTheme.typography.titleSmall
+        }
     Text(
         text = renderInline(raw, colors, boldWeight = FontWeight.Bold),
         style = style,
@@ -118,7 +135,10 @@ private fun MarkdownHeader(raw: String, level: Int, colors: ColorScheme) {
 }
 
 @Composable
-private fun MarkdownBullet(raw: String, colors: ColorScheme) {
+private fun MarkdownBullet(
+    raw: String,
+    colors: ColorScheme,
+) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("•", style = MaterialTheme.typography.bodySmall, color = colors.primary)
         Text(
@@ -130,7 +150,10 @@ private fun MarkdownBullet(raw: String, colors: ColorScheme) {
 }
 
 @Composable
-private fun MarkdownBody(raw: String, colors: ColorScheme) {
+private fun MarkdownBody(
+    raw: String,
+    colors: ColorScheme,
+) {
     Text(
         text = renderInline(raw, colors, boldWeight = FontWeight.SemiBold),
         style = MaterialTheme.typography.bodySmall,
@@ -142,7 +165,11 @@ private val INLINE_PATTERN = Regex("""(\*\*.+?\*\*)|(`[^`]+`)|(\[[^\]]+\]\([^)]+
 private val LINK_PATTERN = Regex("""\[([^\]]+)\]\(([^)]+)\)""")
 
 /** Convert a single line's inline markers (**bold**, `code`, [text](url)) into spans. */
-private fun renderInline(text: String, colors: ColorScheme, boldWeight: FontWeight): AnnotatedString {
+private fun renderInline(
+    text: String,
+    colors: ColorScheme,
+    boldWeight: FontWeight,
+): AnnotatedString {
     val bold = SpanStyle(fontWeight = boldWeight)
     val code = SpanStyle(fontFamily = FontFamily.Monospace, background = colors.surfaceVariant)
     val link = SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline)
