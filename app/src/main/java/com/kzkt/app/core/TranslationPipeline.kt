@@ -971,6 +971,9 @@ class TranslationPipeline(
 
         imageSaver.save(renderBitmap, pageOutputPath)
 
+        val finalRawTexts = if (params.engine.useLocalOcr) batchRawTexts else emptyMap()
+        editMetadataSaver.save(pageOutputPath, page.pil, pageTranslations, page.coordMap, finalRawTexts)
+
         // Immediately recycle page full-res bitmap, render bitmap, and crop bitmaps for this page
         if (renderBitmap != page.pil && !renderBitmap.isRecycled) renderBitmap.recycle()
         recyclePage(page)

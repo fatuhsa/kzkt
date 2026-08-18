@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Multi-Image Parallel Batching**: selecting multiple images (`files.size > 1`) now runs through the batched translation pipeline in groups of up to 6 pages in parallel, combining YOLO bubble detection and making unified single-request LLM calls instead of sequential one-by-one translation, matching PDF speed (3x–5x faster).
+- **Touch-up Metadata Persistence for Batch Pages**: batch and PDF translated pages now save full edit metadata (`EditMetadataRepository`), allowing the interactive bubble editor to be used on all batch results.
+
+### Fixed
+
+- **File Card Progress Spinner on Re-Translation**: fixed an issue where the circular loading animation on file cards stopped spinning or failed to appear when translating again or re-running batches by refining the state check (`state != "done" && state != "failed"`) and resetting `isCancelled` state properly.
+
 ## [v1.37.0] - 2026-08-18
 
 ### Added
