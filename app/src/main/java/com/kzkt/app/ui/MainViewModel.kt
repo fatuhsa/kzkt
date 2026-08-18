@@ -319,11 +319,13 @@ class MainViewModel(
 
         translationActive.value = true
         canRetry.value = false
+        com.kzkt.app.core.TranslationProgressTracker.isCancelled = false
         com.kzkt.app.core.TranslationProgressTracker
             .clearCache()
         translationLog.clear()
         resultPaths.clear()
         pageStatus.clear()
+        selectedFiles.forEach { pageStatus[it] = "processing" }
         translationProgress.value = 0f
         translationTotal.value = selectedFiles.size
         translationDone.value = 0
@@ -410,11 +412,13 @@ class MainViewModel(
 
         translationActive.value = true
         canRetry.value = false
+        com.kzkt.app.core.TranslationProgressTracker.isCancelled = false
         com.kzkt.app.core.TranslationProgressTracker
             .clearCache()
         translationLog.clear()
         resultPaths.clear()
         pageStatus.clear()
+        failed.forEach { pageStatus[it] = "processing" }
         translationProgress.value = 0f
         translationTotal.value = failed.size
         translationDone.value = 0
@@ -440,11 +444,13 @@ class MainViewModel(
         }
         translationActive.value = true
         canRetry.value = false
+        com.kzkt.app.core.TranslationProgressTracker.isCancelled = false
         com.kzkt.app.core.TranslationProgressTracker
             .clearCache()
         translationLog.clear()
         resultPaths.clear()
         pageStatus.clear()
+        pageStatus[entry.inputPath] = "processing"
         translationProgress.value = 0f
         translationTotal.value = 1
         translationDone.value = 0
@@ -461,6 +467,8 @@ class MainViewModel(
         if (translationActive.value || selectedFiles.isEmpty()) return
 
         translationActive.value = true
+        com.kzkt.app.core.TranslationProgressTracker.isCancelled = false
+        selectedFiles.forEach { if (pageStatus[it] != "done") pageStatus[it] = "processing" }
         translationLog.add("[System] Retrying from last cached step...")
         com.kzkt.app.core.TranslationWorker
             .startTranslation(getApplication(), selectedFiles.toList(), retry = true)
