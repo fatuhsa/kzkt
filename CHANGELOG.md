@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [v1.37.1] - 2026-08-18
+
 ### Added
 
 - **Multi-Image Parallel Batching**: selecting multiple images (`files.size > 1`) now runs through the batched translation pipeline in groups of up to 6 pages in parallel, combining YOLO bubble detection and making unified single-request LLM calls instead of sequential one-by-one translation, matching PDF speed (3x–5x faster).
