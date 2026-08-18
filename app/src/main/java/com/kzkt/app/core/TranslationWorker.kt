@@ -26,6 +26,8 @@ import com.kzkt.app.core.providers.OpenRouterProvider
 import com.kzkt.app.core.providers.ProviderFactory
 import com.kzkt.app.core.providers.ZenProvider
 import com.kzkt.app.data.EditMetadataRepository
+import com.kzkt.app.data.HistoryEntry
+import com.kzkt.app.data.HistoryRepository
 import com.kzkt.app.data.SettingsRepository
 import com.kzkt.app.data.TranslationCacheRepository
 import com.kzkt.app.util.KLog
@@ -418,10 +420,10 @@ class TranslationWorker(
                                     KLog.w("KZKT", "Failed to rekey edit metadata for ${result.outputPath}: ${e.message}")
                                 }
                                 try {
-                                    val historyRepo = com.kzkt.app.data.HistoryRepository(applicationContext)
+                                    val historyRepo = HistoryRepository(applicationContext)
                                     historyRepo.deleteByInputPath(originalPath)
                                     historyRepo.record(
-                                        com.kzkt.app.data.HistoryEntry(
+                                        HistoryEntry(
                                             timestamp = System.currentTimeMillis(),
                                             fileName = originalFileName,
                                             outputPath = publicPath,
@@ -444,8 +446,8 @@ class TranslationWorker(
                             emitLog("[!] Failed translation for $originalFileName")
                             emitPageStatus(originalPath, "failed")
                             try {
-                                com.kzkt.app.data.HistoryRepository(applicationContext).record(
-                                    com.kzkt.app.data.HistoryEntry(
+                                HistoryRepository(applicationContext).record(
+                                    HistoryEntry(
                                         timestamp = System.currentTimeMillis(),
                                         fileName = originalFileName,
                                         outputPath = "",
@@ -484,8 +486,8 @@ class TranslationWorker(
                             emitLog("[!] Could not read PDF: $fileName")
                             emitPageStatus(path, "failed")
                             try {
-                                com.kzkt.app.data.HistoryRepository(applicationContext).record(
-                                    com.kzkt.app.data.HistoryEntry(
+                                HistoryRepository(applicationContext).record(
+                                    HistoryEntry(
                                         timestamp = System.currentTimeMillis(),
                                         fileName = fileName,
                                         outputPath = "",
@@ -592,7 +594,7 @@ class TranslationWorker(
                                                 .HistoryRepository(applicationContext)
                                         historyRepo.deleteByInputPath(path)
                                         historyRepo.record(
-                                            com.kzkt.app.data.HistoryEntry(
+                                            HistoryEntry(
                                                 timestamp = System.currentTimeMillis(),
                                                 fileName = fileName,
                                                 outputPath = publicPath,
@@ -621,8 +623,8 @@ class TranslationWorker(
                         emitPageStatus(path, if (pdfSaved) "done" else "failed")
                         if (!pdfSaved) {
                             try {
-                                com.kzkt.app.data.HistoryRepository(applicationContext).record(
-                                    com.kzkt.app.data.HistoryEntry(
+                                HistoryRepository(applicationContext).record(
+                                    HistoryEntry(
                                         timestamp = System.currentTimeMillis(),
                                         fileName = fileName,
                                         outputPath = "",
@@ -671,7 +673,7 @@ class TranslationWorker(
                                             .HistoryRepository(applicationContext)
                                     historyRepo.deleteByInputPath(path)
                                     historyRepo.record(
-                                        com.kzkt.app.data.HistoryEntry(
+                                        HistoryEntry(
                                             timestamp = System.currentTimeMillis(),
                                             fileName = fileName,
                                             outputPath = publicPath,
@@ -694,8 +696,8 @@ class TranslationWorker(
                             emitLog("[!] Failed translation for $fileName")
                             emitPageStatus(path, "failed")
                             try {
-                                com.kzkt.app.data.HistoryRepository(applicationContext).record(
-                                    com.kzkt.app.data.HistoryEntry(
+                                HistoryRepository(applicationContext).record(
+                                    HistoryEntry(
                                         timestamp = System.currentTimeMillis(),
                                         fileName = fileName,
                                         outputPath = "",
