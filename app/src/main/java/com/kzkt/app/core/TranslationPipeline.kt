@@ -207,17 +207,11 @@ class TranslationPipeline(
     ): PipelineResult {
         onProgress("Translating: ${File(inputPath).name}")
 
-        val mat = ImageProcessor.bitmapToMat(bitmap)
-        val imgHeight = mat.rows()
-        val imgWidth = mat.cols()
+        val imgHeight = bitmap.height
+        val imgWidth = bitmap.width
 
         // ── YOLO Detection (3-stage cascade) + box filtering ──
-        val filtered =
-            try {
-                pagePreparer.detectBubbles(bitmap, isCancelled)
-            } finally {
-                mat.release()
-            }
+        val filtered = pagePreparer.detectBubbles(bitmap, isCancelled)
         if (isCancelled()) return PipelineResult(null, failed = true)
 
         if (params.engine.enableDevLogs) {
@@ -343,16 +337,18 @@ class TranslationPipeline(
             if (id != null) normalizedTranslations[id] = text
         }
 
-        val workingMat = ImageProcessor.bitmapToMat(bitmap)
         val resultBitmap =
-            try {
-                if (params.render.useInpainting) {
-                    onProgress("  [OpenCV Inpainting] Erasing original text strokes (Parallel)...")
+            if (params.render.useInpainting) {
+                onProgress("  [OpenCV Inpainting] Erasing original text strokes (Parallel)...")
+                val workingMat = ImageProcessor.bitmapToMat(bitmap)
+                try {
                     ImageInpainting.inpaintTranslated(workingMat, normalizedTranslations, coordinateMap)
+                    ImageProcessor.matToBitmap(workingMat)
+                } finally {
+                    workingMat.release()
                 }
-                ImageProcessor.matToBitmap(workingMat)
-            } finally {
-                workingMat.release()
+            } else {
+                bitmap.copy(Bitmap.Config.ARGB_8888, true)
             }
 
         val canvas = Canvas(resultBitmap)

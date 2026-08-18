@@ -208,14 +208,11 @@ class PagePreparer(
 
                 val cropMat = cropMatFull.submat(org.opencv.core.Rect(cropX1, cropY1, cropX2 - cropX1, cropY2 - cropY1))
                 val maskedMat = ImageRegion.maskOutsideBubble(cropMat, cropX1, cropY1, x1, y1, x2, y2, params)
-                cropMat.release()
-
-                // Scale up
                 val scale = params.detection.skalaPotonganMosaik
                 val cropBitmap = ImageProcessor.matToBitmap(maskedMat)
-                // maskOutsideBubble returns `crop` itself when maskAreaLuarBox is off —
-                // releasing the same Mat twice would corrupt its refcount.
                 if (maskedMat !== cropMat) maskedMat.release()
+                cropMat.release()
+
                 val scaledBitmap =
                     if (scale != 1.0) {
                         Bitmap.createScaledBitmap(

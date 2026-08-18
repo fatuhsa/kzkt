@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **First-Run Onboarding Tutorial & Guide**: interactive 4-step walkthrough modal upon first launch highlighting core features, crucial API Key configuration with one-tap shortcut to Settings, import workflows, and History touch-up editor. Can also be reopened anytime from Settings → Data & Updates → App Tutorial & Quick Guide.
 - **History Multi-Select & Select All**: modernized selection mode with a dedicated checklist icon in the header, dynamic select all / deselect all action, and back-button handling to exit selection mode.
 - **Interactive Quick Config Badges**: tap the Target Language (`→ [Language]`) or Provider badge on the main Translate screen to open a modal bottom sheet picker and switch preferences instantly without going to Settings.
 - **Modern Stepped Progress UI**: 3-phase translation progress tracker (`Scan` → `Translate` → `Render`) with active step highlighting and continuous progress indicator.
@@ -26,6 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Settings & Editor Modularization**: extracted large components from `InteractiveEditorDialog` (`BubbleEditCard`, `BatchEditDialog`) and `SettingsScreen` (`SettingsSections`, `SettingsDialogs`) into focused modular files.
+- **Translation Logs UI**: renamed System Logs to Translation Logs on the main translation screen and added a one-tap clear logs button.
 - **Lock-Free Multi-Core OpenCV Inpainting**: parallelized bubble inpainting across all CPU cores without global mutex locks for significantly faster rendering.
 - **Mask-Aware Free Text Detection**: speech bubbles detected by YOLO are masked out before ML Kit OCR scans the full page, eliminating redundant recognition work.
 - **Adaptive Rate Limiting**: reduced default minimum request delay from 2.0s to 0.5s for faster multi-chunk and batch transitions while preserving exponential backoff on HTTP 429.
@@ -41,6 +44,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **OpenCV Native Use-After-Free**: resolved fatal SIGSEGV crash in `PagePreparer` caused by releasing `cropMat` before bitmap conversion.
+- **Bitmap Allocation Overhead**: removed redundant OpenCV Mat allocations for dimension checks and non-inpainting renders in `TranslationPipeline`.
+- **Delicate GlobalScope API**: switched `PdfReaderDialog` lifecycle disposal to structured `CoroutineScope`.
+- **Exception Logging**: standardized raw `printStackTrace()` calls to structured Android log outputs.
 - **History Selection Action Bar Placement**: fixed floating ZIP/PDF/Delete action bar appearing at the top of the screen overlapping header controls; positioned at the bottom with animated slide transition and adjusted list content padding.
 - **Theme Mode Auto Persistence**: resolved issue where selecting `Auto` (system theme) was immediately overwritten with `dark` or `light` in DataStore.
 - **Appearance Spacing & Squeezed Labels**: resolved cramped layout in Theme Mode and Accent Color settings by moving selectors into full-width card description rows.

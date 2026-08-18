@@ -88,16 +88,13 @@ class YoloOnnx(
             Log.d("KZKT/YOLO", "=== INIT SUCCESS ===")
             return true
         } catch (e: UnsatisfiedLinkError) {
-            Log.e("KZKT/YOLO", "Native library not loaded: ${e.message}")
-            e.printStackTrace()
+            Log.e("KZKT/YOLO", "Native library not loaded: ${e.message}", e)
             return false
         } catch (e: ai.onnxruntime.OrtException) {
-            Log.e("KZKT/YOLO", "ONNX Runtime error: ${e.message}")
-            e.printStackTrace()
+            Log.e("KZKT/YOLO", "ONNX Runtime error: ${e.message}", e)
             return false
         } catch (e: Exception) {
-            Log.e("KZKT/YOLO", "Failed: ${e.message}")
-            e.printStackTrace()
+            Log.e("KZKT/YOLO", "Failed: ${e.message}", e)
             return false
         }
     }
