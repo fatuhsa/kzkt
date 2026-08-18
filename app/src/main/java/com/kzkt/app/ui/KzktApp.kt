@@ -18,6 +18,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -126,6 +127,42 @@ fun KzktApp(
         // Scaffold/NavHost.
         UpdateDialogHost(viewModel)
 
+        val hasCompletedOnboarding by remember {
+            derivedStateOf { viewModel.settings.value.hasCompletedOnboarding }
+        }
+        var showOnboardingManual by remember { mutableStateOf(false) }
+
+        if (!hasCompletedOnboarding || showOnboardingManual) {
+            com.kzkt.app.ui.component.OnboardingTutorialDialog(
+                onDismiss = {
+                    showOnboardingManual = false
+                    scope.launch { viewModel.settingsRepo.saveHasCompletedOnboarding(true) }
+                },
+                onNavigateToSettings = {
+                    showOnboardingManual = false
+                    scope.launch { viewModel.settingsRepo.saveHasCompletedOnboarding(true) }
+                    navController.navigate(BottomTab.SETTINGS.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onNavigateToTranslate = {
+                    showOnboardingManual = false
+                    scope.launch { viewModel.settingsRepo.saveHasCompletedOnboarding(true) }
+                    navController.navigate(BottomTab.TRANSLATE.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+            )
+        }
+
         val backStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = backStackEntry?.destination?.route
 
@@ -197,6 +234,7 @@ fun KzktApp(
                             scope.launch { viewModel.settingsRepo.saveAccentColor(it.toArgb().toLong() and 0xFFFFFFFFL) }
                         },
                         onNavigateToGlossary = { navController.navigate("glossary") },
+                        onShowOnboarding = { showOnboardingManual = true },
                     )
                 }
                 composable("glossary") {

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.BrightnessLow
@@ -529,6 +530,7 @@ fun SettingsDataSection(
     onNavigateToGlossary: () -> Unit,
     onExportBackup: () -> Unit,
     onRestoreBackup: () -> Unit,
+    onShowOnboarding: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val autoCheckUpdates by remember { derivedStateOf { viewModel.settings.value.autoCheckUpdates } }
@@ -555,6 +557,12 @@ fun SettingsDataSection(
         Material3SettingsGroup(
             items =
                 listOf(
+                    Material3SettingsItem(
+                        leadingContent = { SettingsIcon(Icons.AutoMirrored.Outlined.HelpOutline) },
+                        title = { Text("App Tutorial & Quick Guide") },
+                        description = { Text("View introductory guide and crucial API setup tips") },
+                        onClick = onShowOnboarding,
+                    ),
                     Material3SettingsItem(
                         leadingContent = { SettingsIcon(Icons.Outlined.TextFields) },
                         title = { Text("Custom Dictionary / Glossary") },

@@ -82,6 +82,7 @@ fun SettingsScreen(
     themeColor: Color,
     onThemeColorChange: (Color) -> Unit,
     onNavigateToGlossary: () -> Unit = {},
+    onShowOnboarding: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -295,6 +296,7 @@ fun SettingsScreen(
                 onNavigateToGlossary = onNavigateToGlossary,
                 onExportBackup = { exportBackup() },
                 onRestoreBackup = { backupPickerLauncher.launch("*/*") },
+                onShowOnboarding = onShowOnboarding,
             )
         }
 

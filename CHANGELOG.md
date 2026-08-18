@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **First-Run Onboarding Tutorial & Guide**: interactive 4-step walkthrough modal upon first launch highlighting core features, crucial API Key configuration with one-tap shortcut to Settings, import workflows, and History touch-up editor. Can also be reopened anytime from Settings → Data & Updates → App Tutorial & Quick Guide.
+
 ### Fixed
 
 - **OpenCV Native Use-After-Free**: resolved fatal SIGSEGV crash in `PagePreparer` caused by releasing `cropMat` before bitmap conversion.
