@@ -1,19 +1,30 @@
 package com.kzkt.app.ui.component
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoFixHigh
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -23,6 +34,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kzkt.app.ui.MainViewModel
@@ -53,6 +66,41 @@ fun TweakParamsSection(viewModel: MainViewModel) {
             ),
     )
     Spacer(Modifier.height(8.dp))
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Engine Parameters",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        TextButton(
+            onClick = {
+                scope.launch {
+                    viewModel.settingsRepo.saveCustomTimeoutSec(120)
+                    viewModel.settingsRepo.saveTweakParam("max_bubbles", 20)
+                    viewModel.settingsRepo.saveTweakParam("request_delay", 2.0f)
+                    viewModel.settingsRepo.saveTweakParam("pad_x", 0.40f)
+                    viewModel.settingsRepo.saveTweakParam("pad_y", 0.25f)
+                    viewModel.settingsRepo.saveTweakParam("min_pad", 35)
+                    viewModel.settingsRepo.saveJpegQuality(95)
+                }
+            },
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Refresh,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text("Reset Defaults", style = MaterialTheme.typography.labelMedium)
+        }
+    }
 
     TweakSlider(
         viewModel,
@@ -171,11 +219,23 @@ private fun TweakSlider(
                                 val fmt =
                                     when (keyField) {
                                         "request_delay" -> "%.1fs".format(sliderValue)
-                                        "min_pad", "max_bubbles", "jpeg_quality" -> "${sliderValue.toInt()}"
+                                        "min_pad", "max_bubbles" -> "${sliderValue.toInt()}"
+                                        "jpeg_quality" -> "${sliderValue.toInt()}%"
                                         "custom_timeout" -> "${sliderValue.toInt()}s"
                                         else -> "%.2f".format(sliderValue)
                                     }
-                                Text(fmt, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(8.dp),
+                                ) {
+                                    Text(
+                                        text = fmt,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    )
+                                }
                             }
                             Slider(
                                 value = sliderValue,
@@ -193,26 +253,64 @@ private fun TweakSlider(
     )
 }
 
-/** SFX filter mode radio group (balanced / relaxed / strict). */
+/** SFX filter mode segmented row (balanced / relaxed / strict). */
 @Composable
 fun SfxFilterSection(viewModel: MainViewModel) {
     val scope = rememberCoroutineScope()
     val current by remember { derivedStateOf { viewModel.settings.value.filterSfxMode } }
-    val modes = listOf("balanced", "relaxed", "strict")
-    Material3SettingsGroup(
-        items =
-            modes.map { mode ->
-                Material3SettingsItem(
-                    leadingContent = { SettingsIcon(Icons.Outlined.Tune) },
-                    title = { Text(mode.uppercase().replaceFirstChar { it }) },
-                    isHighlighted = current == mode,
-                    trailingContent = {
-                        RadioButton(
-                            selected = current == mode,
-                            onClick = { scope.launch { viewModel.settingsRepo.saveTweakParam("sfx_mode", mode) } },
+    val modes = listOf("balanced" to "Balanced", "relaxed" to "Relaxed", "strict" to "Strict")
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                    .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            modes.forEach { (modeKey, modeTitle) ->
+                val isSelected = current.lowercase() == modeKey
+                Surface(
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                scope.launch { viewModel.settingsRepo.saveTweakParam("sfx_mode", modeKey) }
+                            },
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Outlined.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text(
+                            text = modeTitle,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color =
+                                if (isSelected) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                         )
-                    },
-                )
-            },
-    )
+                    }
+                }
+            }
+        }
+    }
 }

@@ -71,7 +71,7 @@ android {
         // 1.25.1.23 menghasilkan versionCode yang sama → update ditolak Android.
         // Batas aman: build < 1000 dan patch < 100 (di luar itu bentrok dengan
         // increment segmen berikutnya — tidak realistis untuk versi aplikasi ini).
-        val effectiveVersionName = ciVersionName ?: "1.35.0"
+        val effectiveVersionName = ciVersionName ?: "1.38.0"
         versionCode = ciVersionCode ?: Versioning.deriveVersionCode(effectiveVersionName)
         versionName = effectiveVersionName
 
